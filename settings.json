@@ -93,5 +93,8 @@
       "enforcer": 5,
       "stamina": 6
     }
+  },
+  "bannerHeights": {
+    "Jake": 400
   }
 }
