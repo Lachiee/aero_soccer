@@ -1,0 +1,97 @@
+{
+  "mvpWeights": {
+    "goals": 4,
+    "assists": 3.5,
+    "key_passes": 1,
+    "tackles": 0.8,
+    "interceptions": 0.5,
+    "blocks": 1.4,
+    "goalkeeper_saves": 1,
+    "shots_on_target": 0.5,
+    "shots_off_target": 0.1,
+    "nutmegs": 0.3,
+    "post": 0.2
+  },
+  "customStats": {
+    "Amin": {
+      "enforcer": 6,
+      "stamina": 8
+    },
+    "Gio": {
+      "enforcer": 5,
+      "stamina": 7
+    },
+    "Jake": {
+      "enforcer": 6,
+      "stamina": 7
+    },
+    "James": {
+      "enforcer": 5,
+      "stamina": 6
+    },
+    "Richard": {
+      "enforcer": 7,
+      "stamina": 8
+    },
+    "Bailey": {
+      "enforcer": 5,
+      "stamina": 8
+    },
+    "Lachlan": {
+      "enforcer": 6,
+      "stamina": 8
+    },
+    "Austin": {
+      "enforcer": 5,
+      "stamina": 7
+    },
+    "Alberto": {
+      "enforcer": 7,
+      "stamina": 6
+    },
+    "Ines": {
+      "enforcer": 4,
+      "stamina": 6
+    },
+    "David": {
+      "enforcer": 5,
+      "stamina": 6
+    },
+    "Craig": {
+      "enforcer": 7,
+      "stamina": 5
+    },
+    "Carlos": {
+      "enforcer": 6,
+      "stamina": 6
+    },
+    "Dexter": {
+      "enforcer": 5,
+      "stamina": 5
+    },
+    "Ross": {
+      "enforcer": 5,
+      "stamina": 5
+    },
+    "Will": {
+      "enforcer": 7,
+      "stamina": 6
+    },
+    "James2": {
+      "enforcer": 5,
+      "stamina": 6
+    },
+    "Xavier": {
+      "enforcer": 6,
+      "stamina": 7
+    },
+    "Andres": {
+      "enforcer": 6,
+      "stamina": 7
+    },
+    "Lach2": {
+      "enforcer": 5,
+      "stamina": 6
+    }
+  }
+}
