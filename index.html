@@ -3909,12 +3909,18 @@ function renderProfile(name) {
     <div style="position:relative;width:100%;height:180px;border-radius:14px;overflow:hidden;margin-bottom:0;background:linear-gradient(135deg,var(--card),var(--card2));border:1px solid var(--border);border-bottom-left-radius:0;border-bottom-right-radius:0">
       ${playerGifs[name]
         ? `<img src="${playerGifs[name]}" alt="${name}" style="width:100%;height:100%;object-fit:cover;display:block">`
-        : `<img src="${BANNERS_PATH}${name}.gif" alt="" style="width:100%;height:100%;object-fit:cover;display:block"
-             onerror="this.onerror=null;this.src='${BANNERS_PATH}${name}.png';this.onerror=function(){this.style.display='none';document.getElementById('banner-placeholder-${gifKey}').style.display='flex'}"
+        : `<video id="banner-video-${gifKey}" autoplay loop muted playsinline
+             style="width:100%;height:100%;object-fit:cover;display:block"
+             onerror="this.style.display='none';loadFallbackBanner('${gifKey}','${name.replace(/'/g,"\\'")}')">
+             <source src="${BANNERS_PATH}${name}.mp4" type="video/mp4">
+           </video>
+           <img id="banner-img-${gifKey}" src="${BANNERS_PATH}${name}.gif" alt="" style="width:100%;height:100%;object-fit:cover;display:none"
+             onload="document.getElementById('banner-video-${gifKey}').style.display='none';this.style.display='block';document.getElementById('banner-placeholder-${gifKey}').style.display='none'"
+             onerror="this.src='${BANNERS_PATH}${name}.png';this.onerror=function(){this.src='${BANNERS_PATH}${name}.jpg';this.onerror=function(){this.style.display='none';document.getElementById('banner-placeholder-${gifKey}').style.display='flex'}}"
            >
-           <div id="banner-placeholder-${gifKey}" style="display:none;width:100%;height:100%;flex-direction:column;align-items:center;justify-content:center;gap:8px;position:absolute;inset:0">
+           <div id="banner-placeholder-${gifKey}" style="width:100%;height:100%;flex-direction:column;align-items:center;justify-content:center;gap:8px;position:absolute;inset:0;display:flex">
              <div style="font-size:2rem;opacity:.2">🎭</div>
-             <div style="font-size:.75rem;color:var(--muted);font-family:'Barlow Condensed',sans-serif;letter-spacing:1px;text-transform:uppercase;opacity:.5">Add ${name}.gif to your banners/ folder on GitHub</div>
+             <div style="font-size:.72rem;color:var(--muted);font-family:'Barlow Condensed',sans-serif;letter-spacing:1px;text-transform:uppercase;opacity:.5;text-align:center;padding:0 20px">Add ${name}.mp4, .gif, or .png to banners/ on GitHub</div>
            </div>`
       }
       ${adminMode ? `
@@ -3926,7 +3932,7 @@ function renderProfile(name) {
         }
       </div>` : ''}
     </div>
-    <input type="file" id="gif-input-${gifKey}" accept="image/*" style="display:none" onchange="handleGifUpload('${safeName}', this)">
+    <input type="file" id="gif-input-${gifKey}" accept="image/*,video/mp4" style="display:none" onchange="handleGifUpload('${safeName}', this)">
 
     <!-- Hero Card -->
     <div style="background:var(--card);border:1px solid var(--border);border-top:none;border-radius:0 0 14px 14px;padding:20px 24px;margin-bottom:16px">
@@ -5324,6 +5330,12 @@ function doImport() {
 // =====================================================================
 // GIF / PHOTO UPLOAD
 // =====================================================================
+function loadFallbackBanner(gifKey, playerName) {
+  // Video failed — try gif, then png, then jpg
+  const img = document.getElementById('banner-img-' + gifKey);
+  if (img) img.style.display = 'block';
+}
+
 function triggerGifUpload(name) {
   const key = name.replace(/\s/g,'_');
   const input = document.getElementById('gif-input-' + key);
