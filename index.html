@@ -3373,6 +3373,10 @@ let weeklyFiles = [null, null, null, null];
 let weeklyTeams = {};
 let weeklyHalfTeams = {};
 
+// Path to the banners folder in your GitHub repo
+// Files should be named exactly as the player: Lachlan.gif, Bailey.png etc.
+const BANNERS_PATH = 'banners/';
+
 const MVP_WEIGHTS_DEFAULT = {
   goals: 4.0, assists: 3.5, key_passes: 1.0, tackles: 0.8,
   interceptions: 0.5, blocks: 1.4, goalkeeper_saves: 1.0,
@@ -3902,16 +3906,25 @@ function renderProfile(name) {
     </div>
 
     <!-- Banner -->
-    <div style="position:relative;width:100%;height:180px;border-radius:14px;overflow:hidden;margin-bottom:0;background:linear-gradient(135deg,var(--card),var(--card2));border:1px solid var(--border);cursor:pointer;border-bottom-left-radius:0;border-bottom-right-radius:0"
-      onclick="triggerGifUpload('${safeName}')" title="Click to upload a banner image or GIF">
+    <div style="position:relative;width:100%;height:180px;border-radius:14px;overflow:hidden;margin-bottom:0;background:linear-gradient(135deg,var(--card),var(--card2));border:1px solid var(--border);border-bottom-left-radius:0;border-bottom-right-radius:0">
       ${playerGifs[name]
-        ? '<img src="' + playerGifs[name] + '" alt="' + name + '" style="width:100%;height:100%;object-fit:cover;display:block">'
-        : '<div style="width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px"><div style="font-size:2rem;opacity:.2">🎭</div><div style="font-size:.78rem;color:var(--muted);font-family:Barlow Condensed,sans-serif;letter-spacing:1px;text-transform:uppercase;opacity:.5">Click to add banner</div></div>'}
+        ? `<img src="${playerGifs[name]}" alt="${name}" style="width:100%;height:100%;object-fit:cover;display:block">`
+        : `<img src="${BANNERS_PATH}${name}.gif" alt="" style="width:100%;height:100%;object-fit:cover;display:block"
+             onerror="this.onerror=null;this.src='${BANNERS_PATH}${name}.png';this.onerror=function(){this.style.display='none';document.getElementById('banner-placeholder-${gifKey}').style.display='flex'}"
+           >
+           <div id="banner-placeholder-${gifKey}" style="display:none;width:100%;height:100%;flex-direction:column;align-items:center;justify-content:center;gap:8px;position:absolute;inset:0">
+             <div style="font-size:2rem;opacity:.2">🎭</div>
+             <div style="font-size:.75rem;color:var(--muted);font-family:'Barlow Condensed',sans-serif;letter-spacing:1px;text-transform:uppercase;opacity:.5">Add ${name}.gif to your banners/ folder on GitHub</div>
+           </div>`
+      }
+      ${adminMode ? `
       <div style="position:absolute;bottom:8px;right:10px;display:flex;gap:6px">
         ${playerGifs[name]
-          ? '<button class="gif-del-btn" onclick="event.stopPropagation();removeGif(\'' + safeName + '\')" style="font-size:.7rem;padding:3px 8px">✕</button><button class="gif-del-btn" onclick="event.stopPropagation();triggerGifUpload(\'' + safeName + '\')" style="background:var(--green);color:#071009;font-size:.7rem;padding:3px 8px">Change</button>'
-          : ''}
-      </div>
+          ? `<button class="gif-del-btn" onclick="event.stopPropagation();removeGif('${safeName}')" style="font-size:.7rem;padding:3px 8px">✕</button>
+             <button class="gif-del-btn" onclick="event.stopPropagation();triggerGifUpload('${safeName}')" style="background:var(--green);color:#071009;font-size:.7rem;padding:3px 8px">Change</button>`
+          : `<button class="gif-del-btn" onclick="triggerGifUpload('${safeName}')" style="background:var(--green);color:#071009;font-size:.7rem;padding:3px 8px;cursor:pointer">⬆ Upload override</button>`
+        }
+      </div>` : ''}
     </div>
     <input type="file" id="gif-input-${gifKey}" accept="image/*" style="display:none" onchange="handleGifUpload('${safeName}', this)">
 
@@ -3966,7 +3979,6 @@ function renderProfile(name) {
     </div>
 
     ${bestGameHtml}
-    ${milestonesHtml}
 
     <!-- Two-column grid: Form chart + Spider -->
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px">
@@ -4026,6 +4038,70 @@ function renderProfile(name) {
           <div style="font-family:'Bebas Neue',sans-serif;font-size:1.4rem;color:${col};line-height:1">${val}</div>
         </div>`).join('')}
     </div>
+
+    <!-- 1H vs 2H comparison -->
+    ${(() => {
+      const h1 = s.h1, h2 = s.h2;
+      const g1 = Math.max(h1.games, 1), g2 = Math.max(h2.games, 1);
+      if (h1.games < 3 && h2.games < 3) return '';
+      const statDefs = [
+        { key: 'goals',            label: 'Goals' },
+        { key: 'assists',          label: 'Assists' },
+        { key: 'total_shots',      label: 'Shots' },
+        { key: 'key_passes',       label: 'Key Passes' },
+        { key: 'tackles',          label: 'Tackles' },
+        { key: 'interceptions',    label: 'Intercepts' },
+        { key: 'nutmegs',          label: 'Nutmegs' },
+        { key: 'goalkeeper_saves', label: 'GK Saves' },
+      ];
+      const insight = (() => {
+        const goalDiff = h2.goals/g2 - h1.goals/g1;
+        if (Math.abs(goalDiff) >= 0.4) return goalDiff > 0
+          ? '🔥 Scores more in the 2nd half — gets stronger as the game goes on'
+          : '⚡ Scores more in the 1st half — fast starter';
+        const defDiff = (h2.tackles/g2 + h2.interceptions/g2) - (h1.tackles/g1 + h1.interceptions/g1);
+        if (Math.abs(defDiff) >= 1) return defDiff > 0
+          ? '🛡 More defensive in the 2nd half — digs in when it matters'
+          : '🛡 More defensive in the 1st half — sets the tone early';
+        return '⚖ Consistent across both halves';
+      })();
+      const rows = statDefs.map(({ key, label }) => {
+        const f1 = h1[key] / g1, f2 = h2[key] / g2;
+        const max = Math.max(f1, f2, 0.01);
+        const w1 = (f1 / max * 100).toFixed(0), w2 = (f2 / max * 100).toFixed(0);
+        const col1 = f1 > f2 ? 'var(--green)' : 'var(--muted)';
+        const col2 = f2 > f1 ? 'var(--green)' : 'var(--muted)';
+        return `<div style="display:grid;grid-template-columns:1fr 90px 1fr;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid rgba(255,255,255,.04)">
+          <div>
+            <span style="font-family:'Bebas Neue',sans-serif;font-size:1rem;color:${col1}">${f1.toFixed(2)}</span>
+            <div style="height:3px;background:var(--card2);border-radius:2px;margin-top:2px;overflow:hidden">
+              <div style="float:right;height:100%;width:${w1}%;background:${col1};border-radius:2px"></div>
+            </div>
+          </div>
+          <div style="text-align:center;font-size:.63rem;letter-spacing:.8px;text-transform:uppercase;color:var(--muted)">${label}</div>
+          <div>
+            <span style="font-family:'Bebas Neue',sans-serif;font-size:1rem;color:${col2}">${f2.toFixed(2)}</span>
+            <div style="height:3px;background:var(--card2);border-radius:2px;margin-top:2px;overflow:hidden">
+              <div style="height:100%;width:${w2}%;background:${col2};border-radius:2px"></div>
+            </div>
+          </div>
+        </div>`;
+      }).join('');
+      return `<div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:18px;margin-bottom:14px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+          <div style="font-family:'Barlow Condensed',sans-serif;font-size:.7rem;letter-spacing:2px;text-transform:uppercase;color:var(--muted)">🕐 1st vs 2nd Half</div>
+          <div style="font-size:.62rem;color:var(--muted);opacity:.7">(${h1.games} games)</div>
+        </div>
+        <div style="background:rgba(57,211,83,.06);border:1px solid rgba(57,211,83,.15);border-radius:7px;padding:8px 12px;margin-bottom:12px;font-size:.76rem;color:var(--green)">${insight}</div>
+        <div style="display:grid;grid-template-columns:1fr 90px 1fr;margin-bottom:4px">
+          <div style="font-size:.6rem;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted)">1ST HALF /G</div>
+          <div></div>
+          <div style="font-size:.6rem;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);text-align:right">2ND HALF /G</div>
+        </div>
+        ${rows}
+      </div>`;
+    })()}
+
       <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:18px">
         <div style="font-family:'Barlow Condensed',sans-serif;font-size:.7rem;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-bottom:14px">⚽ Attacking</div>
         ${[
