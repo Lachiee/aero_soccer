@@ -97,5 +97,8 @@
   "bannerHeights": {
     "Jake": 400,
     "Richard": 400
+  },
+  "bannerSlowmo": {
+    "Richard": true
   }
 }
