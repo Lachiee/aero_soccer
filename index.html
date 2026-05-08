@@ -3156,7 +3156,24 @@ function saveCombos() {
   const h2 = parseGoalText(document.getElementById('combo-h2-input')?.value||'');
   goalCombos[mid] = { h1, h2, savedAt: new Date().toISOString() };
   saveGoalCombos();
-  if(status){status.textContent=`✅ Saved ${h1.length+h2.length} goals.`;status.style.color='var(--green)';}
+
+  // Build copy text
+  const match = matchList.find(m=>m.id===mid);
+  const toText = (pairs, half) => pairs.map(p=>`${half} ${p.time||''} ${p.scorer}${p.assister?' ('+p.assister+')':''}`).join('\n');
+  const copyText = [
+    match ? `${match.date} · ${match.goalsA}–${match.goalsB}` : mid,
+    '1st Half', toText(h1,'1H'),
+    '2nd Half', toText(h2,'2H'),
+  ].filter(Boolean).join('\n');
+
+  if(status){
+    status.innerHTML = `✅ Saved ${h1.length+h2.length} goals.
+      <button onclick="navigator.clipboard.writeText(${JSON.stringify(copyText)}).then(()=>{this.textContent='✅ Copied!';setTimeout(()=>this.textContent='📋 Copy',2000)})"
+        style="margin-left:10px;background:var(--card2);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:3px 10px;font-family:'Barlow Condensed',sans-serif;font-size:.8rem;cursor:pointer">
+        📋 Copy
+      </button>`;
+    status.style.color='var(--green)';
+  }
   renderCombosPage();
 }
 
@@ -3962,123 +3979,199 @@ function renderMatches() {
           const combos = goalCombos[m.id];
           if (!combos) return '';
           const all = [
-            ...(combos.h1||[]).map(p => ({...p, half:'1H'})),
-            ...(combos.h2||[]).map(p => ({...p, half:'2H'}))
-          ].filter(p => p.time);
+            ...(combos.h1||[]).map(p=>({...p,half:'1H'})),
+            ...(combos.h2||[]).map(p=>({...p,half:'2H'}))
+          ].filter(p=>p.time);
           if (!all.length) return '';
+
+          const matchDur = (window._matchDuration || 52) * 60; // configurable, default 52 mins
+          const halfDur  = matchDur / 2;
 
           const toSecs = (time, half) => {
             const [min, sec] = time.split(':').map(Number);
-            return (half === '2H' ? 25*60 : 0) + min*60 + (sec||0);
+            return (half==='2H' ? halfDur : 0) + min*60 + (sec||0);
           };
           const scorerTeam = {};
-          [...m.teamA, ...m.teamB].forEach(r => { scorerTeam[r.player] = r.team; });
-          const events = all.map(p => ({
-            ...p, secs: toSecs(p.time, p.half), team: scorerTeam[p.scorer] || 'A'
-          })).sort((a,b) => a.secs - b.secs);
+          [...m.teamA,...m.teamB].forEach(r=>{ scorerTeam[r.player]=r.team; });
+          const events = all.map(p=>({
+            ...p, secs:toSecs(p.time,p.half), team:scorerTeam[p.scorer]||'A'
+          })).sort((a,b)=>a.secs-b.secs);
 
-          let sA=0, sB=0;
-          const rows = events.map(e => {
+          let sA=0,sB=0;
+          const rows = events.map(e=>{
             if(e.team==='A') sA++; else sB++;
             return {...e, scoreA:sA, scoreB:sB};
           });
 
-          // Momentum runs: 3+ goals by same team within 10 mins
-          const runs = [];
-          for (let i=0; i<rows.length; i++) {
-            let j=i, count=1;
-            while(j+1<rows.length && rows[j+1].team===rows[i].team && rows[j+1].secs-rows[i].secs<=600){j++;count++;}
-            if(count>=3){ runs.push({team:rows[i].team,count,from:rows[i].time,to:rows[j].time,half:rows[i].half}); i=j; }
+          // Momentum runs
+          const runs=[];
+          for(let i=0;i<rows.length;i++){
+            let j=i,cnt=1;
+            while(j+1<rows.length&&rows[j+1].team===rows[i].team&&rows[j+1].secs-rows[i].secs<=600){j++;cnt++;}
+            if(cnt>=3){runs.push({team:rows[i].team,cnt,from:rows[i].time,to:rows[j].time,half:rows[i].half,span:rows[j].secs-rows[i].secs});i=j;}
           }
 
-          // Comeback detection
-          let maxDefA=0, maxDefB=0, comebackMsg='';
-          rows.forEach(r=>{ maxDefA=Math.max(maxDefA,r.scoreB-r.scoreA); maxDefB=Math.max(maxDefB,r.scoreA-r.scoreB); });
-          const finalA=rows[rows.length-1]?.scoreA||0, finalB=rows[rows.length-1]?.scoreB||0;
-          if(maxDefA>=3&&finalA>=finalB) comebackMsg=`🔄 Team A came back from ${maxDefA} down!`;
-          else if(maxDefB>=3&&finalB>=finalA) comebackMsg=`🔄 Team B came back from ${maxDefB} down!`;
+          // Comeback
+          let maxDA=0,maxDB=0,comebackMsg='';
+          rows.forEach(r=>{maxDA=Math.max(maxDA,r.scoreB-r.scoreA);maxDB=Math.max(maxDB,r.scoreA-r.scoreB);});
+          const fA=rows[rows.length-1]?.scoreA||0,fB=rows[rows.length-1]?.scoreB||0;
+          if(maxDA>=3&&fA>=fB) comebackMsg=`🔄 Team A came back from ${maxDA} down!`;
+          else if(maxDB>=3&&fB>=fA) comebackMsg=`🔄 Team B came back from ${maxDB} down!`;
+
+          // Goalless stretch
+          let maxStretch=0, stretchStart='', stretchEnd='';
+          for(let i=0;i<rows.length-1;i++){
+            const gap=rows[i+1].secs-rows[i].secs;
+            if(gap>maxStretch){maxStretch=gap;stretchStart=rows[i].time;stretchEnd=rows[i+1].time;}
+          }
 
           // Partnership timing
-          const partnerHalves={};
+          const pH={};
           rows.filter(r=>r.assister).forEach(r=>{
-            const key=`${r.scorer}+${r.assister}`;
-            if(!partnerHalves[key]) partnerHalves[key]={h1:0,h2:0,name:`${r.scorer} ← ${r.assister}`};
-            partnerHalves[key][r.half==='1H'?'h1':'h2']++;
+            const k=`${r.scorer}→${r.assister}`;
+            if(!pH[k]) pH[k]={h1:0,h2:0,name:`${r.scorer}→${r.assister}`,times:[]};
+            pH[k][r.half==='1H'?'h1':'h2']++;
+            pH[k].times.push(r.half+' '+r.time);
           });
-          const partnerInsights=Object.values(partnerHalves).filter(p=>p.h1+p.h2>=2).map(p=>{
-            if(p.h1>p.h2*1.5) return `${p.name} connect mainly in 1H`;
-            if(p.h2>p.h1*1.5) return `${p.name} connect mainly in 2H`;
-            return null;
-          }).filter(Boolean);
+          const pInsights=Object.values(pH).filter(p=>p.h1+p.h2>=2).map(p=>{
+            const times=p.times.join(', ');
+            if(p.h1>p.h2*1.5) return `🤝 ${p.name} combined ${p.h1+p.h2}× this match (${times})`;
+            if(p.h2>p.h1*1.5) return `🤝 ${p.name} combined ${p.h1+p.h2}× this match (${times})`;
+            return `🤝 ${p.name} combined ${p.h1+p.h2}× this match (${times})`;
+          });
 
-          const ytId = matchVideos[m.id] || '';
+          const ytId = matchVideos[m.id]||'';
           const canvasId = `timeline-${m.id.replace(/[#,]/g,'_')}`;
-          const totalSecs = 50*60;
 
-          return `<div style="margin-bottom:14px">
-            <div style="font-size:.65rem;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-bottom:6px;font-family:'Barlow Condensed',sans-serif">⚽ Goal Timeline${ytId?' · Click a dot to jump to that moment in the video':''}</div>
-            <canvas id="${canvasId}" style="width:100%;height:56px;display:block;border-radius:8px;${ytId?'cursor:pointer':''}"></canvas>
-            ${runs.length?`<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px">${runs.map(r=>`<div style="background:rgba(240,160,48,.1);border:1px solid rgba(240,160,48,.3);border-radius:5px;padding:3px 10px;font-size:.7rem;color:var(--amber)">⚡ Team ${r.team} scored ${r.count} in a row (${r.from}–${r.to} ${r.half})</div>`).join('')}</div>`:''}
+          return `<div style="margin-bottom:16px">
+            <div style="font-size:.65rem;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-bottom:8px;font-family:'Barlow Condensed',sans-serif">⚽ Score Worm${ytId?' · click a dot to watch in video':''}</div>
+            <canvas id="${canvasId}" style="width:100%;height:120px;display:block;border-radius:8px;${ytId?'cursor:pointer':''}"></canvas>
+            ${runs.length?`<div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:8px">${runs.map(r=>`<div style="background:rgba(240,160,48,.1);border:1px solid rgba(240,160,48,.3);border-radius:5px;padding:3px 10px;font-size:.7rem;color:var(--amber)">⚡ Team ${r.team} scored ${r.cnt} in ${Math.round(r.span/60)} mins (${r.from}–${r.to} ${r.half})</div>`).join('')}</div>`:''}
             ${comebackMsg?`<div style="margin-top:6px;background:rgba(96,165,250,.1);border:1px solid rgba(96,165,250,.3);border-radius:5px;padding:4px 10px;font-size:.72rem;color:#60a5fa">${comebackMsg}</div>`:''}
-            ${partnerInsights.length?`<div style="margin-top:5px;font-size:.68rem;color:var(--muted)">${partnerInsights.join(' · ')}</div>`:''}
-            <div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:8px">
-              ${rows.map(e=>{
-                const ytSecs=ytId&&e.time?timeToYtSeconds(e.time,e.half):null;
-                const matchKey=m.id.replace(/[#,]/g,'_');
-                return `<div style="display:flex;align-items:center;gap:4px;font-size:.7rem;background:var(--card2);border:1px solid ${e.team==='A'?'rgba(57,211,83,.25)':'rgba(96,165,250,.25)'};border-radius:5px;padding:3px 8px;${ytSecs!==null?'cursor:pointer':''}"
-                  ${ytSecs!==null?`onclick="seekYtVideo('${matchKey}','${ytId}',${ytSecs})" title="▶ Watch at ${e.time}"`:''}>
-                  <span style="color:${e.team==='A'?'var(--green)':'var(--blue)'}">⚽</span>
-                  <span style="color:var(--muted);font-size:.6rem">${e.half} ${e.time}</span>
-                  <span style="color:var(--text);font-weight:600">${e.scorer}</span>
-                  ${e.assister?`<span style="color:var(--muted)">←</span><span style="color:var(--text2)">${e.assister}</span>`:''}
-                  <span style="color:var(--muted);font-size:.62rem;margin-left:2px">${e.scoreA}–${e.scoreB}</span>
-                  ${ytSecs!==null?`<span style="color:var(--amber);font-size:.6rem">▶</span>`:''}
-                </div>`;
-              }).join('')}
-            </div>
+            ${maxStretch>120?`<div style="margin-top:5px;font-size:.68rem;color:var(--muted)">⏱ Longest goalless stretch: ${Math.round(maxStretch/60)} mins (${stretchStart}–${stretchEnd})</div>`:''}
+            ${pInsights.map(s=>`<div style="margin-top:4px;font-size:.68rem;color:var(--amber)">${s}</div>`).join('')}
           </div>
           <script>
           (function(){
             const canvas=document.getElementById('${canvasId}');
             if(!canvas) return;
             const dpr=window.devicePixelRatio||1;
-            const W=canvas.offsetWidth||600, H=56;
+            const W=canvas.offsetWidth||600, H=120;
             canvas.width=W*dpr; canvas.height=H*dpr; canvas.style.height=H+'px';
             const ctx=canvas.getContext('2d');
             ctx.scale(dpr,dpr);
-            ctx.fillStyle='rgba(0,0,0,.25)';
-            ctx.beginPath();if(ctx.roundRect)ctx.roundRect(0,0,W,H,6);else ctx.rect(0,0,W,H);ctx.fill();
-            const hx=W*0.5;
-            ctx.strokeStyle='rgba(255,255,255,.12)';ctx.lineWidth=1;ctx.setLineDash([3,3]);
-            ctx.beginPath();ctx.moveTo(hx,4);ctx.lineTo(hx,H-4);ctx.stroke();ctx.setLineDash([]);
-            ctx.fillStyle='rgba(255,255,255,.2)';ctx.font='9px Barlow Condensed,sans-serif';
-            ctx.textAlign='left';ctx.fillText('1H',6,H-5);ctx.fillText('2H',hx+5,H-5);
+
+            const pad={top:18,right:14,bottom:22,left:28};
+            const cW=W-pad.left-pad.right, cH=H-pad.top-pad.bottom;
+
+            // BG
+            ctx.fillStyle='rgba(0,0,0,.2)';
+            ctx.beginPath();if(ctx.roundRect)ctx.roundRect(0,0,W,H,8);else ctx.rect(0,0,W,H);ctx.fill();
+
             const evts=${JSON.stringify(rows)};
-            const toX=s=>(s/${totalSecs})*W;
-            const scoreY=(sA,sB)=>{const d=sA-sB,mx=Math.max(Math.abs(${m.goalsA-m.goalsB})+2,3);return H/2-(d/mx)*(H/2-8);};
-            const pts=[{x:0,y:H/2},...evts.map(e=>({x:toX(e.secs),y:scoreY(e.scoreA,e.scoreB)})),{x:W,y:scoreY(${m.goalsA},${m.goalsB})}];
-            const grad=ctx.createLinearGradient(0,0,0,H);grad.addColorStop(0,'rgba(57,211,83,.25)');grad.addColorStop(1,'rgba(57,211,83,0)');
-            ctx.beginPath();ctx.moveTo(0,H/2);pts.forEach(p=>ctx.lineTo(p.x,p.y));ctx.lineTo(W,H/2);ctx.closePath();ctx.fillStyle=grad;ctx.fill();
-            ctx.beginPath();pts.forEach((p,i)=>i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y));ctx.strokeStyle='rgba(57,211,83,.8)';ctx.lineWidth=2;ctx.stroke();
-            ctx.beginPath();ctx.moveTo(0,H/2);ctx.lineTo(W,H/2);ctx.strokeStyle='rgba(255,255,255,.08)';ctx.lineWidth=1;ctx.stroke();
+            const totDur=${matchDur};
+            const fA=${fA}, fB=${fB};
+            const maxScore=Math.max(fA,fB,1);
+
+            const toX=s=>pad.left+(s/totDur)*cW;
+            // Y: centre = 0-0, Team A above, Team B below
+            // score diff ranges from -maxScore to +maxScore
+            const toY=diff=>pad.top+cH/2-((diff)/(maxScore+1))*(cH/2-2);
+
+            // Grid lines
+            ctx.strokeStyle='rgba(255,255,255,.06)';ctx.lineWidth=1;
+            for(let g=-maxScore;g<=maxScore;g++){
+              if(g===0) continue;
+              ctx.beginPath();ctx.moveTo(pad.left,toY(g));ctx.lineTo(pad.left+cW,toY(g));ctx.stroke();
+            }
+            // Zero line
+            ctx.strokeStyle='rgba(255,255,255,.15)';ctx.lineWidth=1;
+            ctx.beginPath();ctx.moveTo(pad.left,toY(0));ctx.lineTo(pad.left+cW,toY(0));ctx.stroke();
+            // Half divider
+            const hx=pad.left+cW*0.5;
+            ctx.strokeStyle='rgba(255,255,255,.12)';ctx.setLineDash([4,4]);
+            ctx.beginPath();ctx.moveTo(hx,pad.top);ctx.lineTo(hx,pad.top+cH);ctx.stroke();
+            ctx.setLineDash([]);
+
+            // Score axis labels
+            ctx.fillStyle='rgba(255,255,255,.25)';ctx.font='9px Barlow Condensed,sans-serif';ctx.textAlign='right';
+            for(let g=1;g<=maxScore;g++){
+              ctx.fillStyle='rgba(57,211,83,.4)';ctx.fillText('+'+g,pad.left-3,toY(g)+3);
+              ctx.fillStyle='rgba(96,165,250,.4)';ctx.fillText('-'+g,pad.left-3,toY(-g)+3);
+            }
+
+            // Half labels
+            ctx.fillStyle='rgba(255,255,255,.2)';ctx.font='9px Barlow Condensed,sans-serif';
+            ctx.textAlign='left';ctx.fillText('1H',pad.left+3,H-5);
+            ctx.textAlign='left';ctx.fillText('2H',hx+4,H-5);
+
+            // Build worm path — step function: score changes instantly at goal time
+            const pts=[{x:pad.left,y:toY(0),sA:0,sB:0}];
+            evts.forEach(e=>{
+              const x=toX(e.secs);
+              // Before this goal — same score
+              pts.push({x,y:toY(pts[pts.length-1].sA-pts[pts.length-1].sB),sA:pts[pts.length-1].sA,sB:pts[pts.length-1].sB,step:true});
+              pts.push({x,y:toY(e.scoreA-e.scoreB),sA:e.scoreA,sB:e.scoreB,team:e.team});
+            });
+            pts.push({x:pad.left+cW,y:toY(fA-fB),sA:fA,sB:fB});
+
+            // Gradient fill above zero (Team A ahead)
+            const gradA=ctx.createLinearGradient(0,pad.top,0,toY(0));
+            gradA.addColorStop(0,'rgba(57,211,83,.3)');gradA.addColorStop(1,'rgba(57,211,83,0)');
+            ctx.beginPath();ctx.moveTo(pad.left,toY(0));
+            pts.forEach(p=>ctx.lineTo(p.x,p.y));
+            ctx.lineTo(pad.left+cW,toY(0));ctx.closePath();
+            ctx.fillStyle=gradA;ctx.fill();
+
+            // Gradient fill below zero (Team B ahead)
+            const gradB=ctx.createLinearGradient(0,toY(0),0,pad.top+cH);
+            gradB.addColorStop(0,'rgba(96,165,250,0)');gradB.addColorStop(1,'rgba(96,165,250,.25)');
+            ctx.beginPath();ctx.moveTo(pad.left,toY(0));
+            pts.forEach(p=>ctx.lineTo(p.x,p.y));
+            ctx.lineTo(pad.left+cW,toY(0));ctx.closePath();
+            ctx.fillStyle=gradB;ctx.fill();
+
+            // Worm line — colour by who's leading
+            ctx.lineWidth=2.5;ctx.lineJoin='round';
+            ctx.beginPath();
+            pts.forEach((p,i)=>i===0?ctx.moveTo(p.x,p.y):ctx.lineTo(p.x,p.y));
+            ctx.strokeStyle='rgba(255,255,255,.7)';ctx.stroke();
+
+            // Goal dots
             const dotData=[];
             evts.forEach(e=>{
-              const x=toX(e.secs),y=scoreY(e.scoreA,e.scoreB);
-              ctx.beginPath();ctx.arc(x,y,5,0,Math.PI*2);ctx.fillStyle=e.team==='A'?'#4ade80':'#60a5fa';ctx.fill();
-              ctx.strokeStyle='rgba(0,0,0,.4)';ctx.lineWidth=1;ctx.stroke();
-              if('${ytId}'&&e.time) dotData.push({x,y,r:8,time:e.time,half:e.half});
+              const x=toX(e.secs),y=toY(e.scoreA-e.scoreB);
+              ctx.beginPath();ctx.arc(x,y,5,0,Math.PI*2);
+              ctx.fillStyle=e.team==='A'?'#4ade80':'#60a5fa';ctx.fill();
+              ctx.strokeStyle='rgba(0,0,0,.5)';ctx.lineWidth=1;ctx.stroke();
+              if('${ytId}'&&e.time) dotData.push({x,y,r:9,time:e.time,half:e.half,scorer:e.scorer});
             });
+
+            // Score labels at final position
+            ctx.font='bold 10px Barlow Condensed,sans-serif';
+            ctx.fillStyle='#4ade80';ctx.textAlign='right';ctx.fillText('Team A: '+fA,pad.left+cW,pad.top+10);
+            ctx.fillStyle='#60a5fa';ctx.textAlign='right';ctx.fillText('Team B: '+fB,pad.left+cW,pad.top+22);
+
+            // Click to seek
             if('${ytId}'&&dotData.length){
               canvas.addEventListener('click',ev=>{
-                const rect=canvas.getBoundingClientRect();
-                const cx=(ev.clientX-rect.left)*(W/rect.width),cy=(ev.clientY-rect.top)*(H/rect.height);
+                const r=canvas.getBoundingClientRect();
+                const cx=(ev.clientX-r.left)*(W/r.width),cy=(ev.clientY-r.top)*(H/r.height);
                 const hit=dotData.find(d=>Math.hypot(cx-d.x,cy-d.y)<=d.r);
                 if(hit) seekYtVideo('${m.id.replace(/[#,]/g,'_')}','${ytId}',timeToYtSeconds(hit.time,hit.half));
+              });
+              // Tooltip
+              canvas.addEventListener('mousemove',ev=>{
+                const r=canvas.getBoundingClientRect();
+                const cx=(ev.clientX-r.left)*(W/r.width),cy=(ev.clientY-r.top)*(H/r.height);
+                const hit=dotData.find(d=>Math.hypot(cx-d.x,cy-d.y)<=d.r);
+                canvas.title=hit?('▶ '+hit.scorer+' '+hit.half+' '+hit.time):'';
               });
             }
           })();
           <\/script>`;
         })()}
+
 
         <div style="overflow-x:auto">
           <div style="display:flex;gap:6px;margin-bottom:10px;font-family:'Barlow Condensed',sans-serif;font-size:.8rem;letter-spacing:1px">
