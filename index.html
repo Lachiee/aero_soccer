@@ -4699,7 +4699,8 @@ function renderProfile(name) {
       ${playerGifs[name]
         ? `<img src="${playerGifs[name]}" alt="${name}" style="width:100%;height:100%;object-fit:cover;display:block">`
         : `<video id="banner-video-${gifKey}" autoplay loop muted playsinline
-             style="width:100%;height:100%;object-fit:cover;display:block"
+             style="width:100%;height:100%;object-fit:cover;display:block;position:relative;z-index:1"
+             onloadeddata="document.getElementById('banner-placeholder-${gifKey}').style.display='none'"
              onloadedmetadata="initBannerSlowmo('banner-video-${gifKey}','${name.replace(/'/g,"\\'")}')"
              onerror="this.style.display='none';loadFallbackBanner('${gifKey}','${name.replace(/'/g,"\\'")}')">
              <source src="${BANNERS_PATH}${name}.mp4" type="video/mp4">
@@ -4708,7 +4709,7 @@ function renderProfile(name) {
              onload="document.getElementById('banner-video-${gifKey}').style.display='none';this.style.display='block';document.getElementById('banner-placeholder-${gifKey}').style.display='none'"
              onerror="this.src='${BANNERS_PATH}${name}.png';this.onerror=function(){this.src='${BANNERS_PATH}${name}.jpg';this.onerror=function(){this.style.display='none';document.getElementById('banner-placeholder-${gifKey}').style.display='flex'}}"
            >
-           <div id="banner-placeholder-${gifKey}" style="width:100%;height:100%;flex-direction:column;align-items:center;justify-content:center;gap:8px;position:absolute;inset:0;display:flex">
+           <div id="banner-placeholder-${gifKey}" style="width:100%;height:100%;flex-direction:column;align-items:center;justify-content:center;gap:8px;position:absolute;inset:0;display:none;background:var(--card2)">
              <div style="font-size:2rem;opacity:.2">🎭</div>
              <div style="font-size:.72rem;color:var(--muted);font-family:'Barlow Condensed',sans-serif;letter-spacing:1px;text-transform:uppercase;opacity:.5;text-align:center;padding:0 20px">Add ${name}.mp4, .gif, or .png to banners/ on GitHub</div>
            </div>`
@@ -5525,8 +5526,7 @@ function teamDimensions(team) {
   });
 
   // Team synergy: sum of pairwise chemistry deltas within the team
-  // Only counts pairs with enough shared games (Bayesian shrinkage handles this naturally,
-  // but pairs with < minChemGames together are excluded entirely)
+  // Combined from win-rate chemistry AND goal combo frequency
   const minChemGames = 3;
   const chemLookupLocal = {};
   (window._filteredChemistry || window._chemistry || []).forEach(c => {
@@ -5535,15 +5535,31 @@ function teamDimensions(team) {
       chemLookupLocal[`${c.p2}|||${c.p1}`] = c.delta;
     }
   });
+
+  // Also factor in goal combo frequency — pairs that score together often have real chemistry
+  const comboChemBonus = {};
+  const comboStats = getComboStats();
+  comboStats.forEach(c => {
+    if (c.matchCount >= 3) {
+      // Normalise: 1 combo/game = +5% chemistry boost, capped at +20%
+      const rate = c.goals / c.matchCount;
+      const bonus = Math.min(rate * 5, 20);
+      const key1 = `${c.scorer}|||${c.assister}`;
+      const key2 = `${c.assister}|||${c.scorer}`;
+      comboChemBonus[key1] = (comboChemBonus[key1] || 0) + bonus;
+      comboChemBonus[key2] = (comboChemBonus[key2] || 0) + bonus;
+    }
+  });
+
   let synergy = 0;
   let synergyPairs = 0;
   for (let i = 0; i < team.length; i++) {
     for (let j = i + 1; j < team.length; j++) {
       const key = `${team[i].player}|||${team[j].player}`;
-      if (key in chemLookupLocal) {
-        synergy += chemLookupLocal[key];
-        synergyPairs++;
-      }
+      let pairChem = 0;
+      if (key in chemLookupLocal) { pairChem += chemLookupLocal[key]; synergyPairs++; }
+      if (key in comboChemBonus) { pairChem += comboChemBonus[key] * 0.5; if (!(key in chemLookupLocal)) synergyPairs++; }
+      synergy += pairChem;
     }
   }
   const avgSynergy = synergyPairs > 0 ? synergy / synergyPairs : 0;
@@ -5643,9 +5659,8 @@ function autoBalance() {
     const gkScore = (team) => team.reduce((s,p) => s + ((p.goalkeeper_saves||0) / Math.max(p.games,1)), 0);
     const gkA = gkScore(a), gkB = gkScore(b);
 
-    // Team synergy: penalise imbalance more heavily
-    // Also penalise if one team has much higher total synergy (stacked chemistry)
-    const synergyDiff = Math.abs(dA.synergy - dB.synergy) * 2.5;
+    // Chemistry imbalance — heavily weighted so teams with stacked good pairs get split
+    const synergyDiff = Math.abs(dA.synergy - dB.synergy) * 5.0;
 
     return (
       abs(rA, rB) * 3.0 +
