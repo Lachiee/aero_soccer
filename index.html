@@ -2168,7 +2168,7 @@ function timeToYtSeconds(timeStr, half) {
   if (!timeStr) return null;
   const [min, sec] = timeStr.split(':').map(Number);
   const secs = min * 60 + (sec || 0);
-  if (half === '2H') return secs + (window._ytHalfOffset || 27 * 60);
+  if (half === '2H') return secs + (window._ytHalfOffset != null ? window._ytHalfOffset : 27 * 60);
   return secs;
 }
 
@@ -2262,7 +2262,7 @@ function openVideoModal(matchId, matchDate) {
   const existing = document.getElementById('video-link-modal');
   if (existing) existing.remove();
   const current = matchVideos[matchId] || '';
-  const offset = window._ytHalfOffset || 27;
+  const offset = window._ytHalfOffset != null ? window._ytHalfOffset : 27 * 60;
   const modal = document.createElement('div');
   modal.id = 'video-link-modal';
   modal.style.cssText = 'position:fixed;inset:0;z-index:500;background:rgba(0,0,0,.85);display:flex;align-items:center;justify-content:center;padding:20px';
@@ -2279,7 +2279,7 @@ function openVideoModal(matchId, matchDate) {
       <div style="background:var(--card2);border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:12px">
         <div style="font-size:.7rem;color:var(--muted);margin-bottom:6px;letter-spacing:.5px">⏱ 2nd half starts at (video time)</div>
         <div style="display:flex;align-items:center;gap:10px">
-          <input type="range" id="yt-offset-slider" min="20" max="60" step="1" value="${Math.round(offset/60)}"
+          <input type="range" id="yt-offset-slider" min="0" max="60" step="1" value="${Math.round(offset/60)}"
             oninput="document.getElementById('yt-offset-val').textContent=this.value+' min';window._ytHalfOffset=parseInt(this.value)*60"
             style="flex:1;accent-color:var(--lime)">
           <span id="yt-offset-val" style="color:var(--lime);font-family:'Bebas Neue',sans-serif;font-size:1rem;min-width:48px">${Math.round(offset/60)} min</span>
@@ -3935,7 +3935,7 @@ function saveSettings() {
     bannerHeights: { ...bannerHeights },
     bannerSlowmo: { ...bannerSlowmo },
     matchVideos: { ...matchVideos },
-    ytHalfOffset: window._ytHalfOffset || 27,
+    ytHalfOffset: window._ytHalfOffset != null ? window._ytHalfOffset : 27 * 60,
   };
   const json = JSON.stringify(settings, null, 2);
 
