@@ -3270,7 +3270,7 @@ function previewCombos() {
 }
 
 function exportCombosCsv() {
-  const lines = ['match_id,half,time,scorer,assister'];
+  const lines = ['match_id,half,time,scorer,assister,is_og'];
   // Sort by match date
   const sorted = Object.entries(goalCombos)
     .map(([mid, data]) => ({ mid, data, match: matchList.find(m => m.id === mid) }))
@@ -3279,7 +3279,7 @@ function exportCombosCsv() {
   sorted.forEach(({ mid, data }) => {
     ['h1','h2'].forEach(half => {
       (data[half]||[]).forEach(p => {
-        lines.push([mid, half==='h1'?'1H':'2H', p.time||'', p.scorer, p.assister||''].join(','));
+        lines.push([mid, half==='h1'?'1H':'2H', p.time||'', p.scorer, p.assister||'', p.isOG?'1':''].join(','));
       });
     });
   });
@@ -8825,10 +8825,11 @@ document.addEventListener('DOMContentLoaded', () => {
         const time   = cols[idx.time]?.trim() || null;
         const scorer = cols[idx.scorer]?.trim();
         const assister = cols[idx.assister]?.trim() || null;
+        const isOG = cols[idx.is_og]?.trim() === '1' || /\bOG\b|\bown\s*goal\b/i.test(scorer || '');
         if (!mid || !scorer) return;
         if (!loaded[mid]) loaded[mid] = { h1: [], h2: [] };
         const key = half === '2H' ? 'h2' : 'h1';
-        loaded[mid][key].push({ scorer, assister, time });
+        loaded[mid][key].push({ scorer, assister, time, isOG });
       });
       // Merge with localStorage — GitHub file takes precedence
       goalCombos = loaded;
