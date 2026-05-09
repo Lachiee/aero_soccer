@@ -697,6 +697,9 @@ canvas.spider{display:block;margin:0 auto}
     <div style="font-family:'Barlow Condensed',sans-serif;font-size:.85rem;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-bottom:14px">🔮 Predicted Result</div>
     <div id="predict-content"></div>
   </div>
+
+  <!-- Attack combo predictions -->
+  <div id="attack-combos-section" style="display:none"></div>
 </div>
 
 <!-- ===== PAGE: WEEKLY IMPORT ===== -->
@@ -2904,6 +2907,45 @@ function renderSeasonSummary() {
   const filtered = awards.filter(a => a.player && a.player !== '–');
   const [a1, a2, a3, ...rest] = filtered;
 
+  // Combo highlights
+  const comboHighlights = getSeasonComboHighlights();
+  const comboSection = (() => {
+    const parts = [];
+    if (comboHighlights.topPartnership) {
+      const p = comboHighlights.topPartnership;
+      parts.push(`<div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px">
+        <div style="font-size:.7rem;color:var(--muted);font-family:'Barlow Condensed',sans-serif;letter-spacing:1px;text-transform:uppercase;margin-bottom:6px">🔗 Best Partnership</div>
+        <div style="font-family:'Bebas Neue',sans-serif;font-size:1.3rem;color:var(--lime)">${p.scorer} → ${p.assister}</div>
+        <div style="font-size:.75rem;color:var(--muted);margin-top:2px">${p.goals} goals · ${p.matchCount} match${p.matchCount>1?'es':''}</div>
+      </div>`);
+    }
+    if (comboHighlights.biggestComeback) {
+      const c = comboHighlights.biggestComeback;
+      parts.push(`<div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px">
+        <div style="font-size:.7rem;color:var(--muted);font-family:'Barlow Condensed',sans-serif;letter-spacing:1px;text-transform:uppercase;margin-bottom:6px">🔄 Biggest Comeback</div>
+        <div style="font-family:'Bebas Neue',sans-serif;font-size:1.3rem;color:#60a5fa">Team ${c.team} · ${c.deficit} Down</div>
+        <div style="font-size:.75rem;color:var(--muted);margin-top:2px">${c.match.date} · ${c.match.goalsA}–${c.match.goalsB}</div>
+      </div>`);
+    }
+    if (comboHighlights.longestRun) {
+      const r = comboHighlights.longestRun;
+      parts.push(`<div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px">
+        <div style="font-size:.7rem;color:var(--muted);font-family:'Barlow Condensed',sans-serif;letter-spacing:1px;text-transform:uppercase;margin-bottom:6px">⚡ Longest Goal Run</div>
+        <div style="font-family:'Bebas Neue',sans-serif;font-size:1.3rem;color:var(--amber)">Team ${r.team} · ${r.cnt} Goals</div>
+        <div style="font-size:.75rem;color:var(--muted);margin-top:2px">${r.from}–${r.to} · ${r.match.date}</div>
+      </div>`);
+    }
+    if (comboHighlights.totalCombos > 0) {
+      const topAssist = getAssistLeaderboard()[0];
+      if (topAssist) parts.push(`<div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;cursor:pointer" onclick="nav('profile','${topAssist.name}')">
+        <div style="font-size:.7rem;color:var(--muted);font-family:'Barlow Condensed',sans-serif;letter-spacing:1px;text-transform:uppercase;margin-bottom:6px">🎯 Top Playmaker</div>
+        <div style="font-family:'Bebas Neue',sans-serif;font-size:1.3rem;color:var(--green)">${topAssist.name}</div>
+        <div style="font-size:.75rem;color:var(--muted);margin-top:2px">${topAssist.assists} tracked assists</div>
+      </div>`);
+    }
+    return parts.length ? `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px;margin-top:10px;margin-bottom:10px">${parts.join('')}</div>` : '';
+  })();
+
   content.innerHTML = `
     <!-- Hero row: top 3 awards -->
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;margin-bottom:10px">
@@ -2912,11 +2954,12 @@ function renderSeasonSummary() {
       ${a3 ? heroCard(a3, '#60a5fa') : ''}
     </div>
     <!-- Remaining awards -->
-    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px;margin-bottom:20px">
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px;margin-bottom:10px">
       ${rest.map(statCard).join('')}
       ${matchCard('🎯 Biggest Win', biggestWin)}
       ${matchCard('🔥 Highest Scoring', highestScoring)}
     </div>
+    ${comboSection}
     <div style="font-size:.72rem;color:var(--muted);text-align:center">Click any card to open that player's profile · Respects the season filter above</div>
   `;
 }
@@ -3132,6 +3175,115 @@ function getPlayerComboStats(playerName) {
     .sort((a,b) => b.goals - a.goals);
 
   return { scoredFrom: toArr(scoredFrom), assistedTo: toArr(assistedTo) };
+}
+
+// ── Goal timing patterns for a player ──────────────────────────────
+function getPlayerGoalTimings(playerName) {
+  // Returns goals bucketed by 5-min windows across all matches
+  const buckets = {}; // '0-5', '5-10', etc
+  const allGoals = [];
+  Object.entries(goalCombos).forEach(([mid, data]) => {
+    ['h1','h2'].forEach(half => {
+      (data[half]||[]).forEach(p => {
+        if (p.scorer === playerName && !p.isOG && p.time) {
+          const [min] = p.time.split(':').map(Number);
+          const bucket = Math.floor(min / 5) * 5;
+          buckets[bucket] = (buckets[bucket]||0) + 1;
+          allGoals.push({ min, half, time: p.time, mid });
+        }
+      });
+    });
+  });
+  return { buckets, allGoals };
+}
+
+// ── Assist leaderboard data ─────────────────────────────────────────
+function getAssistLeaderboard() {
+  const totals = {};
+  Object.entries(goalCombos).forEach(([mid, data]) => {
+    ['h1','h2'].forEach(half => {
+      (data[half]||[]).forEach(p => {
+        if (p.assister && !p.isOG) {
+          if (!totals[p.assister]) totals[p.assister] = { assists: 0, goals: 0, matches: new Set(), partners: {} };
+          totals[p.assister].assists++;
+          totals[p.assister].matches.add(mid);
+          if (!totals[p.assister].partners[p.scorer]) totals[p.assister].partners[p.scorer] = 0;
+          totals[p.assister].partners[p.scorer]++;
+        }
+        if (p.scorer && !p.isOG) {
+          if (!totals[p.scorer]) totals[p.scorer] = { assists: 0, goals: 0, matches: new Set(), partners: {} };
+          totals[p.scorer].goals++;
+        }
+      });
+    });
+  });
+  return Object.entries(totals)
+    .filter(([,d]) => d.assists > 0)
+    .map(([name, d]) => ({
+      name,
+      assists: d.assists,
+      goals: d.goals,
+      matchCount: d.matches.size,
+      bestPartner: Object.entries(d.partners).sort((a,b)=>b[1]-a[1])[0] || null
+    }))
+    .sort((a,b) => b.assists - a.assists);
+}
+
+// ── Season summary stats from combos ───────────────────────────────
+function getSeasonComboHighlights() {
+  const partnerships = getComboStats();
+  const comebacks = [];
+  const longRuns = [];
+
+  matchList.forEach(m => {
+    const combos = goalCombos[m.id];
+    if (!combos) return;
+    const all = [...(combos.h1||[]).map(p=>({...p,half:'1H'})), ...(combos.h2||[]).map(p=>({...p,half:'2H'}))].filter(p=>p.time);
+    if (!all.length) return;
+
+    const toSecs = t => { const [min,sec]=t.split(':').map(Number); return min*60+(sec||0); };
+    const scorerTeam = {};
+    [...m.teamA,...m.teamB].forEach(r=>{ scorerTeam[r.player]=r.team; });
+    const events = all.map(p=>({...p,secs:toSecs(p.time),team:p.isOG?(scorerTeam[p.scorer]==='A'?'B':'A'):scorerTeam[p.scorer]||'A'})).sort((a,b)=>a.secs-b.secs);
+
+    let sA=0,sB=0,maxDA=0,maxDB=0;
+    events.forEach(e=>{ if(e.team==='A') sA++; else sB++; maxDA=Math.max(maxDA,sB-sA); maxDB=Math.max(maxDB,sA-sB); });
+
+    if(maxDA>=3&&sA>=sB) comebacks.push({match:m,team:'A',deficit:maxDA});
+    if(maxDB>=3&&sB>=sA) comebacks.push({match:m,team:'B',deficit:maxDB});
+
+    // Momentum runs
+    for(let i=0;i<events.length-2;i++){
+      let j=i,cnt=1;
+      while(j+1<events.length&&events[j+1].team===events[i].team&&events[j+1].secs-events[i].secs<=480){j++;cnt++;}
+      if(cnt>=4) longRuns.push({match:m,team:events[i].team,cnt,from:events[i].time,to:events[j].time});
+      if(cnt>1) i=j;
+    }
+  });
+
+  return {
+    topPartnership: partnerships[0] || null,
+    topScorer: getComboStats().reduce((acc,c)=>{ /* count by scorer */ return acc; }, {}),
+    biggestComeback: comebacks.sort((a,b)=>b.deficit-a.deficit)[0] || null,
+    longestRun: longRuns.sort((a,b)=>b.cnt-a.cnt)[0] || null,
+    totalCombos: partnerships.reduce((s,p)=>s+p.goals,0),
+    partnerships
+  };
+}
+
+// ── Attack combo prediction for team builder ───────────────────────
+function getAttackComboPrediction(teamPlayers) {
+  // Given a list of player names, find best scoring partnerships within them
+  const stats = getComboStats();
+  const names = new Set(teamPlayers);
+  const teamCombos = stats.filter(c => names.has(c.scorer) && names.has(c.assister));
+  const perGame = teamCombos.map(c => ({
+    ...c,
+    // How many shared games did these two play together?
+    sharedGames: Math.max(c.matchCount, 1),
+    rate: (c.goals / c.matchCount).toFixed(1)
+  })).sort((a,b) => b.goals - a.goals);
+  return perGame.slice(0, 5);
 }
 
 function getComboStats() {
@@ -4799,6 +4951,40 @@ function renderProfile(name) {
       </div>`;
     })()}
 
+    <!-- Goal Timing Patterns -->
+    ${(() => {
+      const { buckets, allGoals } = getPlayerGoalTimings(name);
+      if (allGoals.length < 3) return '';
+      const maxBucket = Math.max(...Object.values(buckets), 1);
+      const bucketKeys = Array.from({length: 12}, (_,i) => i*5); // 0-55 mins
+      const earlyGoals = allGoals.filter(g => g.min < 15).length;
+      const lateGoals = allGoals.filter(g => g.min >= 40).length;
+      const total = allGoals.length;
+      let insight = '';
+      if (earlyGoals / total >= 0.4) insight = `⚡ Fast starter — ${Math.round(earlyGoals/total*100)}% of goals in first 15 mins`;
+      else if (lateGoals / total >= 0.4) insight = `💪 Strong finisher — ${Math.round(lateGoals/total*100)}% of goals after 40 mins`;
+      else insight = `⚖ Consistent scorer throughout the match`;
+
+      return `<div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:18px;margin-bottom:14px">
+        <div style="font-family:'Barlow Condensed',sans-serif;font-size:.7rem;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-bottom:8px">⏱ When ${name.split(' ')[0]} Scores</div>
+        <div style="background:rgba(57,211,83,.06);border:1px solid rgba(57,211,83,.15);border-radius:7px;padding:7px 12px;margin-bottom:12px;font-size:.75rem;color:var(--green)">${insight}</div>
+        <div style="display:flex;align-items:flex-end;gap:2px;height:50px;margin-bottom:4px">
+          ${bucketKeys.map(b => {
+            const count = buckets[b] || 0;
+            const h = count ? Math.max((count / maxBucket) * 46, 4) : 2;
+            const isHigh = count === maxBucket && count > 0;
+            return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:50px">
+              <div style="width:100%;background:${isHigh?'var(--green)':'rgba(57,211,83,.35)'};border-radius:2px 2px 0 0;height:${h}px;transition:height .3s" title="${count} goal${count!==1?'s':''}  at ${b}-${b+5} min"></div>
+            </div>`;
+          }).join('')}
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:.6rem;color:var(--muted)">
+          <span>0'</span><span>15'</span><span>30'</span><span>HT</span><span>45'</span><span>60'</span>
+        </div>
+        <div style="font-size:.65rem;color:var(--muted);margin-top:6px">${total} goals tracked across ${new Set(allGoals.map(g=>g.mid)).size} matches</div>
+      </div>`;
+    })()}
+
       <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:18px">
         <div style="font-family:'Barlow Condensed',sans-serif;font-size:.7rem;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-bottom:14px">⚽ Attacking</div>
         ${[
@@ -5008,8 +5194,8 @@ function saveCustomStat(player, key, val) {
 // LEADERBOARD
 // =====================================================================
 const LB_STATS = [
-  ['rating','Rating'],['goals','Goals'],['assists','Assists'],['total_shots','Shots'],
-  ['shot_accuracy','Shot Accuracy %'],['shot_conversion','Shot Conv %'],
+  ['rating','Rating'],['goals','Goals'],['assists','Assists'],['combo_assists','🤝 Goal Combos'],
+  ['total_shots','Shots'],['shot_accuracy','Shot Accuracy %'],['shot_conversion','Shot Conv %'],
   ['tackles','Tackles'],['interceptions','Intercepts'],
   ['nutmegs','Nutmegs'],['key_passes','Key Passes'],['blocks','Blocks'],
   ['goalkeeper_saves','GK Saves'],['wins','Wins'],['mvps','MVPs 👑'],
@@ -5080,6 +5266,11 @@ function renderLeaderboard() {
   const getVal = p => {
     const g = Math.max(p.games, 1);
     if (lbStat === 'rating') return p.rating;
+    if (lbStat === 'combo_assists') {
+      const lb = getAssistLeaderboard();
+      const entry = lb.find(e => e.name === p.player);
+      return entry ? entry.assists : 0;
+    }
     if (lbStat === 'shot_conversion') {
       return p.total_shots > 0 ? parseFloat((p.goals / p.total_shots * 100).toFixed(1)) : 0;
     }
@@ -5137,6 +5328,7 @@ function renderLeaderboard() {
   allTimeStats.forEach(p => {
     const g = Math.max(p.games, 1);
     if (lbStat === 'gd') allTimeVals[p.player] = p.gd ?? 0;
+    else if (lbStat === 'combo_assists') { const lb=getAssistLeaderboard(); const e=lb.find(x=>x.name===p.player); allTimeVals[p.player]=e?e.assists:0; }
     else if (lbStat === 'attendance') allTimeVals[p.player] = p.attendanceRate ?? 0;
     else if (lbStat === 'shot_conversion') allTimeVals[p.player] = p.total_shots > 0 ? parseFloat((p.goals/p.total_shots*100).toFixed(1)) : 0;
     else if (lbStat === 'shot_accuracy') allTimeVals[p.player] = p.total_shots > 0 ? parseFloat((p.shots_on_target/p.total_shots*100).toFixed(1)) : 0;
@@ -5830,6 +6022,49 @@ function renderTeamResult(tA, tB) {
   // Generate synergy breakdown and prediction
   renderTeamSynergy(tA, tB);
   predictResult(tA, tB);
+  renderAttackComboPrediction(tA, tB);
+}
+
+function renderAttackComboPrediction(tA, tB) {
+  // Show top attack partnerships within each team based on combo data
+  const sec = document.getElementById('attack-combos-section');
+  if (!sec) return;
+
+  const teamCombos = (players) => {
+    const names = players.map(p => p.player);
+    return getAttackComboPrediction(names);
+  };
+
+  const aCombos = teamCombos(tA);
+  const bCombos = teamCombos(tB);
+
+  if (!aCombos.length && !bCombos.length) {
+    sec.style.display = 'none';
+    return;
+  }
+
+  const renderList = (combos, color) => combos.length
+    ? combos.map(c => `<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid rgba(255,255,255,.04);font-size:.76rem">
+        <span style="color:var(--text)">${c.scorer} <span style="color:var(--muted)">←</span> ${c.assister}</span>
+        <span style="color:${color};font-family:'Bebas Neue',sans-serif;font-size:1rem">${c.goals} <span style="color:var(--muted);font-size:.65rem">goals · ${c.rate}/g</span></span>
+      </div>`).join('')
+    : `<div style="font-size:.74rem;color:var(--muted)">No combo data yet</div>`;
+
+  sec.style.display = 'block';
+  sec.innerHTML = `
+    <div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin-top:12px">
+      <div style="font-family:'Barlow Condensed',sans-serif;font-size:.7rem;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-bottom:10px">⚽ Attack Partnerships In These Teams</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+        <div>
+          <div style="font-size:.65rem;color:var(--green);letter-spacing:1px;text-transform:uppercase;margin-bottom:6px;font-family:'Barlow Condensed',sans-serif">Team A</div>
+          ${renderList(aCombos, 'var(--green)')}
+        </div>
+        <div>
+          <div style="font-size:.65rem;color:var(--blue);letter-spacing:1px;text-transform:uppercase;margin-bottom:6px;font-family:'Barlow Condensed',sans-serif">Team B</div>
+          ${renderList(bCombos, 'var(--blue)')}
+        </div>
+      </div>
+    </div>`;
 }
 
 function renderTeamSynergy(tA, tB) {
@@ -8103,20 +8338,56 @@ function generateMatchReport(matchId) {
   const reportText = [opener, scoringLine, scorerLine, creatorLine, defLine, gkLine, flairLine, ogLine, mvpLine]
     .filter(Boolean).join(' ') + recordsLine;
 
+  // Add timeline insights from combos if available
+  const combos = goalCombos[matchId];
+  let timelineSection = '';
+  if (combos) {
+    const all = [...(combos.h1||[]).map(p=>({...p,half:'1H'})), ...(combos.h2||[]).map(p=>({...p,half:'2H'}))].filter(p=>p.time);
+    if (all.length) {
+      const toSecs = t => { const [min,sec]=t.split(':').map(Number); return min*60+(sec||0); };
+      const scorerTeam = {};
+      [...m.teamA,...m.teamB].forEach(r=>{ scorerTeam[r.player]=r.team; });
+      const events = all.map(p=>({...p,secs:toSecs(p.time),team:p.isOG?(scorerTeam[p.scorer]==='A'?'B':'A'):scorerTeam[p.scorer]||'A'})).sort((a,b)=>a.secs-b.secs);
+      let sA=0,sB=0,maxDA=0,maxDB=0;
+      const rows=events.map(e=>{ if(e.team==='A')sA++;else sB++; maxDA=Math.max(maxDA,sB-sA); maxDB=Math.max(maxDB,sA-sB); return{...e,scoreA:sA,scoreB:sB}; });
+
+      const insights=[];
+      // Momentum runs
+      for(let i=0;i<rows.length;i++){
+        let j=i,cnt=1;
+        while(j+1<rows.length&&rows[j+1].team===rows[i].team&&rows[j+1].secs-rows[i].secs<=480){j++;cnt++;}
+        if(cnt>=3){ insights.push(`Team ${rows[i].team} went on a ${cnt}-goal run (${rows[i].time}–${rows[j].time})`); i=j; }
+      }
+      // Comeback
+      if(maxDA>=3&&sA>=sB) insights.push(`Team A came back from ${maxDA} goals down`);
+      if(maxDB>=3&&sB>=sA) insights.push(`Team B came back from ${maxDB} goals down`);
+      // Key partnerships this match
+      const pH={};
+      rows.filter(r=>r.assister&&!r.isOG).forEach(r=>{ const k=`${r.scorer}+${r.assister}`;pH[k]=(pH[k]||0)+1; });
+      Object.entries(pH).filter(([,v])=>v>=2).forEach(([k,v])=>{
+        const [sc,as]=k.split('+');
+        insights.push(`${sc} and ${as} combined ${v} times`);
+      });
+      if(insights.length) timelineSection = '\n\n⏱ ' + insights.join('. ') + '.';
+    }
+  }
+
+  const fullReport = reportText + timelineSection;
+
   const modal = document.createElement('div');
   modal.style.cssText = 'position:fixed;inset:0;z-index:500;background:rgba(0,0,0,.85);display:flex;align-items:center;justify-content:center;padding:20px';
   modal.onclick = e => { if (e.target === modal) modal.remove(); };
   const copyBtn = document.createElement('button');
   copyBtn.textContent = '📋 Copy Report';
   copyBtn.style.cssText = 'background:var(--card2);border:1px solid var(--border);color:var(--text2);padding:8px 16px;border-radius:7px;cursor:pointer;font-family:"Barlow Condensed",sans-serif;font-size:.82rem;letter-spacing:1px;text-transform:uppercase';
-  copyBtn.onclick = () => navigator.clipboard.writeText(reportText).then(() => { copyBtn.textContent = '✅ Copied!'; });
+  copyBtn.onclick = () => navigator.clipboard.writeText(fullReport).then(() => { copyBtn.textContent = '✅ Copied!'; });
 
   modal.innerHTML = `
     <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:26px;width:100%;max-width:560px;position:relative;max-height:90vh;overflow-y:auto">
       <button onclick="this.closest('[style*=fixed]').remove()" style="position:absolute;top:12px;right:14px;background:none;border:none;color:var(--muted);font-size:1.4rem;cursor:pointer">✕</button>
       <div style="font-family:'Bebas Neue',sans-serif;font-size:1.4rem;color:var(--green);letter-spacing:2px;margin-bottom:4px">📝 Match Report</div>
       <div style="font-size:.75rem;color:var(--muted);margin-bottom:16px">${m.date} · Team A ${m.goalsA}–${m.goalsB} Team B</div>
-      <div style="font-size:.9rem;color:var(--text);line-height:1.7;white-space:pre-line;margin-bottom:16px">${reportText}</div>
+      <div style="font-size:.9rem;color:var(--text);line-height:1.7;white-space:pre-line;margin-bottom:16px">${fullReport}</div>
     </div>`;
   modal.querySelector('div > div:last-of-type').after(copyBtn);
   document.body.appendChild(modal);
