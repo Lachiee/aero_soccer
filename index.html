@@ -3050,7 +3050,7 @@ function drawWormCanvas(canvasId, matchId) {
       ctx.fillStyle = e.team==='A' ? '#4ade80' : '#60a5fa'; ctx.fill();
       ctx.strokeStyle = 'rgba(0,0,0,.6)'; ctx.lineWidth = 1.5; ctx.stroke();
     }
-    if (ytId && e.time) dotData.push({x, y, r:10, time:e.time, half:e.half, scorer:e.scorer+(e.isOG?' (OG)':'')});
+    if (ytId && e.time) dotData.push({x, y, r:10, time:e.time, half:e.half, scorer: e.isOG && e.assister ? e.assister+' (OG)' : e.scorer+(e.isOG?' (OG)':'')});
   });
 
   // Click/hover
@@ -4190,13 +4190,16 @@ function renderMatches() {
               const matchKey=m.id.replace(/[#,]/g,'_');
               const mins=e.time?e.time.split(':')[0].replace(/^0/,''):'?';
               const ogLabel = e.isOG ? '<span style="color:var(--red);font-size:.58rem;font-weight:700"> OG</span>' : '';
+              // For OGs: show the assister (actual OG scorer) as the name, with OG badge
+              const displayName = e.isOG && e.assister ? e.assister : e.scorer;
+              const displayAssister = e.isOG ? null : e.assister; // don't show assister separately for OGs
               return '<div style="display:inline-flex;align-items:center;gap:3px;background:var(--card2);border:1px solid '+(e.isOG?'rgba(240,96,96,.4)':e.team==='A'?'rgba(57,211,83,.3)':'rgba(96,165,250,.3)')
                 +';border-radius:5px;padding:2px 8px;font-size:.68rem;'+(ytSecs?'cursor:pointer':'')+'"'
                 +(ytSecs?' onclick="seekYtVideo(\''+matchKey+'\',\''+ytId+'\','+ytSecs+')" title="▶ Watch"':'')+'>'
                 +'<span style="color:var(--muted);font-size:.6rem">'+mins+"'</span>"
-                +'<span style="color:'+(e.isOG?'var(--red)':e.team==='A'?'#4ade80':'#60a5fa')+';font-weight:600;margin-left:2px">'+e.scorer+'</span>'
+                +'<span style="color:'+(e.isOG?'var(--red)':e.team==='A'?'#4ade80':'#60a5fa')+';font-weight:600;margin-left:2px">'+displayName+'</span>'
                 +ogLabel
-                +(e.assister?'<span style="color:var(--muted);font-size:.6rem"> ('+e.assister+')</span>':'')
+                +(displayAssister?'<span style="color:var(--muted);font-size:.6rem"> ('+displayAssister+')</span>':'')
                 +(ytSecs?'<span style="color:var(--amber);font-size:.55rem;margin-left:2px">▶</span>':'')
                 +'</div>';
             }).join('')
@@ -4239,19 +4242,19 @@ function renderMatches() {
               allow="accelerometer;autoplay;clipboard-write;encrypted-media;gyroscope;picture-in-picture"
               allowfullscreen loading="lazy"></iframe>
           </div>
-          <div style="display:flex;gap:8px;margin-bottom:6px">
+          ${adminMode ? `<div style="display:flex;gap:8px;margin-bottom:6px">
             <button onclick="openVideoModal('${m.id.replace(/'/g,"\\'")}','${m.date}')" class="print-btn">📺 Change Video</button>
             <button onclick="removeMatchVideo('${m.id.replace(/'/g,"\\'")}');event.stopPropagation()" class="print-btn" style="color:var(--red);border-color:rgba(240,96,96,.3)">✕ Remove</button>
-            ${adminMode ? `<div style="display:flex;align-items:center;gap:6px;font-size:.72rem;color:var(--muted)">
+            <div style="display:flex;align-items:center;gap:6px;font-size:.72rem;color:var(--muted)">
               <span>2H offset:</span>
-              <input type="number" value="${Math.round((window._ytHalfOffset||1620)/60)}" min="20" max="60" style="width:46px;background:var(--card2);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:2px 6px;font-size:.72rem;text-align:center"
+              <input type="number" value="${Math.round((window._ytHalfOffset!=null?window._ytHalfOffset:1620)/60)}" min="0" max="60" style="width:46px;background:var(--card2);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:2px 6px;font-size:.72rem;text-align:center"
                 onchange="window._ytHalfOffset=parseInt(this.value)*60" title="Minutes from video start to 2nd half kickoff">
               <span>min</span>
-            </div>` : ''}
-          </div>` : `
+            </div>
+          </div>` : ''}` : adminMode ? `
           <button onclick="openVideoModal('${m.id.replace(/'/g,"\\'")}','${m.date}')" class="print-btn" style="display:flex;align-items:center;gap:7px">
             <span>📺</span> Link Match Video
-          </button>`}
+          </button>` : ''}
         </div>
 
 
