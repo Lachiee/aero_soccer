@@ -2941,131 +2941,134 @@ function drawWormCanvas(canvasId, matchId) {
   const { rows, fA, fB, matchDur, ytId } = data;
 
   const dpr = window.devicePixelRatio || 1;
-  const W = canvas.offsetWidth || canvas.parentElement?.offsetWidth || 600;
+  const W = canvas.offsetWidth || canvas.parentElement?.offsetWidth || 700;
   const H = 220;
-  canvas.width = W * dpr;
-  canvas.height = H * dpr;
-  canvas.style.width = W + 'px';
-  canvas.style.height = H + 'px';
+  canvas.width = W * dpr; canvas.height = H * dpr;
+  canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
   const ctx = canvas.getContext('2d');
   ctx.scale(dpr, dpr);
 
-  const pad = { top: 24, right: 60, bottom: 24, left: 42 };
+  const pad = { top: 36, right: 36, bottom: 36, left: 36 };
   const cW = W - pad.left - pad.right, cH = H - pad.top - pad.bottom;
 
-  ctx.fillStyle = 'rgba(0,0,0,.25)';
-  ctx.beginPath();
+  // Background
+  ctx.fillStyle = 'rgba(0,0,0,.3)';
   if (ctx.roundRect) ctx.roundRect(0,0,W,H,8); else ctx.rect(0,0,W,H);
   ctx.fill();
 
-  const maxScore = Math.max(fA, fB, 1);
+  const maxLead = Math.max(...rows.map(e => Math.abs(e.scoreA - e.scoreB)), 2);
+  const yRange = maxLead + 1;
   const toX = s => pad.left + (s / matchDur) * cW;
-  const toY = d => pad.top + cH/2 - (d / (maxScore + 1)) * (cH/2 - 2);
+  const toY = d => pad.top + cH / 2 - (d / yRange) * (cH / 2);
 
-  // Grid
-  for (let g = 1; g <= maxScore; g++) {
-    ctx.strokeStyle = 'rgba(255,255,255,.06)'; ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(pad.left, toY(g)); ctx.lineTo(pad.left+cW, toY(g)); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(pad.left, toY(-g)); ctx.lineTo(pad.left+cW, toY(-g)); ctx.stroke();
+  // Grid lines + Y labels
+  ctx.font = 'bold 10px Barlow Condensed, sans-serif';
+  for (let g = -maxLead; g <= maxLead; g++) {
+    const y = toY(g);
+    ctx.strokeStyle = g === 0 ? 'rgba(255,255,255,.18)' : 'rgba(255,255,255,.06)';
+    ctx.lineWidth = g === 0 ? 1.5 : 1;
+    ctx.beginPath(); ctx.moveTo(pad.left, y); ctx.lineTo(pad.left+cW, y); ctx.stroke();
+    ctx.textAlign = 'right';
+    ctx.fillStyle = g > 0 ? 'rgba(57,211,83,.55)' : g < 0 ? 'rgba(96,165,250,.55)' : 'rgba(255,255,255,.3)';
+    ctx.fillText((g > 0 ? '+' : '') + g, pad.left - 5, y + 4);
   }
-  ctx.strokeStyle = 'rgba(255,255,255,.2)'; ctx.lineWidth = 1;
-  ctx.beginPath(); ctx.moveTo(pad.left, toY(0)); ctx.lineTo(pad.left+cW, toY(0)); ctx.stroke();
 
-  // Halftime line
-  const htSecs = matchDur / 2;
-  const htX = pad.left + (htSecs / matchDur) * cW;
-  ctx.strokeStyle = 'rgba(255,255,255,.25)';
-  ctx.lineWidth = 1.5;
-  ctx.setLineDash([5, 4]);
-  ctx.beginPath(); ctx.moveTo(htX, pad.top); ctx.lineTo(htX, H - pad.bottom); ctx.stroke();
+  // Halftime dashed line
+  const htX = toX(matchDur / 2);
+  ctx.strokeStyle = 'rgba(255,255,255,.3)'; ctx.lineWidth = 1.5; ctx.setLineDash([5,5]);
+  ctx.beginPath(); ctx.moveTo(htX, pad.top); ctx.lineTo(htX, pad.top+cH); ctx.stroke();
   ctx.setLineDash([]);
-  ctx.fillStyle = 'rgba(255,255,255,.3)';
-  ctx.font = '9px Barlow Condensed, sans-serif';
-  ctx.textAlign = 'center';
-  ctx.fillText('HT', htX, pad.top - 4);
 
-  // Score axis labels
-  ctx.font = 'bold 11px Barlow Condensed, sans-serif'; ctx.textAlign = 'right';
-  for (let g = 1; g <= maxScore; g++) {
-    ctx.fillStyle = 'rgba(57,211,83,.7)'; ctx.fillText('+'+g, pad.left-6, toY(g)+4);
-    ctx.fillStyle = 'rgba(96,165,250,.7)'; ctx.fillText('-'+g, pad.left-6, toY(-g)+4);
-  }
-  ctx.fillStyle = 'rgba(255,255,255,.3)'; ctx.fillText('0', pad.left-6, toY(0)+4);
-
-  // Time axis labels along bottom
-  ctx.font = '9px Barlow Condensed, sans-serif'; ctx.fillStyle = 'rgba(255,255,255,.25)'; ctx.textAlign = 'center';
-  [10,20,30,40,50].forEach(min => {
-    const x = pad.left + (min*60/matchDur)*cW;
-    if (x < pad.left+cW-10) {
-      ctx.fillText(min+"'", x, H-6);
-      ctx.strokeStyle='rgba(255,255,255,.06)';ctx.lineWidth=1;
-      ctx.beginPath();ctx.moveTo(x,pad.top);ctx.lineTo(x,H-pad.bottom+2);ctx.stroke();
+  // X axis time labels + vertical guides
+  const totalMins = Math.round(matchDur / 60);
+  const step = totalMins <= 60 ? 10 : 15;
+  ctx.font = '10px Barlow Condensed, sans-serif'; ctx.fillStyle = 'rgba(255,255,255,.3)'; ctx.textAlign = 'center';
+  for (let min = 0; min <= totalMins; min += step) {
+    const x = toX(min * 60);
+    ctx.fillText(min + "'", x, H - 8);
+    if (min > 0 && min < totalMins) {
+      ctx.strokeStyle = 'rgba(255,255,255,.05)'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(x, pad.top); ctx.lineTo(x, pad.top+cH); ctx.stroke();
     }
-  });
+  }
 
-  // Build step-function path
+  // Watermark half labels
+  ctx.save();
+  ctx.font = 'bold ' + Math.round(cH * 0.6) + 'px Barlow Condensed, sans-serif';
+  ctx.fillStyle = 'rgba(255,255,255,.025)'; ctx.textAlign = 'center';
+  ctx.fillText('1H', pad.left + cW * 0.25, pad.top + cH * 0.75);
+  ctx.fillText('2H', pad.left + cW * 0.75, pad.top + cH * 0.75);
+  ctx.restore();
+
+  // Title + subtitle
+  ctx.fillStyle = 'rgba(255,255,255,.75)'; ctx.font = 'bold 11px Barlow Condensed, sans-serif'; ctx.textAlign = 'left';
+  ctx.fillText('MATCH TIMELINE', pad.left, 18);
+  ctx.fillStyle = 'rgba(255,255,255,.3)'; ctx.font = '9px Barlow Condensed, sans-serif';
+  ctx.fillText('GOAL DIFFERENTIAL OVER ' + totalMins + "'", pad.left + 112, 18);
+
+  // Legend
+  ctx.textAlign = 'right';
+  ctx.fillStyle = '#4ade80'; ctx.font = 'bold 9px Barlow Condensed, sans-serif';
+  ctx.fillText('■ TEAM A LEADING', W - pad.right - 80, 18);
+  ctx.fillStyle = '#60a5fa';
+  ctx.fillText('■ TEAM B LEADING', W - pad.right, 18);
+
+  // Build worm path (step function)
   const pts = [{ x: pad.left, y: toY(0) }];
   rows.forEach(e => {
     const x = toX(e.secs), prev = pts[pts.length-1];
-    pts.push({ x, y: prev.y }); // horizontal step
-    pts.push({ x, y: toY(e.scoreA - e.scoreB) }); // vertical drop
+    pts.push({ x, y: prev.y });
+    pts.push({ x, y: toY(e.scoreA - e.scoreB) });
   });
-  pts.push({ x: pad.left + cW, y: toY(fA - fB) });
+  pts.push({ x: pad.left+cW, y: toY(fA-fB) });
 
-  // Gradient fills
-  const gA = ctx.createLinearGradient(0, pad.top, 0, toY(0));
-  gA.addColorStop(0, 'rgba(57,211,83,.3)'); gA.addColorStop(1, 'rgba(57,211,83,0)');
+  // Green fill above zero
+  const gA = ctx.createLinearGradient(0, toY(maxLead), 0, toY(0));
+  gA.addColorStop(0, 'rgba(57,211,83,.22)'); gA.addColorStop(1, 'rgba(57,211,83,.04)');
   ctx.beginPath(); ctx.moveTo(pad.left, toY(0));
-  pts.forEach(p => ctx.lineTo(p.x, p.y));
+  pts.forEach(p => ctx.lineTo(p.x, Math.min(p.y, toY(0))));
   ctx.lineTo(pad.left+cW, toY(0)); ctx.closePath(); ctx.fillStyle = gA; ctx.fill();
 
-  const gB = ctx.createLinearGradient(0, toY(0), 0, pad.top+cH);
-  gB.addColorStop(0, 'rgba(96,165,250,0)'); gB.addColorStop(1, 'rgba(96,165,250,.25)');
+  // Blue fill below zero
+  const gB = ctx.createLinearGradient(0, toY(0), 0, toY(-maxLead));
+  gB.addColorStop(0, 'rgba(96,165,250,.04)'); gB.addColorStop(1, 'rgba(96,165,250,.28)');
   ctx.beginPath(); ctx.moveTo(pad.left, toY(0));
-  pts.forEach(p => ctx.lineTo(p.x, p.y));
+  pts.forEach(p => ctx.lineTo(p.x, Math.max(p.y, toY(0))));
   ctx.lineTo(pad.left+cW, toY(0)); ctx.closePath(); ctx.fillStyle = gB; ctx.fill();
 
   // Worm line
   ctx.beginPath();
-  pts.forEach((p,i) => i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y));
-  ctx.strokeStyle = 'rgba(255,255,255,.75)'; ctx.lineWidth = 2; ctx.lineJoin = 'round'; ctx.stroke();
+  pts.forEach((p,i) => i===0 ? ctx.moveTo(p.x,p.y) : ctx.lineTo(p.x,p.y));
+  ctx.strokeStyle = 'rgba(255,255,255,.82)'; ctx.lineWidth = 2; ctx.lineJoin = 'round'; ctx.stroke();
 
-  // Goal dots + click targets
+  // Goal dots
   const dotData = [];
   rows.forEach(e => {
     const x = toX(e.secs), y = toY(e.scoreA - e.scoreB);
-    ctx.beginPath(); ctx.arc(x, y, 7, 0, Math.PI*2);
-    ctx.fillStyle = e.team === 'A' ? '#4ade80' : '#60a5fa'; ctx.fill();
-    ctx.strokeStyle = 'rgba(0,0,0,.5)'; ctx.lineWidth = 1.5; ctx.stroke();
-    if (ytId && e.time) dotData.push({ x, y, r: 12, time: e.time, half: e.half, scorer: e.scorer });
+    ctx.beginPath(); ctx.arc(x, y, 5, 0, Math.PI*2);
+    ctx.fillStyle = e.team==='A' ? '#4ade80' : '#60a5fa'; ctx.fill();
+    ctx.strokeStyle = 'rgba(0,0,0,.6)'; ctx.lineWidth = 1.5; ctx.stroke();
+    if (ytId && e.time) dotData.push({x, y, r:10, time:e.time, half:e.half, scorer:e.scorer});
   });
 
-  // Score labels top-right
-  ctx.font = 'bold 11px Barlow Condensed, sans-serif'; ctx.textAlign = 'right';
-  ctx.fillStyle = '#4ade80'; ctx.fillText('Team A: '+fA, pad.left+cW, pad.top-6);
-  ctx.fillStyle = '#60a5fa'; ctx.fillText('Team B: '+fB, pad.left+cW, pad.top+6);
-
-  // Click/hover handlers
+  // Click/hover
   if (ytId && dotData.length && !canvas._clickBound) {
-    canvas._clickBound = true;
-    canvas._dots = dotData;
-    canvas.style.cursor = 'pointer';
+    canvas._clickBound = true; canvas._dots = dotData; canvas.style.cursor = 'pointer';
     canvas.addEventListener('click', ev => {
       const r = canvas.getBoundingClientRect();
       const cx = (ev.clientX-r.left)*(W/r.width), cy = (ev.clientY-r.top)*(H/r.height);
-      const hit = (canvas._dots||[]).find(d => Math.hypot(cx-d.x, cy-d.y) <= d.r);
+      const hit = (canvas._dots||[]).find(d => Math.hypot(cx-d.x,cy-d.y)<=d.r);
       if (hit) seekYtVideo(matchId.replace(/[#,]/g,'_'), ytId, timeToYtSeconds(hit.time, hit.half));
     });
     canvas.addEventListener('mousemove', ev => {
       const r = canvas.getBoundingClientRect();
       const cx = (ev.clientX-r.left)*(W/r.width), cy = (ev.clientY-r.top)*(H/r.height);
-      const hit = (canvas._dots||[]).find(d => Math.hypot(cx-d.x, cy-d.y) <= d.r);
+      const hit = (canvas._dots||[]).find(d => Math.hypot(cx-d.x,cy-d.y)<=d.r);
       canvas.title = hit ? '▶ '+hit.scorer+' '+hit.half+' '+hit.time : '';
     });
-  } else if (ytId) {
-    canvas._dots = dotData; // update dots on redraw
-  }
+  } else if (ytId) { canvas._dots = dotData; }
 }
+
 // =====================================================================
 const LS_COMBOS = 'aeroSoccer_goalCombos';
 let goalCombos = {};
@@ -4167,6 +4170,22 @@ function renderMatches() {
           return '<div style="margin-bottom:14px">'
             +'<div style="font-size:.62rem;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-bottom:6px;font-family:\'Barlow Condensed\',sans-serif">Score Worm'+(ytId?' · click dot to seek video':'')+'</div>'
             +'<canvas id="'+canvasId+'" style="width:100%;height:220px;display:block;border-radius:8px"></canvas>'
+            // Goal chips row
+            +'<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:8px">'
+            +rows.map(e=>{
+              const ytSecs=ytId&&e.time?timeToYtSeconds(e.time,e.half):null;
+              const matchKey=m.id.replace(/[#,]/g,'_');
+              const mins=e.time?e.time.split(':')[0].replace(/^0/,''):'?';
+              return '<div style="display:inline-flex;align-items:center;gap:3px;background:var(--card2);border:1px solid '+(e.team==='A'?'rgba(57,211,83,.3)':'rgba(96,165,250,.3)')
+                +';border-radius:5px;padding:2px 8px;font-size:.68rem;'+(ytSecs?'cursor:pointer':'')+'"'
+                +(ytSecs?' onclick="seekYtVideo(\''+matchKey+'\',\''+ytId+'\','+ytSecs+')" title="▶ Watch"':'')+'>'
+                +'<span style="color:var(--muted);font-size:.6rem">'+mins+"'</span>"
+                +'<span style="color:'+(e.team==='A'?'#4ade80':'#60a5fa')+';font-weight:600;margin-left:2px">'+e.scorer+'</span>'
+                +(e.assister?'<span style="color:var(--muted);font-size:.6rem"> ('+e.assister+')</span>':'')
+                +(ytSecs?'<span style="color:var(--amber);font-size:.55rem;margin-left:2px">▶</span>':'')
+                +'</div>';
+            }).join('')
+            +'</div>'
             +(insights.length?'<div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:8px">'+insights.map(ins=>'<div style="background:var(--card2);border:1px solid var(--border);border-radius:5px;padding:2px 9px;font-size:.68rem;color:'+ins.col+'">'+ins.text+'</div>').join('')+'</div>':'')
             +'</div>';
         })()}
