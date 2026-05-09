@@ -2200,18 +2200,10 @@ function removeMatchVideo(matchId) {
 }
 
 function seekYtVideo(matchKey, ytId, seconds) {
-  // Seek the embedded iframe to a specific time, or open in new tab if not embedded
-  const iframe = document.getElementById('yt-iframe-' + matchKey);
-  if (iframe) {
-    // Update src with start time — forces seek
-    const newSrc = `https://www.youtube.com/embed/${ytId}?rel=0&modestbranding=1&enablejsapi=1&start=${seconds}&autoplay=1`;
-    iframe.src = newSrc;
-    // Scroll to video
-    iframe.closest('[style*="padding-bottom"]')?.scrollIntoView({ behavior:'smooth', block:'center' });
-  } else {
-    // Open in new tab at timestamp
-    window.open(`https://www.youtube.com/watch?v=${ytId}&t=${seconds}s`, '_blank');
-  }
+  if (!ytId) return;
+  // Always open YouTube at the exact timestamp in a new tab
+  // This is more reliable than trying to control an embedded iframe
+  window.open('https://www.youtube.com/watch?v=' + ytId + '&t=' + Math.round(seconds) + 's', '_blank');
 }
 
 function openYtSyncModal() {
@@ -2942,13 +2934,13 @@ function drawWormCanvas(canvasId, matchId) {
 
   const dpr = window.devicePixelRatio || 1;
   const W = canvas.offsetWidth || canvas.parentElement?.offsetWidth || 700;
-  const H = 220;
+  const H = 280;
   canvas.width = W * dpr; canvas.height = H * dpr;
   canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
   const ctx = canvas.getContext('2d');
   ctx.scale(dpr, dpr);
 
-  const pad = { top: 36, right: 36, bottom: 36, left: 36 };
+  const pad = { top: 40, right: 36, bottom: 36, left: 40 };
   const cW = W - pad.left - pad.right, cH = H - pad.top - pad.bottom;
 
   // Background
@@ -3046,9 +3038,19 @@ function drawWormCanvas(canvasId, matchId) {
   rows.forEach(e => {
     const x = toX(e.secs), y = toY(e.scoreA - e.scoreB);
     ctx.beginPath(); ctx.arc(x, y, 5, 0, Math.PI*2);
-    ctx.fillStyle = e.team==='A' ? '#4ade80' : '#60a5fa'; ctx.fill();
-    ctx.strokeStyle = 'rgba(0,0,0,.6)'; ctx.lineWidth = 1.5; ctx.stroke();
-    if (ytId && e.time) dotData.push({x, y, r:10, time:e.time, half:e.half, scorer:e.scorer});
+    if (e.isOG) {
+      // Own goal — red hollow dot
+      ctx.fillStyle = 'rgba(0,0,0,.6)'; ctx.fill();
+      ctx.strokeStyle = '#f87171'; ctx.lineWidth = 2; ctx.stroke();
+      // Small X inside
+      ctx.strokeStyle = '#f87171'; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.moveTo(x-2.5,y-2.5); ctx.lineTo(x+2.5,y+2.5); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(x+2.5,y-2.5); ctx.lineTo(x-2.5,y+2.5); ctx.stroke();
+    } else {
+      ctx.fillStyle = e.team==='A' ? '#4ade80' : '#60a5fa'; ctx.fill();
+      ctx.strokeStyle = 'rgba(0,0,0,.6)'; ctx.lineWidth = 1.5; ctx.stroke();
+    }
+    if (ytId && e.time) dotData.push({x, y, r:10, time:e.time, half:e.half, scorer:e.scorer+(e.isOG?' (OG)':'')});
   });
 
   // Click/hover
@@ -3085,10 +3087,17 @@ function parseGoalText(text) {
   const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
   for (const line of lines) {
     if (/^(1st|2nd)\s*half/i.test(line)) continue;
+    // Check for own goal: "OG" or "Own Goal" as scorer or in brackets
+    const isOG = /\bOG\b|\bown\s*goal\b/i.test(line);
     const m = line.match(/^(?:\d+:\d+\s+)?([A-Za-z][A-Za-z0-9_\s]*?)(?:\s*\(([A-Za-z][A-Za-z0-9_\s]*?)\))?\s*$/);
     if (m) {
       const timeMatch = line.match(/^(\d+:\d+)/);
-      pairs.push({ scorer: m[1].trim(), assister: m[2]?.trim() || null, time: timeMatch?.[1] || null });
+      pairs.push({
+        scorer: m[1].trim(),
+        assister: m[2]?.trim() || null,
+        time: timeMatch?.[1] || null,
+        isOG: isOG || /\bOG\b|\bown\s*goal\b/i.test(m[1])
+      });
     }
   }
   return pairs;
@@ -4129,7 +4138,11 @@ function renderMatches() {
           const matchDur = Math.max(...all.map(p=>toSecs(p.time)), 50*60) + 60;
           const scorerTeam = {};
           [...m.teamA,...m.teamB].forEach(r=>{ scorerTeam[r.player]=r.team; });
-          const events = all.map(p=>({...p,secs:toSecs(p.time),team:scorerTeam[p.scorer]||'A'})).sort((a,b)=>a.secs-b.secs);
+          const events = all.map(p=>{
+            let team = scorerTeam[p.scorer] || 'A';
+            if (p.isOG) team = team === 'A' ? 'B' : 'A'; // OG scores for other team
+            return {...p, secs:toSecs(p.time), team};
+          }).sort((a,b)=>a.secs-b.secs);
           let sA=0,sB=0;
           const rows = events.map(e=>{ if(e.team==='A') sA++; else sB++; return {...e,scoreA:sA,scoreB:sB}; });
           const fA=sA, fB=sB;
@@ -4169,18 +4182,20 @@ function renderMatches() {
 
           return '<div style="margin-bottom:14px">'
             +'<div style="font-size:.62rem;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-bottom:6px;font-family:\'Barlow Condensed\',sans-serif">Score Worm'+(ytId?' · click dot to seek video':'')+'</div>'
-            +'<canvas id="'+canvasId+'" style="width:100%;height:220px;display:block;border-radius:8px"></canvas>'
+            +'<canvas id="'+canvasId+'" style="width:100%;height:280px;display:block;border-radius:8px"></canvas>'
             // Goal chips row
             +'<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:8px">'
             +rows.map(e=>{
               const ytSecs=ytId&&e.time?timeToYtSeconds(e.time,e.half):null;
               const matchKey=m.id.replace(/[#,]/g,'_');
               const mins=e.time?e.time.split(':')[0].replace(/^0/,''):'?';
-              return '<div style="display:inline-flex;align-items:center;gap:3px;background:var(--card2);border:1px solid '+(e.team==='A'?'rgba(57,211,83,.3)':'rgba(96,165,250,.3)')
+              const ogLabel = e.isOG ? '<span style="color:var(--red);font-size:.58rem;font-weight:700"> OG</span>' : '';
+              return '<div style="display:inline-flex;align-items:center;gap:3px;background:var(--card2);border:1px solid '+(e.isOG?'rgba(240,96,96,.4)':e.team==='A'?'rgba(57,211,83,.3)':'rgba(96,165,250,.3)')
                 +';border-radius:5px;padding:2px 8px;font-size:.68rem;'+(ytSecs?'cursor:pointer':'')+'"'
                 +(ytSecs?' onclick="seekYtVideo(\''+matchKey+'\',\''+ytId+'\','+ytSecs+')" title="▶ Watch"':'')+'>'
                 +'<span style="color:var(--muted);font-size:.6rem">'+mins+"'</span>"
-                +'<span style="color:'+(e.team==='A'?'#4ade80':'#60a5fa')+';font-weight:600;margin-left:2px">'+e.scorer+'</span>'
+                +'<span style="color:'+(e.isOG?'var(--red)':e.team==='A'?'#4ade80':'#60a5fa')+';font-weight:600;margin-left:2px">'+e.scorer+'</span>'
+                +ogLabel
                 +(e.assister?'<span style="color:var(--muted);font-size:.6rem"> ('+e.assister+')</span>':'')
                 +(ytSecs?'<span style="color:var(--amber);font-size:.55rem;margin-left:2px">▶</span>':'')
                 +'</div>';
