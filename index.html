@@ -2520,11 +2520,10 @@ const TAG_DEFS = {
   'Wave Maker':        { cls:'tag-striker',   tip:'Combines scoring and creating at high volume over time — a consistent match-winner across the whole season' },
   // Shooting
   'Gunslinger':        { cls:'tag-target',    tip:'Takes more shots per game than anyone — never stops attacking and always has a shot in mind' },
-  'Target Locked':     { cls:'tag-target',    tip:'Most shots on target per game weighted by volume — makes the keeper work more than anyone else' },
   'Deadeye':           { cls:'tag-target',    tip:'Highest shot accuracy in the group — a greater percentage of shots hit the target than anyone else' },
   'Heat Check':        { cls:'tag-target',    tip:'Most off-target shots — fires from bold angles and distances without hesitation, high volume high risk' },
   'Trigger Finger':    { cls:'tag-target',    tip:'Best ratio of shots on target to shots taken — the most precise shooter when pulling the trigger' },
-  'Front Foot':        { cls:'tag-target',    tip:'Combines shots on target with creativity — constantly threatens the goal while also setting up teammates' },
+  'Front Foot':        { cls:'tag-target',    tip:'Highest shots on target combined with assists — always threatening the goal directly while also creating for teammates' },
   'Sledgehammer':      { cls:'tag-target',    tip:'High shot volume and regularly rattles the woodwork — a powerful attacker who constantly tests the frame' },
   'Pinball':           { cls:'tag-target',    tip:'Constantly involved in chaotic attacking moments — hits posts and fires wide but keeps defences under pressure' },
   'High Voltage':      { cls:'tag-target',    tip:'Scores, tackles and stays active at the highest rate — an explosive player who impacts every phase of the game' },
@@ -2535,8 +2534,6 @@ const TAG_DEFS = {
   'Chaos Creator':     { cls:'tag-wizard',    tip:'Produces high nutmegs, key passes and shots together — the most unpredictably dangerous attacker available' },
   'Chaos Agent':       { cls:'tag-wizard',    tip:'Most off-target shots in the group — applies relentless attacking pressure even if the execution is erratic' },
   'Woodwork Warrior':  { cls:'tag-wizard',    tip:'Hits the woodwork more per game than anyone — constantly inches away from spectacular goals that deserve better' },
-  'Crossbar Hero':     { cls:'tag-wizard',    tip:'Has hit the post or bar more total times than anyone — never stops shooting despite the bad luck' },
-  'Lucky Bounce':      { cls:'tag-wizard',    tip:'Combines hitting the post with scoring — finds ways to score while also suffering the most near-misses' },
   'Showtime':          { cls:'tag-wizard',    tip:'Nutmegs in games where they also score or assist — delivers crowd-pleasing performances in the biggest moments' },
   'Breaker':           { cls:'tag-wizard',    tip:'Wins tackles and nutmegs opponents — a rare combination of defensive physicality and technical flair in one player' },
   // Creating
@@ -2544,13 +2541,10 @@ const TAG_DEFS = {
   'Thread Needle':     { cls:'tag-playmaker', tip:'Most key passes per game — consistently finds dangerous passes through tight spaces that unlock defences' },
   'Puppet Master':     { cls:'tag-playmaker', tip:'Elite in both assists and key passes — controls the entire flow of attacking play from creation to delivery' },
   'The Supplier':      { cls:'tag-playmaker', tip:'Balances assists with high-quality key passes — a reliable creator who feeds teammates both directly and indirectly' },
-  'The Connector':     { cls:'tag-playmaker', tip:'Has directly assisted the most different teammates — spreads creative output across the whole team, not one partner' },
   'Pathfinder':        { cls:'tag-playmaker', tip:'Assists the widest variety of teammates — connects the whole team together and finds whoever is in space' },
   'Play Driver':       { cls:'tag-playmaker', tip:'Highest combined scoring and creating output — central to almost every attack with both goals and assists' },
   'Traffic Controller':{ cls:'tag-playmaker', tip:'Wins possession through interceptions and immediately restarts attacks with key passes — reads the game in both directions' },
-  'Space Creator':     { cls:'tag-playmaker', tip:'Combines key passes with high shot volume — pulls defences out of shape with smart movement and quick distribution' },
   'Safety Valve':      { cls:'tag-playmaker', tip:'Intercepts danger and immediately creates attack — the most reliable player for winning possession and restarting play' },
-  'Pulse Setter':      { cls:'tag-playmaker', tip:'Breaks the deadlock and dictates tempo with early key passes — sets the tone and energy of matches from minute one' },
   'Brace Builder':     { cls:'tag-playmaker', tip:'Set up 2+ goals in the same match more often than anyone — the most dangerous creator when they get going in a single game' },
   'Leveller':          { cls:'tag-playmaker', tip:'Most assists that directly equalled the score — sets up teammates to drag the team back into matches at the critical moment' },
   // Combo
@@ -2572,9 +2566,7 @@ const TAG_DEFS = {
   'Two-Way Engine':    { cls:'tag-workhorse', tip:'Scores and tackles at the same elite rate — a genuinely rare dual-threat player who dominates both ends of the pitch' },
   'Swiss Army Knife':  { cls:'tag-workhorse', tip:'Most balanced stat profile in the group — contributes meaningfully across scoring, creating, defending and goalkeeping' },
   'Iron Lung':         { cls:'tag-workhorse', tip:'Highest total actions per game — involved in attack and defence more than anyone and never stops running' },
-  'Relentless':        { cls:'tag-workhorse', tip:'Combines high overall activity with strong defensive output — constantly involved in tackles, interceptions and all phases' },
   'Mr Reliable':       { cls:'tag-workhorse', tip:'Most consistent contributor across matches — delivers solid performances every single session with minimal variance' },
-  'Glue Guy':          { cls:'tag-workhorse', tip:'Quietly improves the team in every area — never a weak link and always somewhere near the middle across all stats' },
   'Lone Wolf':         { cls:'tag-workhorse', tip:'Scores without receiving tracked assists — creates and converts their own chances with minimal direct help from others' },
   // Timestamp — goal scoring
   'Icebreaker':        { cls:'tag-enforcer',  tip:'Scores the first goal of matches more than anyone — breaks the deadlock and shifts momentum before others find their rhythm' },
@@ -2831,7 +2823,6 @@ function buildTagAuction() {
 
   // Shooting — clearly distinct stats
   award('Gunslinger',       m => m.spg);
-  award('Target Locked',    m => m.sotpg*1.5+m.spg*0.2);
   award('Deadeye',          m => m.acc);
   award('Heat Check',       m => m.offpg);
   award('Trigger Finger',   m => m.spg>0?m.sotpg/m.spg:0);
@@ -2847,8 +2838,6 @@ function buildTagAuction() {
   award('Chaos Creator',    m => m.nmpg*1.5+m.kppg+m.spg*0.2);
   award('Chaos Agent',      m => m.offpg*2+m.spg*0.3);
   award('Woodwork Warrior', m => m.postpg);
-  award('Crossbar Hero',    m => (m.ps.post||0));
-  award('Lucky Bounce',     m => m.postpg+m.gpg*0.5);
   award('Showtime',         m => m.nmpg*(m.dualGames+m.multiGoalGames+1));
   award('Breaker',          m => m.tklpg+m.nmpg*1.5);
 
@@ -2857,13 +2846,10 @@ function buildTagAuction() {
   award('Thread Needle',    m => m.kppg);
   award('Puppet Master',    m => Math.min(m.apg,m.kppg)*2);
   award('The Supplier',     m => m.apg*0.4+m.kppg*0.6);
-  award('The Connector',    m => m.uniqueAssisted);
   award('Pathfinder',       m => m.uniqueAssisted*2+m.apg*0.1);
   award('Play Driver',      m => (m.gpg+m.apg)*0.5+m.kppg*0.3);
   award('Traffic Controller',m => m.kppg*0.4+m.intpg*1.6);
-  award('Space Creator',    m => m.kppg+m.spg*0.3);
   award('Safety Valve',     m => m.apg*0.2+m.intpg*2);
-  award('Pulse Setter',     m => m.openers*3+m.kppg*0.5);
 
   // Combo
   award('Combo King',       m => m.dualGames);
@@ -2887,10 +2873,8 @@ function buildTagAuction() {
   award('Two-Way Engine',   m => Math.min(m.gpg,m.tklpg)*4);
   award('Swiss Army Knife', m => m.stdDev<0.4?10-m.stdDev*20:0);
   award('Iron Lung',        m => m.actpg);
-  award('Relentless',       m => m.actpg*0.4+m.tklpg*0.4+m.intpg*0.4);
   award('Lone Wolf',        m => m.asScorer.length===0&&m.gpg>0?m.gpg*3:0);
   award('Mr Reliable',      m => m.reliabilityScore);
-  award('Glue Guy',         m => m.stdDev<0.5&&m.actpg>1?5-m.stdDev*5:0);
 
   // Timestamp
   awardTime('Clutch Factor',    m => m.lateGoals>=2?m.lateGoals:0);
@@ -3017,7 +3001,7 @@ function getFifaTags(s, cs) {
   // Convert label strings → {label, cls, tip} objects
   const sorted = [...myTagLabels].sort((a,b) => {
     const primaryFirst = ['Golden Boot','Shot Stopper','Enforcer','Ball Hawk','Brick Wall',
-      'Sauce Merchant','Architect','Thread Needle','Gunslinger','Target Locked','Deadeye','Clinical'];
+      'Sauce Merchant','Architect','Thread Needle','Gunslinger','Deadeye','Clinical'];
     const ai = primaryFirst.indexOf(a), bi = primaryFirst.indexOf(b);
     if (ai>=0 && bi<0) return -1;
     if (bi>=0 && ai<0) return 1;
