@@ -2507,94 +2507,77 @@ function computeRating(s, cs) {
 // ── Tag definitions ──
 // ── Tag definitions ──
 const TAG_DEFS = {
-  // Attacking — red
-  'Golden Boot':       { cls:'tag-striker',   tip:"Highest goals — the team's main scorer" },
-  'Clinical':          { cls:'tag-striker',   tip:'Highest shot conversion % — elite finishing rate' },
-  'Silent Assassin':   { cls:'tag-striker',   tip:'High goals with low shot count — needs very few chances' },
-  'Avalanche':         { cls:'tag-striker',   tip:'Most multi-goal games — capable of huge performances' },
-  'Finisher':          { cls:'tag-striker',   tip:'Most game-winning goals — scores the goals that decide matches' },
-  'Poacher':           { cls:'tag-striker',   tip:'Most unassisted goals — creates and finishes independently' },
-  'Predator':          { cls:'tag-striker',   tip:'Goals in explosive bursts — scores multiple in short windows' },
-  'Net Magnet':        { cls:'tag-striker',   tip:'Shots on target + goals — always finds dangerous areas around goal' },
-  'Rebound King':      { cls:'tag-striker',   tip:'Goals + posts hit + shots on target — thrives off rebounds and second chances' },
-  'Ghost Runner':      { cls:'tag-striker',   tip:'Goals with lower overall stat volume — quietly appears in perfect scoring positions' },
-  'Wave Maker':        { cls:'tag-striker',   tip:'High goal involvement across multiple matches — consistently drives attacking momentum' },
-
-  // Shooting — amber/gold
-  'Gunslinger':        { cls:'tag-target',    tip:'Highest shots — always looking to shoot' },
-  'Target Locked':     { cls:'tag-target',    tip:'Highest shots on target — constantly pressures the keeper' },
-  'Deadeye':           { cls:'tag-target',    tip:'Highest shot accuracy % — rarely misses the target' },
-  'Heat Check':        { cls:'tag-target',    tip:'Very high shots with lower accuracy — shoots from anywhere' },
-  'Trigger Finger':    { cls:'tag-target',    tip:'High shots on target + high shots — constantly firing' },
-  'Front Foot':        { cls:'tag-target',    tip:'Highest attacks on target — keeps the team constantly threatening' },
-  'Sledgehammer':      { cls:'tag-target',    tip:'High shot volume + posts hit — powerful attacker constantly rattling defenses' },
-  'Pinball':           { cls:'tag-target',    tip:'Posts hit + shots on target — constantly involved in chaotic attacking moments' },
-  'High Voltage':      { cls:'tag-target',    tip:'Goals + tackles + high activity — explosive player constantly in the action' },
-
-  // Flair — bright green
-  'Sauce Merchant':    { cls:'tag-wizard',    tip:'Highest nutmegs — flair player who beats defenders with skill' },
-  'Streetballer':      { cls:'tag-wizard',    tip:'Nutmegs + attacking output — combines flair with real impact' },
-  'Risk Taker':        { cls:'tag-wizard',    tip:'High nutmegs + high off-target shots — always attempts difficult plays' },
-  'Chaos Creator':     { cls:'tag-wizard',    tip:'High shots, nutmegs and key passes — always in exciting moments' },
-  'Chaos Agent':       { cls:'tag-wizard',    tip:'Highest attacks off target — relentless attacking pressure' },
-  'Woodwork Warrior':  { cls:'tag-wizard',    tip:'Highest posts hit — constantly inches from spectacular goals' },
-  'Crossbar Hero':     { cls:'tag-wizard',    tip:'High posts hit + goals — never stops attacking despite misses' },
-  'Lucky Bounce':      { cls:'tag-wizard',    tip:'Goals + posts hit — keeps finding dangerous scoring positions' },
-  'Showtime':          { cls:'tag-wizard',    tip:'Nutmegs + multi-goal or multi-contribution games — flashy crowd-pleasing performances' },
-  'Breaker':           { cls:'tag-wizard',    tip:'Tackles + nutmegs — combines physical play with technical skill' },
-  'Wildcard':          { cls:'tag-wizard',    tip:'Highly varied stat profile — completely unpredictable, capable of anything' },
-
-  // Creating — lime green
-  'Architect':         { cls:'tag-playmaker', tip:"Highest assists — main creator behind the team's attack" },
-  'Thread Needle':     { cls:'tag-playmaker', tip:'Highest key passes — finds dangerous passes others miss' },
-  'Puppet Master':     { cls:'tag-playmaker', tip:'High assists + key passes — controls the flow of attacking play' },
-  'The Supplier':      { cls:'tag-playmaker', tip:'High assists + key passes — creates opportunities for everyone' },
-  'The Connector':     { cls:'tag-playmaker', tip:'Assisted the most different players — involves the whole team' },
-  'Play Driver':       { cls:'tag-playmaker', tip:'Highest involvement in team goals — central figure in attacks' },
-  'Traffic Controller':{ cls:'tag-playmaker', tip:'Key passes + interceptions — influences attack and defense' },
-  'Pathfinder':        { cls:'tag-playmaker', tip:'Assists to many different teammates — connects the whole team offensively' },
-  'Space Creator':     { cls:'tag-playmaker', tip:'Key passes + attacking pressure — pulls defenses apart' },
-  'Pulse Setter':      { cls:'tag-playmaker', tip:'Opening goals + early key passes — sets the tempo and energy of matches early' },
-  'Safety Valve':      { cls:'tag-playmaker', tip:'Assists + interceptions — relieves pressure by winning possession and restarting attacks' },
-
-  // Combo/partnership — engine orange
-  'Combo King':        { cls:'tag-engine',    tip:'Most goal + assist same-game combos — takes over games offensively' },
-  'One-Two Specialist':{ cls:'tag-engine',    tip:'Most assists to same teammate — dangerous attacking partnership' },
-  'Duo Link':          { cls:'tag-engine',    tip:"Most assisted by same teammate — thrives from one specific player's service" },
-
-  // Defending — blue
-  'Enforcer':          { cls:'tag-guardian',  tip:'Highest tackles — wins possession consistently' },
-  'Ball Hawk':         { cls:'tag-guardian',  tip:'Highest interceptions — reads the game and cuts out attacks' },
-  'Lockdown':          { cls:'tag-guardian',  tip:'Tackles + blocks + interceptions — makes attacking against them extremely difficult' },
-  'Engine Room':       { cls:'tag-guardian',  tip:'High tackles + key passes + interceptions — controls matches through effort' },
-  'Hunter':            { cls:'tag-guardian',  tip:'Interceptions + goals — tracks down opportunities defensively and offensively' },
-
-  // Blocking/GK — teal
-  'Brick Wall':        { cls:'tag-blocker',   tip:'Highest blocks — constantly gets in the way of shots' },
-  'Shot Stopper':      { cls:'tag-sweeper',   tip:'Highest GK saves — goalkeeper who repeatedly bails the team out' },
-  'Fortress':          { cls:'tag-blocker',   tip:'Highest blocks + GK saves — defensive backbone' },
-  'Clean Hands':       { cls:'tag-sweeper',   tip:'High saves + blocks — dependable last line of defense' },
-
-  // Hybrid / all-round — workhorse green
-  'Two-Way Engine':    { cls:'tag-workhorse', tip:'High goals + high tackles — major impact in both attack and defense' },
-  'Swiss Army Knife':  { cls:'tag-workhorse', tip:'Most balanced all-round stats — reliable in every area' },
-  'Relentless':        { cls:'tag-workhorse', tip:'Highest combined actions — never stops impacting the game' },
-  'Iron Lung':         { cls:'tag-workhorse', tip:'Highest total actions — constantly involved across the match' },
-  'Mr Reliable':       { cls:'tag-workhorse', tip:'Consistent contributions across matches — delivers dependably' },
-  'Glue Guy':          { cls:'tag-workhorse', tip:'Moderate stats across everything — quietly improves the team' },
-  'Lone Wolf':         { cls:'tag-workhorse', tip:'High goals with low assists received — creates success largely alone' },
-
-  // Timestamp-based — purple/enforcer
-  'Quick Strike':      { cls:'tag-enforcer',  tip:'Fastest average goal timestamp — scores before opponents settle' },
-  'Clutch Factor':     { cls:'tag-enforcer',  tip:'Most late goals — delivers in important late-game moments' },
-  'Icebreaker':        { cls:'tag-enforcer',  tip:'Most opening goals — frequently gets the team started' },
-  'Momentum Shift':    { cls:'tag-enforcer',  tip:'Most equalising goals — swings momentum back toward the team' },
-  'Comeback Kid':      { cls:'tag-enforcer',  tip:'Most goals while losing — refuses to let the team fall behind quietly' },
-  'Last Laugh':        { cls:'tag-enforcer',  tip:'Often has the final say — most final goal contributions' },
-  'Big Game Player':   { cls:'tag-enforcer',  tip:'Best stats vs high-scoring matches — performs under pressure' },
-  'Heartbreaker':      { cls:'tag-enforcer',  tip:'Most posts hit in close games — painfully close to match-changing moments' },
-  'Rebound King':      { cls:'tag-striker',   tip:'Goals + posts + shots on target — thrives off second chances' },
+  'Golden Boot':       { cls:'tag-striker',   tip:"Top scorer in the group — the team's most dangerous goal threat by goals per game" },
+  'Clinical':          { cls:'tag-striker',   tip:'Converts more chances into goals per shot than anyone — ruthlessly efficient in front of goal' },
+  'Silent Assassin':   { cls:'tag-striker',   tip:'Scores frequently but takes very few shots — needs almost nothing to be dangerous' },
+  'Avalanche':         { cls:'tag-striker',   tip:'Most multi-goal games — capable of completely taking over a match with a big performance' },
+  'Finisher':          { cls:'tag-striker',   tip:'Consistently turns up in the right place at the right time — combines goal volume with finishing efficiency' },
+  'Poacher':           { cls:'tag-striker',   tip:'Creates and converts their own chances independently — dangerous even without a teammate setting them up' },
+  'Predator':          { cls:'tag-striker',   tip:'Scores early in matches more than anyone — hunts the ball from kickoff and punishes slow starts' },
+  'Net Magnet':        { cls:'tag-striker',   tip:'Highest shots on target per game — constantly forces saves and rarely wastes a shooting opportunity' },
+  'Rebound King':      { cls:'tag-striker',   tip:'Thrives off second chances and loose balls — hits the post and keeps scoring from rebounds around goal' },
+  'Ghost Runner':      { cls:'tag-striker',   tip:'Scores quietly without dominating the stats — gets in the right positions without constant involvement' },
+  'Wave Maker':        { cls:'tag-striker',   tip:'Combines scoring and creating at high volume over time — a consistent match-winner across the whole season' },
+  'Gunslinger':        { cls:'tag-target',    tip:'Takes more shots per game than anyone — never stops attacking and always has a shot in mind' },
+  'Target Locked':     { cls:'tag-target',    tip:'Most shots on target per game weighted by volume — makes the keeper work more than anyone else' },
+  'Deadeye':           { cls:'tag-target',    tip:'Highest shot accuracy in the group — a greater percentage of shots hit the target than anyone else' },
+  'Heat Check':        { cls:'tag-target',    tip:'Most off-target shots — fires from bold angles and distances without hesitation, high volume high risk' },
+  'Trigger Finger':    { cls:'tag-target',    tip:'Best ratio of shots on target to shots taken — the most precise shooter when pulling the trigger' },
+  'Front Foot':        { cls:'tag-target',    tip:'Combines shots on target with creativity — constantly threatens the goal while also setting up teammates' },
+  'Sledgehammer':      { cls:'tag-target',    tip:'High shot volume and regularly rattles the woodwork — a powerful attacker who constantly tests the frame' },
+  'Pinball':           { cls:'tag-target',    tip:'Constantly involved in chaotic attacking moments — hits posts and fires wide but keeps defences under pressure' },
+  'High Voltage':      { cls:'tag-target',    tip:'Scores, tackles and stays active at the highest rate — an explosive player who impacts every phase of the game' },
+  'Sauce Merchant':    { cls:'tag-wizard',    tip:'Highest nutmegs per game — beats more defenders with skill moves than anyone else in the group' },
+  'Streetballer':      { cls:'tag-wizard',    tip:'Combines the most nutmegs with genuine scoring threat — flair that translates directly into attacking output' },
+  'Risk Taker':        { cls:'tag-wizard',    tip:'Attempts nutmegs and fires ambitious off-target shots constantly — always trying something difficult' },
+  'Chaos Creator':     { cls:'tag-wizard',    tip:'Produces high nutmegs, key passes and shots together — the most unpredictably dangerous attacker available' },
+  'Chaos Agent':       { cls:'tag-wizard',    tip:'Most off-target shots in the group — applies relentless attacking pressure even if the execution is erratic' },
+  'Woodwork Warrior':  { cls:'tag-wizard',    tip:'Hits the woodwork more per game than anyone — constantly inches away from spectacular goals that deserve better' },
+  'Crossbar Hero':     { cls:'tag-wizard',    tip:'Has hit the post or bar more total times than anyone — never stops shooting despite the bad luck' },
+  'Lucky Bounce':      { cls:'tag-wizard',    tip:'Combines hitting the post with scoring — finds ways to score while also suffering the most near-misses' },
+  'Showtime':          { cls:'tag-wizard',    tip:'Nutmegs in games where they also score or assist — delivers crowd-pleasing performances in the biggest moments' },
+  'Breaker':           { cls:'tag-wizard',    tip:'Wins tackles and nutmegs opponents — a rare combination of defensive physicality and technical flair in one player' },
+  'Wildcard':          { cls:'tag-wizard',    tip:'Most unpredictable stat profile in the group — capable of brilliance or chaos in any area on any given day' },
+  'Architect':         { cls:'tag-playmaker', tip:'Highest assists per game — sets up more goals than anyone and is the main creative force in every attack' },
+  'Thread Needle':     { cls:'tag-playmaker', tip:'Most key passes per game — consistently finds dangerous passes through tight spaces that unlock defences' },
+  'Puppet Master':     { cls:'tag-playmaker', tip:'Elite in both assists and key passes — controls the entire flow of attacking play from creation to delivery' },
+  'The Supplier':      { cls:'tag-playmaker', tip:'Balances assists with high-quality key passes — a reliable creator who feeds teammates both directly and indirectly' },
+  'The Connector':     { cls:'tag-playmaker', tip:'Has directly assisted the most different teammates — spreads creative output across the whole team, not one partner' },
+  'Pathfinder':        { cls:'tag-playmaker', tip:'Assists the widest variety of teammates — connects the whole team together and finds whoever is in space' },
+  'Play Driver':       { cls:'tag-playmaker', tip:'Highest combined scoring and creating output — central to almost every attack with both goals and assists' },
+  'Traffic Controller':{ cls:'tag-playmaker', tip:'Wins possession through interceptions and immediately restarts attacks with key passes — reads the game in both directions' },
+  'Space Creator':     { cls:'tag-playmaker', tip:'Combines key passes with high shot volume — pulls defences out of shape with smart movement and quick distribution' },
+  'Safety Valve':      { cls:'tag-playmaker', tip:'Intercepts danger and immediately creates attack — the most reliable player for winning possession and restarting play' },
+  'Pulse Setter':      { cls:'tag-playmaker', tip:'Breaks the deadlock and dictates tempo with early key passes — sets the tone and energy of matches from minute one' },
+  'Combo King':        { cls:'tag-engine',    tip:'Both scores and assists in more games than anyone — the complete offensive force who takes over matches completely' },
+  'One-Two Specialist':{ cls:'tag-engine',    tip:'Has been assisted by the same teammate more than any other pair — the most productive scoring partnership in the group' },
+  'Duo Link':          { cls:'tag-engine',    tip:'Has assisted the same scorer more times than any other pair — forms the deadliest and most consistent attacking combination' },
+  'Enforcer':          { cls:'tag-guardian',  tip:'Wins more tackles per game than anyone — the most physical presence who dominates direct duels and wins possession' },
+  'Ball Hawk':         { cls:'tag-guardian',  tip:'Most interceptions per game — reads the game better than anyone and cuts out attacks before they develop' },
+  'Lockdown':          { cls:'tag-guardian',  tip:'Blocks-dominant defensive force — gets in the way of shots and challenges more than anyone in the group' },
+  'Engine Room':       { cls:'tag-guardian',  tip:'Combines defensive work with playmaking — wins the ball through tackles and interceptions then drives attacks forward' },
+  'Hunter':            { cls:'tag-guardian',  tip:'Intercepts and scores — tracks down turnovers defensively then capitalises going forward at the highest rate' },
+  'Brick Wall':        { cls:'tag-blocker',   tip:'Blocks more shots per game than anyone — throws themselves in front of attempts more than any other player' },
+  'Shot Stopper':      { cls:'tag-sweeper',   tip:'Highest GK saves per game — repeatedly bails the team out and is the single biggest reason they stay in matches' },
+  'Fortress':          { cls:'tag-blocker',   tip:'Elite at both blocking shots and making saves — must be high in both stats, the complete multi-layer defensive presence' },
+  'Clean Hands':       { cls:'tag-sweeper',   tip:'GK-dominant defensive wall — makes the most goalkeeper saves while also contributing through outfield blocks' },
+  'Two-Way Engine':    { cls:'tag-workhorse', tip:'Scores and tackles at the same elite rate — a genuinely rare dual-threat player who dominates both ends of the pitch' },
+  'Swiss Army Knife':  { cls:'tag-workhorse', tip:'Most balanced stat profile in the group — contributes meaningfully across scoring, creating, defending and goalkeeping' },
+  'Iron Lung':         { cls:'tag-workhorse', tip:'Highest total actions per game — involved in attack and defence more than anyone and never stops running' },
+  'Relentless':        { cls:'tag-workhorse', tip:'Combines high overall activity with strong defensive output — constantly involved in tackles, interceptions and all phases' },
+  'Mr Reliable':       { cls:'tag-workhorse', tip:'Most consistent contributor across matches — delivers solid performances every single session with minimal variance' },
+  'Glue Guy':          { cls:'tag-workhorse', tip:'Quietly improves the team in every area — never a weak link and always somewhere near the middle across all stats' },
+  'Lone Wolf':         { cls:'tag-workhorse', tip:'Scores without receiving tracked assists — creates and converts their own chances with minimal direct help from others' },
+  'Quick Strike':      { cls:'tag-enforcer',  tip:'Lowest average goal minute in the group — scores earlier in matches than anyone else and punishes teams before they settle' },
+  'Clutch Factor':     { cls:'tag-enforcer',  tip:'Most goals after the 40-minute mark — produces in the biggest moments when matches are still alive and pressure is highest' },
+  'Icebreaker':        { cls:'tag-enforcer',  tip:'Scores the first goal of matches more than anyone — breaks deadlocks and shifts momentum before others find their rhythm' },
+  'Momentum Shift':    { cls:'tag-enforcer',  tip:'Scores the most equalisers — steps up when the team is behind and single-handedly drags them back into matches' },
+  'Comeback Kid':      { cls:'tag-enforcer',  tip:'Most contributions while their team is losing — refuses to accept defeat and keeps fighting when others might switch off' },
+  'Last Laugh':        { cls:'tag-enforcer',  tip:'Scores the final goal of matches more than anyone — loves finishing games off and always wants the last word' },
+  'Big Game Player':   { cls:'tag-enforcer',  tip:'Scores more in high-scoring open matches than their average suggests — rises to the occasion when the game is chaotic' },
+  'Heartbreaker':      { cls:'tag-enforcer',  tip:'Hits the woodwork in more matches than anyone — comes agonisingly close to defining moments with painful regularity' },
 };
+
 
 
 
@@ -2714,10 +2697,12 @@ function buildTagAuction() {
     const winner = best(scoreFn, minScore);
     if (winner) tagWinners[label] = winner;
   };
-  // For timestamp tags — award even if only 1 goal qualifies
+  // For timestamp tags — always award to whoever leads, even if count is 0
+  // Someone always has the most late goals, openers etc.
   const awardTime = (label, scoreFn) => {
-    const winner = best(scoreFn, 1);
-    if (winner) tagWinners[label] = winner;
+    let bestP=null, bestV=-Infinity;
+    players.forEach(p=>{ const v=scoreFn(metrics[p]); if(v>bestV){bestV=v;bestP=p;} });
+    if (bestP) tagWinners[label] = bestP;
   };
 
   // Attacking
