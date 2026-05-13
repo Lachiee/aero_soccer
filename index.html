@@ -2915,8 +2915,8 @@ function renderSeasonSummary() {
       const p = comboHighlights.topPartnership;
       parts.push(`<div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px">
         <div style="font-size:.7rem;color:var(--muted);font-family:'Barlow Condensed',sans-serif;letter-spacing:1px;text-transform:uppercase;margin-bottom:6px">🔗 Best Partnership</div>
-        <div style="font-family:'Bebas Neue',sans-serif;font-size:1.3rem;color:var(--lime)">${p.scorer} → ${p.assister}</div>
-        <div style="font-size:.75rem;color:var(--muted);margin-top:2px">${p.goals} goals · ${p.matchCount} match${p.matchCount>1?'es':''}</div>
+        <div style="font-family:'Bebas Neue',sans-serif;font-size:1.3rem;color:var(--lime)">${p.scorer} ← ${p.assister}</div>
+        <div style="font-size:.75rem;color:var(--muted);margin-top:2px">${p.goals} goals in ${p.matchCount} of ${p.matchCount} recorded games</div>
       </div>`);
     }
     if (comboHighlights.biggestComeback) {
@@ -3168,12 +3168,15 @@ function getPlayerComboStats(playerName) {
     });
   });
 
-  // Calculate shared games from match data (games both played together regardless of combo)
+  // Calculate shared games from combo data only — games where both players
+  // appeared in the same match AND that match has goal combo data recorded
   const getSharedGames = (otherPlayer) => {
-    return matchList.filter(m =>
-      [...m.teamA,...m.teamB].some(r => r.player === playerName) &&
-      [...m.teamA,...m.teamB].some(r => r.player === otherPlayer)
-    ).length;
+    return Object.entries(goalCombos).filter(([mid, data]) => {
+      const m = matchList.find(x => x.id === mid);
+      if (!m) return false;
+      const players = [...m.teamA,...m.teamB].map(r => r.player);
+      return players.includes(playerName) && players.includes(otherPlayer);
+    }).length;
   };
 
   const toArr = (obj) => Object.entries(obj)
@@ -3288,12 +3291,20 @@ function getAttackComboPrediction(teamPlayers) {
   const stats = getComboStats();
   const names = new Set(teamPlayers);
   const teamCombos = stats.filter(c => names.has(c.scorer) && names.has(c.assister));
-  const perGame = teamCombos.map(c => ({
-    ...c,
-    // How many shared games did these two play together?
-    sharedGames: Math.max(c.matchCount, 1),
-    rate: (c.goals / c.matchCount).toFixed(1)
-  })).sort((a,b) => b.goals - a.goals);
+  const perGame = teamCombos.map(c => {
+    // Shared recorded games = matches with combo data where both players appeared
+    const sharedRecorded = Object.entries(goalCombos).filter(([mid]) => {
+      const m = matchList.find(x => x.id === mid);
+      if (!m) return false;
+      const players = [...m.teamA,...m.teamB].map(r => r.player);
+      return players.includes(c.scorer) && players.includes(c.assister);
+    }).length;
+    return {
+      ...c,
+      sharedGames: sharedRecorded || c.matchCount,
+      rate: (c.goals / (sharedRecorded || c.matchCount)).toFixed(1)
+    };
+  }).sort((a,b) => b.goals - a.goals);
   return perGame.slice(0, 5);
 }
 
@@ -3319,10 +3330,12 @@ function renderComboLeaderboard() {
   if (!stats.length) return '<div style="color:var(--muted);font-size:.8rem">No combination data yet.</div>';
   return stats.slice(0,15).map((c,i) => {
     // Shared games between scorer and assister
-    const shared = matchList.filter(m =>
-      [...m.teamA,...m.teamB].some(r=>r.player===c.scorer) &&
-      [...m.teamA,...m.teamB].some(r=>r.player===c.assister)
-    ).length;
+    const shared = Object.entries(goalCombos).filter(([mid]) => {
+      const m = matchList.find(x => x.id === mid);
+      if (!m) return false;
+      const players = [...m.teamA,...m.teamB].map(r => r.player);
+      return players.includes(c.scorer) && players.includes(c.assister);
+    }).length;
     return `
     <div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid rgba(255,255,255,.04)">
       <span style="font-family:'Bebas Neue',sans-serif;font-size:.9rem;color:var(--muted);width:18px">${i+1}</span>
@@ -6082,10 +6095,12 @@ function renderAttackComboPrediction(tA, tB) {
 
   const renderList = (combos, color) => combos.length
     ? combos.map(c => {
-        const shared = matchList.filter(m =>
-          [...m.teamA,...m.teamB].some(r=>r.player===c.scorer) &&
-          [...m.teamA,...m.teamB].some(r=>r.player===c.assister)
-        ).length;
+        const shared = Object.entries(goalCombos).filter(([mid]) => {
+          const m = matchList.find(x => x.id === mid);
+          if (!m) return false;
+          const players = [...m.teamA,...m.teamB].map(r => r.player);
+          return players.includes(c.scorer) && players.includes(c.assister);
+        }).length;
         return `<div style="display:flex;align-items:center;gap:10px;padding:5px 0;border-bottom:1px solid rgba(255,255,255,.04);font-size:.76rem">
           <div style="flex:1">
             <span style="color:${color}">${c.scorer}</span>
