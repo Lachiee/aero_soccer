@@ -2844,11 +2844,73 @@ function buildTagAuction() {
     tags.slice(1).forEach(t => { delete tagWinners[t.tag]; });
   });
 
-  // Build reverse map: player → [tags they won]
+  // Build reverse map: player → [tags they won], capped at 3 per player
+  // Process in order: stat tags first, then timestamp tags
+  // This ensures timestamp tags aren't crowded out by players who win everything
   const playerTags = {};
   players.forEach(p => { playerTags[p] = []; });
-  Object.entries(tagWinners).forEach(([label, winner]) => {
-    if (playerTags[winner]) playerTags[winner].push(label);
+
+  const statTagOrder = Object.keys(tagWinners).filter(t =>
+    !['Quick Strike','Clutch Factor','Icebreaker','Momentum Shift','Last Laugh','Comeback Kid','Big Game Player'].includes(t)
+  );
+  const timeTagOrder = ['Quick Strike','Clutch Factor','Icebreaker','Momentum Shift','Last Laugh','Comeback Kid','Big Game Player'];
+
+  // First pass: assign stat tags, max 2 per player (leave room for time tags)
+  statTagOrder.forEach(label => {
+    const winner = tagWinners[label];
+    if (winner && playerTags[winner] && playerTags[winner].length < 2) {
+      playerTags[winner].push(label);
+    }
+  });
+
+  // Second pass: assign timestamp tags — each goes to its winner regardless of cap
+  // but if winner already has 3, reassign to next best eligible player
+  timeTagOrder.forEach(label => {
+    const winner = tagWinners[label];
+    if (!winner) return;
+    if (playerTags[winner] && playerTags[winner].length < 3) {
+      playerTags[winner].push(label);
+    } else {
+      // Winner is full — give to next best eligible player who has room
+      // Find all eligible players for this tag and pick highest scorer with < 3 tags
+      const scoreFnMap = {
+        'Quick Strike':   m => m.ps.goals>0&&m.myGoalEvents.length>=2?Math.max(0,60-m.avgMin):0,
+        'Clutch Factor':  m => m.lateGoals>=2?m.lateGoals:0,
+        'Icebreaker':     m => m.openers>=2?m.openers:0,
+        'Momentum Shift': m => m.equalisers>=2?m.equalisers:0,
+        'Last Laugh':     m => m.finishers>=2?m.finishers:0,
+        'Comeback Kid':   m => (m.lateGoals+m.equalisers)>=3?m.lateGoals*0.5+m.equalisers*0.8:0,
+        'Big Game Player':m => { const big=matchList.filter(x=>x.goalsA+x.goalsB>=20); if(big.length<4)return 0; const s=big.flatMap(x=>[...x.teamA,...x.teamB]).filter(r=>r.player===m.ps.player); if(s.length<3)return 0; const bgpg=s.reduce((a,r)=>a+Number(r.goals||0),0)/s.length; return bgpg>m.gpg*1.2?bgpg:0; },
+      };
+      const fn = scoreFnMap[label];
+      if (!fn) return;
+      const eligible = players
+        .filter(p => {
+          const m = metrics[p];
+          const allTimeGames = (playerStats[p]||m.ps).games||0;
+          return allTimeGames>=10 && m.ps.goals>0 && m.myGoalEvents.length>=2 && fn(m)>0;
+        })
+        .sort((a,b) => fn(metrics[b]) - fn(metrics[a]));
+      for (const alt of eligible) {
+        if (playerTags[alt] && playerTags[alt].length < 3 && !playerTags[alt].includes(label)) {
+          playerTags[alt].push(label);
+          break;
+        }
+      }
+    }
+  });
+
+  // Third pass: fill anyone with < 3 tags using remaining stat tags
+  statTagOrder.forEach(label => {
+    const winner = tagWinners[label];
+    if (!winner) return;
+    players.forEach(p => {
+      // already assigned or already has 3
+    });
+    // Give to winner if they still have room
+    if (winner && playerTags[winner] && playerTags[winner].length < 3 && !playerTags[winner].includes(label)) {
+      playerTags[winner].push(label);
+    }
   });
 
   return playerTags;
@@ -2856,19 +2918,7 @@ function buildTagAuction() {
 
 function getFifaTags(s, cs) {
   if (!_tagCache) _tagCache = buildTagAuction();
-
   const myTagLabels = (_tagCache[s.player] || []);
-
-  // One-time diagnostic — show what Amin gets
-  if (s.player === 'Amin' && !window._tagDiagDone) {
-    window._tagDiagDone = true;
-    const allWinners = {};
-    Object.entries(_tagCache).forEach(([p,tags]) => tags.forEach(t => { allWinners[t] = p; }));
-    const timeTags = ['Quick Strike','Clutch Factor','Icebreaker','Momentum Shift','Last Laugh','Comeback Kid'];
-    const msg = 'Cache size: ' + Object.keys(_tagCache).length + '\nAmin tags: ' + JSON.stringify(myTagLabels) + '\n\nTime tags:\n' +
-      timeTags.map(t => t + ': ' + (allWinners[t] || 'NONE')).join('\n');
-    alert(msg);
-  }
 
   // Convert label strings → {label, cls, tip} objects
   const sorted = [...myTagLabels].sort((a,b) => {
