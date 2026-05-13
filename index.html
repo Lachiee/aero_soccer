@@ -5351,17 +5351,60 @@ function renderProfile(name) {
       if (allGoals.length < 3) return '';
       const maxBucket = Math.max(...Object.values(buckets), 1);
       const bucketKeys = Array.from({length: 12}, (_,i) => i*5); // 0-55 mins
-      const earlyGoals = allGoals.filter(g => g.min < 15).length;
-      const lateGoals = allGoals.filter(g => g.min >= 40).length;
+      const earlyGoals  = allGoals.filter(g => g.min < 15).length;
+      const midGoals    = allGoals.filter(g => g.min >= 15 && g.min < 40).length;
+      const lateGoals   = allGoals.filter(g => g.min >= 40).length;
+      const h1Goals     = allGoals.filter(g => g.half === 'h1').length;
+      const h2Goals     = allGoals.filter(g => g.half === 'h2').length;
       const total = allGoals.length;
-      let insight = '';
-      if (earlyGoals / total >= 0.4) insight = `⚡ Fast starter — ${Math.round(earlyGoals/total*100)}% of goals in first 15 mins`;
-      else if (lateGoals / total >= 0.4) insight = `💪 Strong finisher — ${Math.round(lateGoals/total*100)}% of goals after 40 mins`;
-      else insight = `⚖ Consistent scorer throughout the match`;
+
+      // Find peak 10-min window
+      const windows = [0,5,10,15,20,25,30,35,40,45,50].map(start => ({
+        start, count: allGoals.filter(g => g.min >= start && g.min < start+10).length
+      }));
+      const peak = windows.reduce((best,w) => w.count > best.count ? w : best, windows[0]);
+
+      // Build insights array — pick the most interesting ones
+      const insights = [];
+
+      // Half preference (strong signal if 60%+)
+      const h1pct = h1Goals/total, h2pct = h2Goals/total;
+      if (h1pct >= 0.65) insights.push({ icon:'1️⃣', text:`${Math.round(h1pct*100)}% of goals in the first half — hits the ground running and builds early leads` });
+      else if (h2pct >= 0.65) insights.push({ icon:'2️⃣', text:`${Math.round(h2pct*100)}% of goals in the second half — improves as the game goes on and wears teams down` });
+
+      // Early burst (first 15 mins)
+      if (earlyGoals/total >= 0.35) insights.push({ icon:'⚡', text:`${Math.round(earlyGoals/total*100)}% of goals in the first 15 mins — one of the fastest starters in the group` });
+
+      // Late scorer (after 40)
+      if (lateGoals/total >= 0.35) insights.push({ icon:'💪', text:`${Math.round(lateGoals/total*100)}% of goals after the 40-minute mark — most dangerous when matches are in the balance` });
+
+      // Peak window (only mention if clearly dominant — 25%+ of goals in one 10-min block)
+      if (peak.count/total >= 0.25 && total >= 5) {
+        const label = peak.start < 15 ? 'opening minutes' :
+                      peak.start < 30 ? `${peak.start}-${peak.start+10} minute window` :
+                      peak.start < 40 ? `crucial ${peak.start}-${peak.start+10} minute spell` :
+                      `late ${peak.start}-${peak.start+10} minute window`;
+        insights.push({ icon:'🎯', text:`Scores ${Math.round(peak.count/total*100)}% of goals in the ${label} — a clear danger zone for opponents to watch` });
+      }
+
+      // Mid-game specialist (lots of goals in 15-40 window, few early or late)
+      if (midGoals/total >= 0.65 && earlyGoals/total < 0.2 && lateGoals/total < 0.2) {
+        insights.push({ icon:'⚖', text:`Most goals come in the middle of matches (15-40 min) — builds into games before finding a rhythm` });
+      }
+
+      // Even spread fallback
+      if (insights.length === 0) {
+        const spread = Math.max(...bucketKeys.map(b => buckets[b]||0)) / (total/bucketKeys.filter(b=>b<60).length);
+        if (spread < 1.8) insights.push({ icon:'📊', text:`Goals spread evenly across all parts of the match — no clear pattern, dangerous at any time` });
+        else insights.push({ icon:'📊', text:`Goals arrive in clusters rather than evenly — tends to have quiet spells then sudden bursts` });
+      }
+
+      // Pick the single most interesting insight
+      const insight = insights[0];
 
       return `<div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:18px;margin-bottom:14px">
         <div style="font-family:'Barlow Condensed',sans-serif;font-size:.7rem;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-bottom:8px">⏱ When ${name.split(' ')[0]} Scores</div>
-        <div style="background:rgba(57,211,83,.06);border:1px solid rgba(57,211,83,.15);border-radius:7px;padding:7px 12px;margin-bottom:12px;font-size:.75rem;color:var(--green)">${insight}</div>
+        <div style="background:rgba(57,211,83,.06);border:1px solid rgba(57,211,83,.15);border-radius:7px;padding:7px 12px;margin-bottom:12px;font-size:.75rem;color:var(--green)">${insight.icon} ${insight.text}</div>
         <div style="display:flex;align-items:flex-end;gap:2px;height:50px;margin-bottom:4px">
           ${bucketKeys.map(b => {
             const count = buckets[b] || 0;
@@ -5379,49 +5422,72 @@ function renderProfile(name) {
       </div>`;
     })()}
 
-      <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:18px">
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:18px;margin-bottom:14px">
         <div style="font-family:'Barlow Condensed',sans-serif;font-size:.7rem;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-bottom:14px">⚽ Attacking</div>
-        ${[
-          ['Goals', pg('goals')+'/g', s.goals+' total', 'Goals scored per game on average'],
-          ['Assists', pg('assists')+'/g', s.assists+' total', 'Goal assists per game on average'],
-          ['Key Passes', pg('key_passes')+'/g', s.key_passes+' total', 'Passes leading to shots per game'],
-          ['Shots', pg('total_shots')+'/g', s.total_shots+' total', 'Total attempts at goal per game'],
-          ['On Target %', s.total_shots>0?(s.shots_on_target/s.total_shots*100).toFixed(0)+'%':'–', s.shots_on_target+' on target', 'Percentage of shots on target — shot accuracy'],
-          ['Shot Conv %', s.total_shots>0?(s.goals/s.total_shots*100).toFixed(0)+'%':'–', 'finishing quality', 'Percentage of shots that become goals — finishing quality'],
-          ['Nutmegs', pg('nutmegs')+'/g', s.nutmegs+' total', 'Times beat an opponent through the legs per game'],
-        ].map(([lbl,val,sub,tip]) => `
-          <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid rgba(255,255,255,.04);cursor:help" data-tip="${tip}">
-            <div>
-              <span style="font-size:.76rem;color:var(--muted);font-family:'Barlow Condensed',sans-serif;letter-spacing:.5px">${lbl}</span>
-              <div style="font-size:.62rem;color:var(--muted);opacity:.6">${sub}</div>
-            </div>
-            <span style="font-family:'Bebas Neue',sans-serif;font-size:1.15rem;color:var(--text)">${val}</span>
-          </div>`).join('')}
-      </div>
-
-      <!-- DISCIPLINE & DEFENCE -->
-      <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:18px">
-        <div style="font-family:'Barlow Condensed',sans-serif;font-size:.7rem;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-bottom:14px">🛡 Discipline &amp; Defence</div>
         ${(()=>{
-          const defStats = [
-            ['Tackles', s.tackles, s.tackles/g],
-            ['Interceptions', s.interceptions, s.interceptions/g],
-            ['Blocks', s.blocks, s.blocks/g],
-            ['Saves', s.total_saves||0, (s.total_saves||0)/g],
-            ['Key Passes', s.key_passes, s.key_passes/g],
+          const pool = Object.values(getDisplayStats()).filter(p=>p.games>=3);
+          const avgPg = (key) => pool.reduce((s,p)=>s+p[key]/Math.max(p.games,1),0)/Math.max(pool.length,1);
+          const maxPg = (key) => Math.max(...pool.map(p=>p[key]/Math.max(p.games,1)),0.01);
+          const atkStats = [
+            { lbl:'Goals',        val:s.goals/g,                                  avg:avgPg('goals'),          max:maxPg('goals'),          fmt: v=>v.toFixed(2)+'/g', tip:'Goals per game vs squad average' },
+            { lbl:'Assists',      val:s.assists/g,                                avg:avgPg('assists'),        max:maxPg('assists'),        fmt: v=>v.toFixed(2)+'/g', tip:'Assists per game vs squad average' },
+            { lbl:'Shots',        val:s.total_shots/g,                            avg:avgPg('total_shots'),    max:maxPg('total_shots'),    fmt: v=>v.toFixed(1)+'/g', tip:'Shots per game vs squad average' },
+            { lbl:'Shot Conv %',  val:s.total_shots>0?s.goals/s.total_shots:0,   avg:pool.reduce((sum,p)=>sum+(p.total_shots>0?p.goals/p.total_shots:0),0)/Math.max(pool.length,1), max:Math.max(...pool.map(p=>p.total_shots>0?p.goals/p.total_shots:0),0.01), fmt: v=>(v*100).toFixed(0)+'%', tip:'Shot conversion % vs squad average' },
+            { lbl:'Nutmegs',      val:s.nutmegs/g,                                avg:avgPg('nutmegs'),        max:maxPg('nutmegs'),        fmt: v=>v.toFixed(2)+'/g', tip:'Nutmegs per game vs squad average' },
           ];
-          const maxVal = Math.max(...defStats.map(d => d[1]), 1);
-          return defStats.map(([lbl, total, perG]) => `
-            <div style="margin-bottom:10px">
+          return atkStats.map(({lbl,val,avg,max,fmt,tip})=>{
+            const pct = Math.min(val/max*100,100).toFixed(0);
+            const avgPct = Math.min(avg/max*100,100).toFixed(0);
+            const aboveAvg = val > avg*1.1;
+            const belowAvg = val < avg*0.9;
+            const barCol = aboveAvg?'var(--green)':belowAvg?'rgba(57,211,83,.3)':'rgba(57,211,83,.55)';
+            return `<div style="margin-bottom:12px" title="${tip}">
               <div style="display:flex;justify-content:space-between;margin-bottom:3px">
                 <span style="font-size:.72rem;color:var(--muted);font-family:'Barlow Condensed',sans-serif;letter-spacing:.5px;text-transform:uppercase">${lbl}</span>
-                <span style="font-size:.72rem;color:var(--text2)">${total} · <span style="color:var(--green)">${perG.toFixed(2)}/g</span></span>
+                <span style="font-size:.72rem;color:${aboveAvg?'var(--green)':belowAvg?'var(--muted)':'var(--text2)'}">${fmt(val)} <span style="opacity:.5;font-size:.65rem">avg ${fmt(avg)}</span></span>
               </div>
-              <div style="height:4px;background:var(--card2);border-radius:2px;overflow:hidden">
-                <div style="width:${(total/maxVal*100).toFixed(0)}%;height:100%;background:var(--green);border-radius:2px;transition:width .4s"></div>
+              <div style="height:5px;background:var(--card2);border-radius:3px;overflow:visible;position:relative">
+                <div style="width:${pct}%;height:100%;background:${barCol};border-radius:3px;transition:width .4s"></div>
+                <div style="position:absolute;top:-2px;left:${avgPct}%;width:2px;height:9px;background:rgba(255,255,255,.4);border-radius:1px" title="Squad avg"></div>
               </div>
-            </div>`).join('');
+            </div>`;
+          }).join('');
         })()}
+      </div>
+
+      <!-- DEFENCE & PLAYMAKING -->
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:18px">
+        <div style="font-family:'Barlow Condensed',sans-serif;font-size:.7rem;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-bottom:14px">🛡 Defence &amp; Playmaking</div>
+        ${(()=>{
+          const pool = Object.values(getDisplayStats()).filter(p=>p.games>=3);
+          const avgPg = (key) => pool.reduce((s,p)=>s+p[key]/Math.max(p.games,1),0)/Math.max(pool.length,1);
+          const maxPg = (key) => Math.max(...pool.map(p=>p[key]/Math.max(p.games,1)),0.01);
+          const defStats = [
+            { lbl:'Tackles',       val:s.tackles/g,           avg:avgPg('tackles'),       max:maxPg('tackles'),       fmt: v=>v.toFixed(2)+'/g', tip:'Tackles per game vs squad average' },
+            { lbl:'Interceptions', val:s.interceptions/g,     avg:avgPg('interceptions'), max:maxPg('interceptions'), fmt: v=>v.toFixed(2)+'/g', tip:'Interceptions per game vs squad average' },
+            { lbl:'Blocks',        val:(s.blocks||0)/g,       avg:avgPg('blocks'),        max:maxPg('blocks'),        fmt: v=>v.toFixed(2)+'/g', tip:'Blocks per game vs squad average' },
+            { lbl:'GK Saves',      val:(s.goalkeeper_saves||0)/g, avg:avgPg('goalkeeper_saves'), max:maxPg('goalkeeper_saves'), fmt: v=>v.toFixed(2)+'/g', tip:'Goalkeeper saves per game vs squad average' },
+            { lbl:'Key Passes',    val:s.key_passes/g,        avg:avgPg('key_passes'),    max:maxPg('key_passes'),    fmt: v=>v.toFixed(2)+'/g', tip:'Key passes per game vs squad average' },
+          ];
+          return defStats.map(({lbl,val,avg,max,fmt,tip})=>{
+            const pct = Math.min(val/max*100,100).toFixed(0);
+            const avgPct = Math.min(avg/max*100,100).toFixed(0);
+            const aboveAvg = val > avg*1.1;
+            const belowAvg = val < avg*0.9;
+            const barCol = aboveAvg?'var(--green)':belowAvg?'rgba(57,211,83,.3)':'rgba(57,211,83,.55)';
+            return `<div style="margin-bottom:12px" title="${tip}">
+              <div style="display:flex;justify-content:space-between;margin-bottom:3px">
+                <span style="font-size:.72rem;color:var(--muted);font-family:'Barlow Condensed',sans-serif;letter-spacing:.5px;text-transform:uppercase">${lbl}</span>
+                <span style="font-size:.72rem;color:${aboveAvg?'var(--green)':belowAvg?'var(--muted)':'var(--text2)'}">${fmt(val)} <span style="opacity:.5;font-size:.65rem">avg ${fmt(avg)}</span></span>
+              </div>
+              <div style="height:5px;background:var(--card2);border-radius:3px;overflow:visible;position:relative">
+                <div style="width:${pct}%;height:100%;background:${barCol};border-radius:3px;transition:width .4s"></div>
+                <div style="position:absolute;top:-2px;left:${avgPct}%;width:2px;height:9px;background:rgba(255,255,255,.4);border-radius:1px" title="Squad avg"></div>
+              </div>
+            </div>`;
+          }).join('');
+        })()}
+        <div style="font-size:.62rem;color:var(--muted);margin-top:4px;opacity:.6">Bright bar = above squad average · faint bar = below · white line = squad average</div>
       </div>
 
     </div>
