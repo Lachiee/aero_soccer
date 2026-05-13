@@ -2597,300 +2597,345 @@ const TAG_DEFS = {
 };
 
 
-function getFifaTags(s, cs) {
-  const ps = s;
-  const g = Math.max(ps.games, 1);
 
-  // Recency gate: must have played in last 10 matches
+// =====================================================================
+// TAG SYSTEM — global auction: each tag goes to exactly one player
+// =====================================================================
+let _tagCache = null; // { playerName: [{label,cls,tip},...] }
+
+function buildTagAuction() {
+  // Recency gate: active pool = played in last 10 matches AND 5+ games
   const last10Ids = [...matchList].sort((a,b)=>b.date.localeCompare(a.date)).slice(0,10).map(m=>m.id);
-  const playedRecently = last10Ids.some(mid => {
+  const isActive = (player) => last10Ids.some(mid => {
     const m = matchList.find(x=>x.id===mid);
-    return m && [...m.teamA,...m.teamB].some(r=>r.player===ps.player);
+    return m && [...m.teamA,...m.teamB].some(r=>r.player===player);
   });
-  if (!playedRecently && g < 5) return [];
 
-  // Per-game stats
-  const gpg   = ps.goals / g;
-  const apg   = ps.assists / g;
-  const spg   = ps.total_shots / g;
-  const sotpg = (ps.shots_on_target||0) / g;
-  const offpg = (ps.shots_off_target||0) / g;
-  const kppg  = ps.key_passes / g;
-  const intpg = ps.interceptions / g;
-  const tklpg = ps.tackles / g;
-  const blkpg = ps.blocks / g;
-  const gkspg = (ps.goalkeeper_saves||0) / g;
-  const nmpg  = ps.nutmegs / g;
-  const postpg= (ps.post||0) / g;
-  const conv  = spg > 0 ? gpg/spg : 0;
-  const acc   = spg > 0 ? sotpg/spg : 0;
-  const totalAct = ps.goals + ps.assists + ps.total_shots + ps.tackles + ps.interceptions;
+  const allStats = Object.values(getDisplayStats()).filter(p => p.games >= 5 && isActive(p.player));
+  if (!allStats.length) return {};
 
-  // Active pool: played in last 10 matches AND 5+ games
-  const pool = Object.values(getDisplayStats()).filter(p => {
-    if (p.games < 5) return false;
-    return last10Ids.some(mid => {
-      const m = matchList.find(x=>x.id===mid);
-      return m && [...m.teamA,...m.teamB].some(r=>r.player===p.player);
-    });
-  });
-  if (!pool.length) return [];
+  const n = (v) => Number(v)||0;
+  const g = (ps) => Math.max(ps.games,1);
 
-  // top1: is this player #1 in pool for this stat?
-  const top1 = (myVal, poolFn) => pool.filter(p => poolFn(p) > myVal).length === 0;
-  // top2: is this player #1 or #2?
-  const top2 = (myVal, poolFn) => pool.filter(p => poolFn(p) > myVal).length < 2;
+  // Per-player computed metrics
+  const metrics = {};
+  const comboStatsAll = getComboStats();
 
-  const pGPG  = p => p.goals/Math.max(p.games,1);
-  const pAPG  = p => p.assists/Math.max(p.games,1);
-  const pSPG  = p => p.total_shots/Math.max(p.games,1);
-  const pSOT  = p => (p.shots_on_target||0)/Math.max(p.games,1);
-  const pOFF  = p => (p.shots_off_target||0)/Math.max(p.games,1);
-  const pKPPG = p => p.key_passes/Math.max(p.games,1);
-  const pINT  = p => p.interceptions/Math.max(p.games,1);
-  const pTKL  = p => p.tackles/Math.max(p.games,1);
-  const pBLK  = p => p.blocks/Math.max(p.games,1);
-  const pGKS  = p => (p.goalkeeper_saves||0)/Math.max(p.games,1);
-  const pNMG  = p => p.nutmegs/Math.max(p.games,1);
-  const pPOST = p => (p.post||0)/Math.max(p.games,1);
-  const pCONV = p => p.total_shots>0 ? p.goals/p.total_shots : 0;
-  const pACC  = p => p.total_shots>0 ? (p.shots_on_target||0)/p.total_shots : 0;
-  const pACT  = p => (p.goals+p.assists+p.total_shots+p.tackles+p.interceptions)/Math.max(p.games,1);
-  const pDEF3 = p => (p.interceptions+p.tackles+(p.blocks||0))/Math.max(p.games,1);
-  const pFORT = p => (p.blocks||0)/Math.max(p.games,1)+(p.goalkeeper_saves||0)/Math.max(p.games,1);
-  const pNETMAG=p=>((p.shots_on_target||0)+p.goals)/Math.max(p.games,1);
-  const pHV   = p => (p.goals+p.tackles)/Math.max(p.games,1);
-  const pSLED = p => (p.total_shots+(p.post||0))/Math.max(p.games,1);
-  const pHUNT = p => (p.interceptions+p.goals)/Math.max(p.games,1);
-  const pSAFE = p => (p.assists+p.interceptions)/Math.max(p.games,1);
+  allStats.forEach(ps => {
+    const gm = g(ps);
+    const gpg = ps.goals/gm, apg=ps.assists/gm, spg=ps.total_shots/gm;
+    const sotpg=(ps.shots_on_target||0)/gm, offpg=(ps.shots_off_target||0)/gm;
+    const kppg=ps.key_passes/gm, intpg=ps.interceptions/gm, tklpg=ps.tackles/gm;
+    const blkpg=(ps.blocks||0)/gm, gkspg=(ps.goalkeeper_saves||0)/gm;
+    const nmpg=(ps.nutmegs||0)/gm, postpg=(ps.post||0)/gm;
+    const conv=spg>0?gpg/spg:0, acc=spg>0?sotpg/spg:0;
+    const totalAct=ps.goals+ps.assists+ps.total_shots+ps.tackles+ps.interceptions;
+    const actpg=totalAct/gm;
 
-  // Combo data
-  const playerCombos = Object.entries(goalCombos);
-  const myGoalEvents = [];
-  playerCombos.forEach(([mid, data]) => {
-    const match = matchList.find(m=>m.id===mid);
-    if (!match) return;
-    const scorerTeam = {};
-    [...match.teamA,...match.teamB].forEach(r=>{ scorerTeam[r.player]=r.team; });
-    ['h1','h2'].forEach(half => {
-      (data[half]||[]).forEach(p => {
-        if (p.scorer!==ps.player||p.isOG||!p.time) return;
-        const [min] = p.time.split(':').map(Number);
-        const myTeam = scorerTeam[ps.player];
-        const allInMatch=[...(data.h1||[]).map(x=>({...x,half:'1H'})),...(data.h2||[]).map(x=>({...x,half:'2H'}))];
-        const toS=t=>{const[a,b]=t.split(':').map(Number);return a*60+(b||0);};
-        const sorted=allInMatch.filter(x=>x.time).sort((a,b)=>toS(a.time)-toS(b.time));
-        const myIdx=sorted.findIndex(x=>x.scorer===ps.player&&x.time===p.time&&x.half===half);
-        let tA=0,tB=0;
-        for(let i=0;i<myIdx;i++){const t=scorerTeam[sorted[i].scorer];if(t==='A')tA++;else tB++;}
-        const myScore=myTeam==='A'?tA:tB, oppScore=myTeam==='A'?tB:tA;
-        myGoalEvents.push({min,half,mid,
-          isOpener:myIdx===0,
-          isFinal:myIdx===sorted.length-1,
-          isEqualisingOrComeback:oppScore>myScore});
+    const asScorer=comboStatsAll.filter(c=>c.scorer===ps.player);
+    const asAssister=comboStatsAll.filter(c=>c.assister===ps.player);
+    const playerCombos=Object.entries(goalCombos);
+    const dualGames=playerCombos.filter(([,d])=>{
+      const all=[...(d.h1||[]),...(d.h2||[])];
+      return all.some(p=>p.scorer===ps.player&&!p.isOG)&&all.some(p=>p.assister===ps.player);
+    }).length;
+    const multiGoalGames=playerCombos.filter(([,d])=>
+      [...(d.h1||[]),...(d.h2||[])].filter(p=>p.scorer===ps.player&&!p.isOG).length>=2
+    ).length;
+    const uniqueAssisted=new Set(asAssister.map(c=>c.scorer)).size;
+    const topProvider=asScorer.sort((a,b)=>b.goals-a.goals)[0];
+    const topReceiver=asAssister.sort((a,b)=>b.goals-a.goals)[0];
+    const unassistedGoals=Math.max(0,(ps.goals||0)-asScorer.reduce((s,c)=>s+c.goals,0));
+
+    // Goal timing events
+    const myGoalEvents=[];
+    playerCombos.forEach(([mid,data])=>{
+      const match=matchList.find(m=>m.id===mid); if(!match) return;
+      const scorerTeam={};
+      [...match.teamA,...match.teamB].forEach(r=>{ scorerTeam[r.player]=r.team; });
+      ['h1','h2'].forEach(half=>{
+        (data[half]||[]).forEach(p=>{
+          if(p.scorer!==ps.player||p.isOG||!p.time) return;
+          const [min]=p.time.split(':').map(Number);
+          const myTeam=scorerTeam[ps.player];
+          const all=[...(data.h1||[]).map(x=>({...x,half:'1H'})),...(data.h2||[]).map(x=>({...x,half:'2H'}))];
+          const sorted=all.filter(x=>x.time).sort((a,b)=>parseInt(a.time)-parseInt(b.time));
+          const idx=sorted.findIndex(x=>x.scorer===ps.player&&x.time===p.time&&x.half===half);
+          let tA=0,tB=0;
+          for(let i=0;i<idx;i++){const t=scorerTeam[sorted[i].scorer];if(t==='A')tA++;else tB++;}
+          const myScore=myTeam==='A'?tA:tB, oppScore=myTeam==='A'?tB:tA;
+          myGoalEvents.push({min,isOpener:idx===0,isFinal:idx===sorted.length-1,isEqualisingOrComeback:oppScore>myScore});
+        });
       });
     });
+    const avgMin=myGoalEvents.length>=3?myGoalEvents.reduce((s,e)=>s+e.min,0)/myGoalEvents.length:999;
+
+    // Consistency
+    const matchScores=matchList.filter(m=>[...m.teamA,...m.teamB].some(r=>r.player===ps.player))
+      .map(m=>{const r=[...m.teamA,...m.teamB].find(x=>x.player===ps.player);
+        return r?n(r.goals)*2+n(r.assists)+n(r.key_passes)*0.3+n(r.tackles)*0.3:0;});
+    const mu=matchScores.length?matchScores.reduce((s,v)=>s+v,0)/matchScores.length:0;
+    const cv=mu>0?Math.sqrt(matchScores.reduce((s,v)=>s+(v-mu)**2,0)/matchScores.length)/mu:999;
+    const reliabilityScore=matchScores.length>=8&&cv<0.5&&mu>=1.0?mu*(1-cv):0;
+
+    // Variance for wildcard/swiss army
+    const vals=[gpg,apg,sotpg/2,tklpg,intpg,gkspg].map(v=>v||0);
+    const vmean=vals.reduce((s,v)=>s+v,0)/vals.length;
+    const variance=vals.reduce((s,v)=>s+(v-vmean)**2,0)/vals.length;
+    const stdDev=Math.sqrt(variance);
+
+    metrics[ps.player] = {
+      ps, gpg, apg, spg, sotpg, offpg, kppg, intpg, tklpg, blkpg, gkspg, nmpg, postpg,
+      conv, acc, actpg, totalAct: totalAct/gm,
+      dualGames, multiGoalGames, uniqueAssisted,
+      topProvider, topReceiver, unassistedGoals,
+      myGoalEvents, avgMin,
+      openers: myGoalEvents.filter(e=>e.isOpener).length,
+      finishers: myGoalEvents.filter(e=>e.isFinal).length,
+      equalisers: myGoalEvents.filter(e=>e.isEqualisingOrComeback).length,
+      lateGoals: myGoalEvents.filter(e=>e.min>=40).length,
+      reliabilityScore, stdDev, variance,
+      asScorer, asAssister,
+    };
   });
 
-  const comboStats = getComboStats();
-  const asScorer   = comboStats.filter(c=>c.scorer===ps.player);
-  const asAssister = comboStats.filter(c=>c.assister===ps.player);
-  const dualGames  = playerCombos.filter(([,data])=>{
-    const all=[...(data.h1||[]),...(data.h2||[])];
-    return all.some(p=>p.scorer===ps.player&&!p.isOG)&&all.some(p=>p.assister===ps.player);
-  }).length;
-  const topProvider  = asScorer.sort((a,b)=>b.goals-a.goals)[0];
-  const topReceiver  = asAssister.sort((a,b)=>b.goals-a.goals)[0];
-  const uniqueAssisted = new Set(asAssister.map(c=>c.scorer)).size;
-  const multiGoalGames = playerCombos.filter(([,data])=>[...(data.h1||[]),...(data.h2||[])].filter(p=>p.scorer===ps.player&&!p.isOG).length>=2).length;
-  const unassistedGoals= (ps.goals||0)-asScorer.reduce((s,c)=>s+c.goals,0);
+  const players = Object.keys(metrics);
+  const best = (scoreFn, minScore = 0) => {
+    // Returns the player name with highest score (must be >= minScore)
+    let bestP=null, bestV=-Infinity;
+    players.forEach(p=>{ const v=scoreFn(metrics[p]); if(v>bestV){bestV=v;bestP=p;} });
+    return bestV >= minScore ? bestP : null;
+  };
 
-  // Pool-relative combo metrics
-  const poolDual = pool.map(p=>playerCombos.filter(([,data])=>{
-    const all=[...(data.h1||[]),...(data.h2||[])];
-    return all.some(x=>x.scorer===p.player&&!x.isOG)&&all.some(x=>x.assister===p.player);
-  }).length);
-  const poolMulti = pool.map(p=>playerCombos.filter(([,data])=>
-    [...(data.h1||[]),...(data.h2||[])].filter(x=>x.scorer===p.player&&!x.isOG).length>=2
-  ).length);
-  const top1combo = (myVal, arr) => arr.filter(v=>v>myVal).length === 0;
-  const top2combo = (myVal, arr) => arr.filter(v=>v>myVal).length < 2;
+  // ── TAG AUCTION — one winner per tag ──────────────────────────────────
+  const tagWinners = {}; // tagLabel → playerName
 
-  const cands = [];
-  const add = (label, score) => { if (TAG_DEFS[label]) cands.push({label, score}); };
+  const award = (label, scoreFn, minScore = 0.01) => {
+    const winner = best(scoreFn, minScore);
+    if (winner) tagWinners[label] = winner;
+  };
+  // For timestamp tags — award even if only 1 goal qualifies
+  const awardTime = (label, scoreFn) => {
+    const winner = best(scoreFn, 1);
+    if (winner) tagWinners[label] = winner;
+  };
 
-  // ── ATTACKING (top1 only) ─────────────────────────────────────────────
-  if (top1(gpg,pGPG))                              add('Golden Boot',      gpg*4);
-  if (top1(conv,pCONV))                            add('Clinical',         conv*15);
-  const sotPlusGoal=sotpg+gpg;
-  if (top1(sotPlusGoal, pNETMAG))                  add('Net Magnet',       sotPlusGoal*2);
-  if (top1(postpg+sotpg, p=>(p.post||0)/Math.max(p.games,1)+(p.shots_on_target||0)/Math.max(p.games,1)))
-                                                   add('Rebound King',     (postpg+sotpg+gpg)*2);
-  if (top1(multiGoalGames, ()=>0)||top1combo(multiGoalGames, poolMulti)) add('Avalanche', multiGoalGames*3);
-  if (top1(gpg,pGPG)||top2(gpg,pGPG)&&myGoalEvents.filter(e=>e.min<=10).length>=2) add('Predator', gpg*2.5);
-  if (top2(conv,pCONV)&&!top2(spg,pSPG))           add('Silent Assassin',  conv*12+gpg*2);
-  if (gpg>0.3&&totalAct/g<pool.reduce((s,p)=>s+pACT(p),0)/pool.length*0.7) add('Ghost Runner', gpg*3);
-  if (top1(asAssister.reduce((s,c)=>s+c.goals,0)+gpg*g, p=>{
-    const a=comboStats.filter(c=>c.assister===p.player).reduce((s,c)=>s+c.goals,0);
-    return a+(p.goals||0);
-  }))                                               add('Wave Maker',       (gpg+apg)*2.5);
-  if (unassistedGoals>0&&gpg>0.3&&top2(gpg,pGPG))  add('Poacher',          unassistedGoals+gpg*2);
-  if (top1(gpg,pGPG)||top2(gpg,pGPG))              add('Finisher',         gpg*3);
+  // Attacking
+  award('Golden Boot',      m => m.gpg);
+  award('Clinical',         m => m.conv);
+  award('Silent Assassin',  m => m.conv>0&&m.spg<3?m.conv*2-m.spg*0.1:0);
+  award('Avalanche',        m => m.multiGoalGames);
+  award('Finisher',         m => m.gpg*0.7+m.conv*0.3);
+  award('Poacher',          m => m.unassistedGoals>0?m.unassistedGoals/Math.max(m.ps.games,1):0);
+  award('Predator',         m => m.myGoalEvents.filter(e=>e.min<=10).length>0?m.gpg*m.myGoalEvents.filter(e=>e.min<=10).length:0);
+  award('Net Magnet',       m => m.sotpg+m.gpg);
+  award('Rebound King',     m => m.gpg+m.postpg+m.sotpg*0.3);
+  award('Ghost Runner',     m => m.gpg>0.3&&m.actpg<2?m.gpg/Math.max(m.actpg,0.5):0);
+  award('Wave Maker',       m => (m.gpg+m.apg)*m.ps.games);
 
-  // ── SHOOTING ─────────────────────────────────────────────────────────
-  if (top1(spg,pSPG))                               add('Gunslinger',       spg*1.5);
-  if (top1(sotpg,pSOT))                             add('Target Locked',    sotpg*2);
-  if (top1(acc,pACC))                               add('Deadeye',          acc*15);
-  if (top2(spg,pSPG)&&!top2(acc,pACC))              add('Heat Check',       spg*0.8+offpg*0.5);
-  if (top1(sotpg+spg, p=>pSOT(p)+pSPG(p)))          add('Trigger Finger',   (sotpg+spg)*0.8);
-  if (top1(sotpg,pSOT)||top2(sotpg,pSOT))           add('Front Foot',       sotpg*1.8);
-  if (top1(spg+postpg, pSLED))                      add('Sledgehammer',     (spg+postpg)*1.2);
-  if (top1(postpg+sotpg, p=>pPOST(p)+pSOT(p)))      add('Pinball',          (postpg+sotpg)*2);
-  if (top1(gpg+tklpg+totalAct/g, pHV))              add('High Voltage',     (gpg+tklpg+totalAct/g/2)*1.5);
+  // Shooting
+  award('Gunslinger',       m => m.spg);
+  award('Target Locked',    m => m.sotpg);
+  award('Deadeye',          m => m.acc);
+  award('Heat Check',       m => m.spg>0&&m.acc<0.5?m.spg*(1-m.acc):0);
+  award('Trigger Finger',   m => m.sotpg*1.5+m.spg*0.5);
+  award('Front Foot',       m => m.sotpg*2+m.gpg);
+  award('Sledgehammer',     m => m.spg+m.postpg*2);
+  award('Pinball',          m => m.postpg+m.sotpg);
+  award('High Voltage',     m => m.gpg*2+m.tklpg+m.actpg*0.3);
 
-  // ── FLAIR ─────────────────────────────────────────────────────────────
-  if (top1(nmpg,pNMG))                              add('Sauce Merchant',   nmpg*4);
-  if (top2(nmpg,pNMG)&&top2(gpg,pGPG))              add('Streetballer',     nmpg*2+gpg);
-  if (top2(nmpg,pNMG)&&top2(offpg,pOFF))            add('Risk Taker',       nmpg*2+offpg*0.5);
-  if (top1(spg+nmpg+kppg, p=>pSPG(p)+pNMG(p)+pKPPG(p))) add('Chaos Creator',(spg+nmpg+kppg)*0.8);
-  if (top1(offpg,pOFF))                             add('Chaos Agent',      offpg*1.5);
-  if (top1(postpg,pPOST)&&(ps.post||0)>=2)          add('Woodwork Warrior', postpg*8);
-  if (top2(postpg,pPOST)&&top2(gpg,pGPG))           add('Crossbar Hero',    postpg*5+gpg);
-  if (top2(postpg,pPOST)&&top1(gpg,pGPG))           add('Lucky Bounce',     postpg*4+gpg*1.5);
-  if (top2(nmpg,pNMG)&&(multiGoalGames>=2||dualGames>=2)) add('Showtime', nmpg*2+multiGoalGames);
-  if (top2(tklpg,pTKL)&&top2(nmpg,pNMG))            add('Breaker',          tklpg+nmpg*2);
-  const variance=([gpg,apg,sotpg/2,tklpg,intpg,gkspg].map(v=>v||0)).reduce((s,v,_,a)=>{const m=a.reduce((s2,x)=>s2+x,0)/a.length;return s+(v-m)**2;},0)/6;
-  if (variance>0.8)                                  add('Wildcard',         variance*5);
+  // Flair
+  award('Sauce Merchant',   m => m.nmpg);
+  award('Streetballer',     m => m.nmpg*2+m.gpg);
+  award('Risk Taker',       m => m.nmpg*1.5+m.offpg);
+  award('Chaos Creator',    m => m.spg+m.nmpg*2+m.kppg);
+  award('Chaos Agent',      m => m.offpg);
+  award('Woodwork Warrior', m => m.postpg*(m.ps.post||0)>0?m.postpg:0);
+  award('Crossbar Hero',    m => m.postpg*2+m.gpg*0.5);
+  award('Lucky Bounce',     m => m.postpg+m.gpg*2);
+  award('Showtime',         m => m.nmpg*(m.dualGames+m.multiGoalGames));
+  award('Breaker',          m => m.tklpg*0.5+m.nmpg*2);
+  award('Wildcard',         m => m.variance);
 
-  // ── CREATING ──────────────────────────────────────────────────────────
-  if (top1(apg,pAPG))                               add('Architect',        apg*5);
-  if (top1(kppg,pKPPG))                             add('Thread Needle',    kppg*3);
-  if (top1(apg+kppg, p=>pAPG(p)+pKPPG(p)))          add('Puppet Master',    (apg+kppg)*2);
-  if (top2(apg,pAPG)&&top2(kppg,pKPPG))             add('The Supplier',     apg*2+kppg*0.8);
-  if (top1(uniqueAssisted, p=>new Set(comboStats.filter(c=>c.assister===p.player).map(c=>c.scorer)).size))
-                                                     add('The Connector',    uniqueAssisted*2);
-  if (top1(uniqueAssisted, ()=>0)&&uniqueAssisted>=3) add('Pathfinder',      uniqueAssisted*2.5);
-  if (top2(apg,pAPG)&&top2(gpg,pGPG))               add('Play Driver',      (apg+gpg)*2);
-  if (top1(kppg+intpg, p=>pKPPG(p)+pINT(p)))        add('Traffic Controller',kppg+intpg);
-  if (top1(kppg+sotpg, p=>pKPPG(p)+pSOT(p)))        add('Space Creator',    (kppg+sotpg)*1.2);
-  if (top1(apg+intpg, pSAFE))                        add('Safety Valve',     (apg+intpg)*2);
-  if (myGoalEvents.filter(e=>e.isOpener).length>=2&&top2(kppg,pKPPG))
-                                                     add('Pulse Setter',     kppg*2+myGoalEvents.filter(e=>e.isOpener).length);
+  // Creating
+  award('Architect',        m => m.apg);
+  award('Thread Needle',    m => m.kppg);
+  award('Puppet Master',    m => m.apg*2+m.kppg);
+  award('The Supplier',     m => m.apg+m.kppg*0.8);
+  award('The Connector',    m => m.uniqueAssisted);
+  award('Pathfinder',       m => m.uniqueAssisted*1.2+m.apg);
+  award('Play Driver',      m => m.apg+m.gpg);
+  award('Traffic Controller',m => m.kppg+m.intpg);
+  award('Space Creator',    m => m.kppg*1.5+m.sotpg*0.5);
+  award('Safety Valve',     m => m.apg+m.intpg*1.5);
+  award('Pulse Setter',     m => m.openers*2+m.kppg);
 
-  // ── COMBO/PARTNERSHIP ─────────────────────────────────────────────────
-  if (top1combo(dualGames, poolDual)&&dualGames>=2)  add('Combo King',       dualGames*3);
-  if (topProvider&&topProvider.goals>=3&&top2(apg,pAPG)) add('Duo Link',     topProvider.goals*2);
-  if (topReceiver&&topReceiver.goals>=3&&top2(gpg,pGPG)) add('One-Two Specialist',topReceiver.goals*2);
+  // Combo
+  award('Combo King',       m => m.dualGames);
+  award('Duo Link',         m => m.topProvider?m.topProvider.goals:0);
+  award('One-Two Specialist',m => m.topReceiver?m.topReceiver.goals:0);
 
-  // ── DEFENDING ─────────────────────────────────────────────────────────
-  if (top1(tklpg,pTKL))                             add('Enforcer',         tklpg*3);
-  if (top1(intpg,pINT))                             add('Ball Hawk',        intpg*3);
-  if (top1(tklpg+blkpg+intpg, pDEF3))               add('Lockdown',         (tklpg+blkpg+intpg)*1.5);
-  if (top1(tklpg+kppg+intpg, p=>pTKL(p)+pKPPG(p)+pINT(p))) add('Engine Room',(tklpg+kppg+intpg)*1.2);
-  if (top1(intpg+gpg, pHUNT))                       add('Hunter',           (intpg+gpg)*2);
+  // Defending
+  award('Enforcer',         m => m.tklpg);
+  award('Ball Hawk',        m => m.intpg);
+  award('Lockdown',         m => m.tklpg+m.blkpg+m.intpg);
+  award('Engine Room',      m => m.tklpg+m.kppg+m.intpg);
+  award('Hunter',           m => m.intpg*1.5+m.gpg);
 
-  // ── GK/BLOCKING ────────────────────────────────────────────────────────
-  if (top1(blkpg,pBLK))                             add('Brick Wall',       blkpg*5);
-  if (top1(gkspg,pGKS))                             add('Shot Stopper',     gkspg*4);
-  if (top1(blkpg+gkspg, pFORT))                     add('Fortress',         (blkpg+gkspg)*2);
-  if (top2(gkspg,pGKS)&&top2(blkpg,pBLK))           add('Clean Hands',      gkspg*1.5+blkpg*1.5);
+  // GK/Blocking
+  award('Brick Wall',       m => m.blkpg);
+  award('Shot Stopper',     m => m.gkspg);
+  award('Fortress',         m => m.blkpg+m.gkspg);
+  award('Clean Hands',      m => m.gkspg*0.8+m.blkpg*0.8);
 
-  // ── HYBRID ─────────────────────────────────────────────────────────────
-  if (top1(gpg+tklpg, p=>pGPG(p)+pTKL(p)))          add('Two-Way Engine',   (gpg+tklpg)*2);
-  const vals=[gpg,apg,sotpg/2,tklpg,intpg,gkspg].map(v=>v||0);
-  const mean=vals.reduce((s,v)=>s+v,0)/vals.length;
-  const stdDev=Math.sqrt(vals.reduce((s,v)=>s+(v-mean)**2,0)/vals.length);
-  if (stdDev<0.35&&top2(totalAct/g,pACT))            add('Swiss Army Knife', 10-stdDev*20);
-  if (top1(totalAct/g,pACT))                         add('Iron Lung',         (totalAct/g)*1.2);
-  else if (top2(totalAct/g,pACT))                    add('Relentless',        (totalAct/g)*0.8);
-  if (top2(gpg,pGPG)&&asScorer.reduce((s,c)=>s+c.goals,0)===0&&gpg>0.3) add('Lone Wolf',gpg*3);
+  // Hybrid
+  award('Two-Way Engine',   m => m.gpg*1.5+m.tklpg*1.5);
+  award('Swiss Army Knife', m => m.stdDev<0.4?10-m.stdDev*20:0);
+  award('Iron Lung',        m => m.actpg*1.5);
+  award('Relentless',       m => m.actpg);
+  award('Lone Wolf',        m => m.asScorer.length===0&&m.gpg>0?m.gpg*3:0);
+  award('Mr Reliable',      m => m.reliabilityScore);
+  award('Glue Guy',         m => m.stdDev<0.5&&m.actpg>1?5-m.stdDev*5:0);
 
-  // Consistency
-  const matchScores=matchList.filter(m=>[...m.teamA,...m.teamB].some(r=>r.player===ps.player))
-    .map(m=>{const r=[...m.teamA,...m.teamB].find(x=>x.player===ps.player);
-      return r?n(r.goals)*2+n(r.assists)+n(r.key_passes)*0.3+n(r.tackles)*0.3:0;});
-  if (matchScores.length>=8){
-    const mu=matchScores.reduce((s,v)=>s+v,0)/matchScores.length;
-    const cv=mu>0?Math.sqrt(matchScores.reduce((s,v)=>s+(v-mu)**2,0)/matchScores.length)/mu:999;
-    if (cv<0.5&&mu>=1.0) add('Mr Reliable',mu*(1-cv));
-  }
-  if (stdDev<0.4&&mean>0.3&&top2(totalAct/g,pACT)) add('Glue Guy',5-stdDev*5);
+  // Timestamp — award to whoever has the most, even if count is low
+  awardTime('Quick Strike',     m => m.myGoalEvents.length>=1 ? Math.max(0, 60-m.avgMin) : 0);
+  awardTime('Clutch Factor',    m => m.lateGoals);
+  awardTime('Icebreaker',       m => m.openers);
+  awardTime('Momentum Shift',   m => m.equalisers);
+  awardTime('Last Laugh',       m => m.finishers);
+  awardTime('Comeback Kid',     m => m.equalisers*1.2+m.lateGoals*0.3);
+  awardTime('Big Game Player',  m => {
+    const big=matchList.filter(x=>x.goalsA+x.goalsB>=20);
+    if(big.length<4) return 0;
+    const s=big.flatMap(x=>[...x.teamA,...x.teamB]).filter(r=>r.player===m.ps.player);
+    if(s.length<3) return 0;
+    const bgpg=s.reduce((a,r)=>a+n(r.goals),0)/s.length;
+    return bgpg>m.gpg*1.2?bgpg:0;
+  });
+  award('Heartbreaker',     m => (m.ps.post||0)*m.postpg);
 
-  // ── TIMESTAMP ──────────────────────────────────────────────────────────
-  if (myGoalEvents.length>=3) {
-    const avgMin=myGoalEvents.reduce((s,e)=>s+e.min,0)/myGoalEvents.length;
-    const poolAvgMin=pool.map(p=>{const evts=[];
-      Object.entries(goalCombos).forEach(([,d])=>['h1','h2'].forEach(h=>(d[h]||[]).forEach(x=>{
-        if(x.scorer===p.player&&!x.isOG&&x.time){const[m]=x.time.split(':').map(Number);evts.push(m);}
-      })));return evts.length>=3?evts.reduce((s,v)=>s+v,0)/evts.length:999;});
-    if (avgMin<=25&&poolAvgMin.filter(v=>v<avgMin).length===0) add('Quick Strike',(30-avgMin)*0.3);
-    const lateGoals=myGoalEvents.filter(e=>e.min>=40).length;
-    const poolLate=pool.map(p=>Object.entries(goalCombos).reduce((s,[,d])=>
-      s+[...(d.h1||[]),...(d.h2||[])].filter(x=>x.scorer===p.player&&!x.isOG&&x.time&&parseInt(x.time)>=40).length,0));
-    if (lateGoals>=2&&poolLate.filter(v=>v>lateGoals).length===0) add('Clutch Factor',lateGoals*3);
-    const openers=myGoalEvents.filter(e=>e.isOpener).length;
-    const poolOpen=pool.map(p=>Object.entries(goalCombos).reduce((s,[,d])=>{
-      const all=[...(d.h1||[]),...(d.h2||[])].filter(x=>x.time).sort((a,b)=>parseInt(a.time)-parseInt(b.time));
-      return s+(all[0]&&all[0].scorer===p.player?1:0);},0));
-    if (openers>=2&&poolOpen.filter(v=>v>openers).length===0) add('Icebreaker',openers*3);
-    const equalisers=myGoalEvents.filter(e=>e.isEqualisingOrComeback).length;
-    const poolEq=pool.map(p=>Object.entries(goalCombos).reduce((s,[,d])=>
-      s+[...(d.h1||[]),...(d.h2||[])].filter(x=>x.scorer===p.player&&!x.isOG).length,0));
-    if (equalisers>=2&&poolEq.filter(v=>v>equalisers).length===0) add('Momentum Shift',equalisers*3);
-    const finishers=myGoalEvents.filter(e=>e.isFinal).length;
-    if (finishers>=2&&poolEq.filter(v=>v>finishers).length===0) add('Last Laugh',finishers*3);
-    if (equalisers>=3&&poolEq.filter(v=>v>equalisers).length===0) add('Comeback Kid',equalisers*2.5);
-  }
-  if ((ps.post||0)>=3&&top2(postpg,pPOST)) add('Heartbreaker',(ps.post||0)*2);
-  const bigGames=matchList.filter(m=>m.goalsA+m.goalsB>=20);
-  if (bigGames.length>=4){
-    const bgStats=bigGames.flatMap(m=>[...m.teamA,...m.teamB]).filter(r=>r.player===ps.player);
-    if (bgStats.length>=3){
-      const bgGpg=bgStats.reduce((s,r)=>s+n(r.goals),0)/bgStats.length;
-      if (bgGpg>gpg*1.3) add('Big Game Player',bgGpg*3);
+  // ── Dedup: each player keeps only their single best nutmeg-based tag ──
+  const nutmegTags = ['Sauce Merchant','Streetballer','Risk Taker','Chaos Creator','Showtime','Breaker'];
+  const nutmegScoreFns = {
+    'Sauce Merchant': m => m.nmpg,
+    'Streetballer':   m => m.nmpg*2+m.gpg,
+    'Risk Taker':     m => m.nmpg*1.5+m.offpg,
+    'Chaos Creator':  m => m.spg+m.nmpg*2+m.kppg,
+    'Showtime':       m => m.nmpg*(m.dualGames+m.multiGoalGames),
+    'Breaker':        m => m.tklpg*0.5+m.nmpg*2,
+  };
+  const playerNutmegTags = {};
+  nutmegTags.forEach(tag => {
+    const winner = tagWinners[tag];
+    if (!winner) return;
+    if (!playerNutmegTags[winner]) playerNutmegTags[winner] = [];
+    const score = metrics[winner] ? nutmegScoreFns[tag](metrics[winner]) : 0;
+    playerNutmegTags[winner].push({ tag, score });
+  });
+  Object.entries(playerNutmegTags).forEach(([player, tags]) => {
+    if (tags.length <= 1) return;
+    tags.sort((a,b) => b.score - a.score);
+    tags.slice(1).forEach(t => { delete tagWinners[t.tag]; });
+  });
+
+  // Build reverse map: player → [tags they won]
+  const playerTags = {};
+  players.forEach(p => { playerTags[p] = []; });
+  Object.entries(tagWinners).forEach(([label, winner]) => {
+    if (playerTags[winner]) playerTags[winner].push(label);
+  });
+
+  return playerTags;
+}
+
+function getFifaTags(s, cs) {
+  // Rebuild cache if needed (cleared on filter change via computeFilteredStats)
+  if (!_tagCache) _tagCache = buildTagAuction();
+
+  const myTags = (_tagCache[s.player] || []);
+
+  // Sort by tag "prestige" — put primary stat winners first
+  const primaryFirst = ['Golden Boot','Shot Stopper','Enforcer','Ball Hawk','Brick Wall',
+    'Sauce Merchant','Architect','Thread Needle','Gunslinger','Target Locked','Deadeye',
+    'Avalanche','Clinical','Wildcard'];
+  const sorted = [...myTags].sort((a,b) => {
+    const ai = primaryFirst.indexOf(a), bi = primaryFirst.indexOf(b);
+    if (ai>=0 && bi<0) return -1;
+    if (bi>=0 && ai<0) return 1;
+    return ai - bi;
+  });
+
+  // Return top 3
+  const result = sorted.slice(0,3).map(label => {
+    const def = TAG_DEFS[label];
+    return def ? {label, cls:def.cls, tip:def.tip} : null;
+  }).filter(Boolean);
+
+  // Fallback if player has fewer than 3 won tags — award based on best ranked stat
+  if (result.length < 3) {
+    const g = Math.max(s.games,1);
+    const gpg=s.goals/g, apg=s.assists/g, kppg=s.key_passes/g;
+    const intpg=s.interceptions/g, tklpg=s.tackles/g, blkpg=(s.blocks||0)/g;
+    const gkspg=(s.goalkeeper_saves||0)/g, nmpg=(s.nutmegs||0)/g;
+    const sotpg=(s.shots_on_target||0)/g, spg=s.total_shots/g;
+    const actpg=(s.goals+s.assists+s.total_shots+s.tackles+s.interceptions)/g;
+    // Fallback: award tags based on this player's best stats relative to pool
+    // Each fallback tag still unique — awarded to the best-ranked eligible player
+    // But here we just check if THIS player is in top 25% for that stat
+    const pool = Object.values(getDisplayStats()).filter(p => p.games >= 5);
+    const rank = (myVal, fn) => pool.filter(p => fn(p) > myVal).length; // 0 = best
+    const pct25 = Math.ceil(pool.length * 0.25);
+
+    const fallbackCandidates = [
+      {r:rank(gkspg,p=>(p.goalkeeper_saves||0)/Math.max(p.games,1)), tag:'Shot Stopper',   cls:'tag-sweeper',   tip:'Among the best goalkeepers in the group'},
+      {r:rank(tklpg,p=>p.tackles/Math.max(p.games,1)),               tag:'Enforcer',       cls:'tag-guardian',  tip:'Among the best tacklers in the group'},
+      {r:rank(intpg,p=>p.interceptions/Math.max(p.games,1)),         tag:'Ball Hawk',      cls:'tag-guardian',  tip:'Among the best interceptors in the group'},
+      {r:rank(kppg, p=>p.key_passes/Math.max(p.games,1)),            tag:'Thread Needle',  cls:'tag-playmaker', tip:'Among the best creators in the group'},
+      {r:rank(apg,  p=>p.assists/Math.max(p.games,1)),               tag:'Architect',      cls:'tag-playmaker', tip:'Among the top assisters in the group'},
+      {r:rank(gpg,  p=>p.goals/Math.max(p.games,1)),                 tag:'Finisher',       cls:'tag-striker',   tip:'Among the top scorers in the group'},
+      {r:rank(blkpg,p=>(p.blocks||0)/Math.max(p.games,1)),           tag:'Brick Wall',     cls:'tag-blocker',   tip:'Among the best shot blockers in the group'},
+      {r:rank(nmpg, p=>(p.nutmegs||0)/Math.max(p.games,1)),          tag:'Sauce Merchant', cls:'tag-wizard',    tip:'Among the top flair players in the group'},
+      {r:rank(sotpg,p=>(p.shots_on_target||0)/Math.max(p.games,1)),  tag:'Front Foot',     cls:'tag-target',    tip:'Among the most threatening attackers in the group'},
+      {r:rank(actpg,p=>(p.goals+p.assists+p.total_shots+p.tackles+p.interceptions)/Math.max(p.games,1)), tag:'Relentless', cls:'tag-workhorse', tip:'Among the most active players in the group'},
+      {r:rank(gkspg+blkpg,p=>((p.goalkeeper_saves||0)+(p.blocks||0))/Math.max(p.games,1)), tag:'Fortress', cls:'tag-blocker', tip:'Strong defensive presence in the group'},
+      {r:rank(apg+intpg,p=>(p.assists+p.interceptions)/Math.max(p.games,1)), tag:'Safety Valve', cls:'tag-playmaker', tip:'Wins possession and restarts attacks'},
+      {r:rank(gpg+tklpg,p=>(p.goals+p.tackles)/Math.max(p.games,1)), tag:'Two-Way Engine', cls:'tag-workhorse', tip:'Contributes in both attack and defense'},
+    ]
+    .filter(f => f.r <= pct25) // must be in top 25%
+    .filter(f => !result.some(r => r.cls===f.cls || r.label===f.tag)) // no colour dupes
+    .filter(f => { // tag not already claimed by someone else in main auction
+      if (!_tagCache) return true;
+      return !Object.entries(_tagCache).some(([p, tags]) => p !== s.player && tags.includes(f.tag));
+    })
+    .sort((a,b) => a.r - b.r); // best rank first
+
+    for (const f of fallbackCandidates) {
+      if (result.length >= 3) break;
+      result.push({label:f.tag, cls:f.cls, tip:f.tip});
+    }
+
+    // Last resort: if still under 3, drop the uniqueness requirement and just pick best stats
+    if (result.length < 3) {
+      const lastResort = [
+        {r:rank(gpg,  p=>p.goals/Math.max(p.games,1)),               tag:'Finisher',      cls:'tag-striker',   tip:'Scores consistently in the group'},
+        {r:rank(actpg,p=>(p.goals+p.assists+p.total_shots+p.tackles+p.interceptions)/Math.max(p.games,1)), tag:'Relentless', cls:'tag-workhorse', tip:'High involvement every match'},
+        {r:rank(sotpg,p=>(p.shots_on_target||0)/Math.max(p.games,1)), tag:'Front Foot',   cls:'tag-target',    tip:'Keeps the team threatening'},
+        {r:rank(tklpg,p=>p.tackles/Math.max(p.games,1)),              tag:'Enforcer',     cls:'tag-guardian',  tip:'Wins the ball consistently'},
+        {r:rank(kppg, p=>p.key_passes/Math.max(p.games,1)),           tag:'Thread Needle',cls:'tag-playmaker', tip:'Creates chances for teammates'},
+        {r:rank(gkspg,p=>(p.goalkeeper_saves||0)/Math.max(p.games,1)),tag:'Shot Stopper', cls:'tag-sweeper',   tip:'Reliable in goal'},
+      ].filter(f => !result.some(r => r.cls===f.cls || r.label===f.tag))
+       .sort((a,b) => a.r - b.r);
+      for (const f of lastResort) {
+        if (result.length >= 3) break;
+        result.push({label:f.tag, cls:f.cls, tip:f.tip});
+      }
     }
   }
 
-  // ── Assign up to 3 tags, deduplicated by CSS class ─────────────────────
-  cands.sort((a,b)=>b.score-a.score);
-  const seen=new Set();
-  const result=[];
-  for (const c of cands){
-    const def=TAG_DEFS[c.label];
-    if (!def) continue;
-    if (!seen.has(def.cls)){seen.add(def.cls);result.push({label:c.label,cls:def.cls,tip:def.tip});}
-    if (result.length>=3) break;
-  }
-  // Relax colour dedup to fill to 3
-  for (const c of cands){
-    if (result.length>=3) break;
-    const def=TAG_DEFS[c.label];
-    if (!def||result.some(r=>r.label===c.label)) continue;
-    result.push({label:c.label,cls:def.cls,tip:def.tip});
-  }
-  // Hard fallback: award tags for best raw stats
-  if (result.length<3){
-    const fallbacks=[
-      {val:gkspg,fn:pGKS,tag:'Shot Stopper',cls:'tag-sweeper',  tip:'Reliable goalkeeper'},
-      {val:kppg, fn:pKPPG,tag:'Thread Needle',cls:'tag-playmaker',tip:'Above-average key passes'},
-      {val:apg,  fn:pAPG, tag:'Architect',    cls:'tag-playmaker',tip:'Above-average assists'},
-      {val:gpg,  fn:pGPG, tag:'Finisher',     cls:'tag-striker',  tip:'Above-average goals'},
-      {val:intpg,fn:pINT, tag:'Ball Hawk',    cls:'tag-guardian', tip:'Above-average interceptions'},
-      {val:tklpg,fn:pTKL, tag:'Enforcer',     cls:'tag-guardian', tip:'Above-average tackles'},
-      {val:blkpg,fn:pBLK, tag:'Brick Wall',   cls:'tag-blocker',  tip:'Above-average blocks'},
-      {val:nmpg, fn:pNMG, tag:'Sauce Merchant',cls:'tag-wizard',  tip:'Shows flair'},
-      {val:totalAct/g,fn:pACT,tag:'Relentless',cls:'tag-workhorse',tip:'High activity'},
-      {val:sotpg,fn:pSOT, tag:'Front Foot',   cls:'tag-target',   tip:'Above-average shots on target'},
-    ].map(s=>({...s,rank:pool.filter(p=>s.fn(p)>s.val).length+1}))
-     .sort((a,b)=>a.rank-b.rank)
-     .filter(s=>!result.some(r=>r.cls===s.cls||r.label===s.tag));
-    for (const s of fallbacks){
-      if (result.length>=3) break;
-      result.push({label:s.tag,cls:s.cls,tip:s.tip});
-    }
-  }
   return result;
 }
+
+
 
 
 
@@ -4030,6 +4075,7 @@ function setGlobalFilter(f) {
 
 // Build filtered player stats based on globalFilter
 function computeFilteredStats() {
+  _tagCache = null; // Clear tag cache — filters changed
   const allFull = allRows.filter(r => r.half === 'FULL' && r.team !== 'DNP');
   const allHalf = allRows.filter(r => (r.half === '1H' || r.half === '2H') && r.team !== 'DNP');
 
