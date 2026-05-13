@@ -2594,7 +2594,8 @@ function buildTagAuction() {
     return m && [...m.teamA,...m.teamB].some(r=>r.player===player);
   });
 
-  const allStats = Object.values(getDisplayStats()).filter(p => p.games >= 5 && isActive(p.player));
+  // Use all-time playerStats for metrics — timestamp tags should use career data
+  const allStats = Object.values(playerStats).filter(p => p.games >= 5 && isActive(p.player));
   if (!allStats.length) return {};
 
   const n = (v) => Number(v)||0;
@@ -2710,17 +2711,17 @@ function buildTagAuction() {
     const winner = best(scoreFn, minScore);
     if (winner) tagWinners[label] = winner;
   };
-  // Timestamp tags: require 10+ games, scored goals, AND minimum 2 qualifying events
-  // Prevents tags being handed to the only player with any combo data at all
+  // Timestamp tags: require 10+ all-time games AND scored goals AND 2+ goal events
+  // Use playerStats (all-time) for game count, not filtered display stats
   const awardTime = (label, scoreFn, minEvents = 2) => {
     const eligible = players.filter(p => {
       const m = metrics[p];
-      return m.ps.games >= 10 && m.ps.goals > 0 && m.myGoalEvents.length >= minEvents;
+      const allTimeGames = (playerStats[p] || m.ps).games || 0;
+      return allTimeGames >= 10 && m.ps.goals > 0 && m.myGoalEvents.length >= minEvents;
     });
     if (!eligible.length) return;
     let bestP=null, bestV=-Infinity;
     eligible.forEach(p=>{ const v=scoreFn(metrics[p]); if(v>bestV){bestV=v;bestP=p;} });
-    // Only award if the winner actually has qualifying events (score > 0)
     if (bestP && scoreFn(metrics[bestP]) > 0) tagWinners[label] = bestP;
   };
 
