@@ -585,7 +585,6 @@ canvas.spider{display:block;margin:0 auto}
 
 <!-- ===== PAGE: PLAYERS ===== -->
 <div class="page" id="page-players">
-  <pre id="tag-debug" style="display:none;background:#1a1a1a;color:#4ade80;padding:12px;border-radius:8px;font-size:.75rem;margin-bottom:12px;white-space:pre-wrap"></pre>
   <div class="section-hd"><h2>Players</h2><span id="player-count"></span></div>
 
   <div class="toolbar">
@@ -2856,23 +2855,21 @@ function buildTagAuction() {
 }
 
 function getFifaTags(s, cs) {
-  // Rebuild cache if needed (cleared on filter change via computeFilteredStats)
   if (!_tagCache) _tagCache = buildTagAuction();
 
-  const myTags = (_tagCache[s.player] || []);
+  const myTagLabels = (_tagCache[s.player] || []);
 
-  // Sort by tag "prestige" — put primary stat winners first
-  const primaryFirst = ['Golden Boot','Shot Stopper','Enforcer','Ball Hawk','Brick Wall',
-    'Sauce Merchant','Architect','Thread Needle','Gunslinger','Target Locked','Deadeye',
-    'Avalanche','Clinical','Wildcard'];
-  const sorted = [...myTags].sort((a,b) => {
+  // Convert label strings → {label, cls, tip} objects
+  const sorted = [...myTagLabels].sort((a,b) => {
+    const primaryFirst = ['Golden Boot','Shot Stopper','Enforcer','Ball Hawk','Brick Wall',
+      'Sauce Merchant','Architect','Thread Needle','Gunslinger','Target Locked','Deadeye',
+      'Avalanche','Clinical','Wildcard'];
     const ai = primaryFirst.indexOf(a), bi = primaryFirst.indexOf(b);
     if (ai>=0 && bi<0) return -1;
     if (bi>=0 && ai<0) return 1;
     return ai - bi;
   });
 
-  // Return top 3
   const result = sorted.slice(0,3).map(label => {
     const def = TAG_DEFS[label];
     return def ? {label, cls:def.cls, tip:def.tip} : null;
@@ -4816,23 +4813,6 @@ function toggleMatchDetail(id) {
 // RENDER PLAYERS GRID
 // =====================================================================
 function renderPlayers() {
-  // TEMP DEBUG — show tag auction results
-  if (!_tagCache) _tagCache = buildTagAuction();
-  const debugEl = document.getElementById('tag-debug');
-  if (debugEl) {
-    const timeTags = ['Quick Strike','Clutch Factor','Icebreaker','Momentum Shift','Last Laugh','Comeback Kid','Big Game Player'];
-    const lines = timeTags.map(tag => {
-      const winner = Object.entries(_tagCache).find(([,tags]) => tags.includes(tag));
-      return `${tag}: ${winner ? winner[0] : 'NONE'}`;
-    });
-    lines.push('--- Pool size: ' + Object.keys(_tagCache).length);
-    lines.push('--- Combo matches: ' + Object.keys(goalCombos).length);
-    // Check a known player
-    const amin = Object.values(playerStats).find(p=>p.player==='Amin');
-    if (amin) lines.push('--- Amin all-time games: ' + amin.games);
-    debugEl.textContent = lines.join('\n');
-    debugEl.style.display = 'block';
-  }
   const q = (document.getElementById('player-search')?.value || '').toLowerCase();
   let sort = document.getElementById('player-sort')?.value || 'rating';
   // Show/hide admin-only sort options
