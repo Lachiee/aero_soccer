@@ -2513,7 +2513,8 @@ const TAG_DEFS = {
   'Avalanche':         { cls:'tag-striker',   tip:'Most multi-goal games — capable of completely taking over a match with a big performance' },
   'Finisher':          { cls:'tag-striker',   tip:'Consistently turns up in the right place at the right time — combines goal volume with finishing efficiency' },
   'Poacher':           { cls:'tag-striker',   tip:'Creates and converts their own chances independently — dangerous even without a teammate setting them up' },
-  'Predator':          { cls:'tag-striker',   tip:'Scores early in matches more than anyone — hunts the ball from kickoff and punishes slow starts' },
+  'Predator':          { cls:'tag-striker',   tip:'Top scorer in a match (3+ goals) more times than anyone — capable of completely dominating a game offensively' },
+  'Icebreaker':        { cls:'tag-enforcer',  tip:'Most goals in the first 15 minutes across all matches — consistently strikes early and punishes teams before they settle in' },
   'Net Magnet':        { cls:'tag-striker',   tip:'Highest shots on target per game — constantly forces saves and rarely wastes a shooting opportunity' },
   'Rebound King':      { cls:'tag-striker',   tip:'Thrives off second chances and loose balls — hits the post and keeps scoring from rebounds around goal' },
   'Ghost Runner':      { cls:'tag-striker',   tip:'Scores quietly without dominating the stats — gets in the right positions without constant involvement' },
@@ -2568,14 +2569,15 @@ const TAG_DEFS = {
   'Mr Reliable':       { cls:'tag-workhorse', tip:'Most consistent contributor across matches — delivers solid performances every single session with minimal variance' },
   'Glue Guy':          { cls:'tag-workhorse', tip:'Quietly improves the team in every area — never a weak link and always somewhere near the middle across all stats' },
   'Lone Wolf':         { cls:'tag-workhorse', tip:'Scores without receiving tracked assists — creates and converts their own chances with minimal direct help from others' },
-  'Quick Strike':      { cls:'tag-enforcer',  tip:'Lowest average goal minute in the group — scores earlier in matches than anyone else and punishes teams before they settle' },
+  'Icebreaker':        { cls:'tag-enforcer',  tip:'Most goals in the first 15 minutes — consistently strikes early and punishes teams before they settle into the game' },
   'Clutch Factor':     { cls:'tag-enforcer',  tip:'Most goals after the 40-minute mark — produces in the biggest moments when matches are still alive and pressure is highest' },
-  'Icebreaker':        { cls:'tag-enforcer',  tip:'Scores the first goal of matches more than anyone — breaks deadlocks and shifts momentum before others find their rhythm' },
   'Momentum Shift':    { cls:'tag-enforcer',  tip:'Scores the most equalisers — steps up when the team is behind and single-handedly drags them back into matches' },
-  'Comeback Kid':      { cls:'tag-enforcer',  tip:'Most contributions while their team is losing — refuses to accept defeat and keeps fighting when others might switch off' },
+  'Comeback Kid':      { cls:'tag-enforcer',  tip:'Most goals while losing in the second half — refuses to accept defeat and keeps fighting when others might switch off' },
   'Last Laugh':        { cls:'tag-enforcer',  tip:'Scores the final goal of matches more than anyone — loves finishing games off and always wants the last word' },
   'Big Game Player':   { cls:'tag-enforcer',  tip:'Scores more in high-scoring open matches than their average suggests — rises to the occasion when the game is chaotic' },
   'Heartbreaker':      { cls:'tag-enforcer',  tip:'Hits the woodwork in more matches than anyone — comes agonisingly close to defining moments with painful regularity' },
+  'Late Supplier':     { cls:'tag-playmaker', tip:'Most assists after the 40-minute mark — delivers key passes when the game is in the balance and teammates need a chance most' },
+  'Leveller':          { cls:'tag-playmaker', tip:'Most assists that directly equalled the score — sets up teammates to drag the team back into matches at the critical moment' },
 };
 
 
@@ -2669,6 +2671,36 @@ function buildTagAuction() {
     const validMins=myGoalEvents.map(e=>e.min);
     const avgMin=validMins.length>=1?validMins.reduce((s,v)=>s+v,0)/validMins.length:999;
 
+    // Assist events
+    const myAssistEvents=[];
+    playerCombos.forEach(([mid,data])=>{
+      const match=matchList.find(m=>m.id===mid); if(!match) return;
+      const scorerTeam={};
+      [...match.teamA,...match.teamB].forEach(r=>{ scorerTeam[r.player]=r.team; });
+      const toSecs=t=>{ if(!t) return 0; const[a,b]=t.split(':').map(Number); return a*60+(b||0); };
+      const allGoalsFull=[...(data.h1||[]).map(g=>({...g})),...(data.h2||[]).map(g=>({...g}))]
+        .filter(g=>g.time&&!g.isOG&&g.scorer).sort((a,b)=>toSecs(a.time)-toSecs(b.time));
+      let tA2=0,tB2=0;
+      allGoalsFull.forEach(goal=>{
+        const gt2=scorerTeam[goal.scorer];
+        const sA2=tA2,sB2=tB2;
+        if(gt2==='A') tA2++; else if(gt2==='B') tB2++;
+        if(goal.assister===ps.player&&gt2){
+          const myBefore2=gt2==='A'?sA2:sB2, oppBefore2=gt2==='A'?sB2:sA2;
+          const min2=parseInt(goal.time.split(':')[0])||0;
+          myAssistEvents.push({min:min2, isEqualiserAssist:oppBefore2-myBefore2===1, isLateAssist:min2>=40});
+        }
+      });
+    });
+
+    // topScorerMatches — matches where this player scored the most (min 3 goals)
+    const topScorerMatches=playerCombos.filter(([,data])=>{
+      const all=[...(data.h1||[]),...(data.h2||[])].filter(g=>!g.isOG&&g.scorer);
+      const counts={}; all.forEach(g=>{ counts[g.scorer]=(counts[g.scorer]||0)+1; });
+      const my=counts[ps.player]||0;
+      return my>=3&&Object.values(counts).every(c=>c<=my);
+    }).length;
+
     // Consistency
     const matchScores=matchList.filter(m=>[...m.teamA,...m.teamB].some(r=>r.player===ps.player))
       .map(m=>{const r=[...m.teamA,...m.teamB].find(x=>x.player===ps.player);
@@ -2693,8 +2725,11 @@ function buildTagAuction() {
       finishers: myGoalEvents.filter(e=>e.isFinal).length,
       equalisers: myGoalEvents.filter(e=>e.isEqualisingOrComeback).length,
       trueEqualisers: myGoalEvents.filter(e=>e.isTrueEqualiser).length,
-      comebackGoals: myGoalEvents.filter(e=>e.isComebackGoal&&e.min>=30).length, // behind AND late
+      comebackGoals: myGoalEvents.filter(e=>e.isComebackGoal&&e.min>=30).length,
       lateGoals: myGoalEvents.filter(e=>e.min>=40).length,
+      lateAssists: myAssistEvents.filter(e=>e.isLateAssist).length,
+      equaliserAssists: myAssistEvents.filter(e=>e.isEqualiserAssist).length,
+      topScorerMatches,
       reliabilityScore, stdDev, variance,
       asScorer, asAssister,
     };
@@ -2737,7 +2772,7 @@ function buildTagAuction() {
   award('Avalanche',        m => m.multiGoalGames);
   award('Finisher',         m => m.gpg*0.4+m.conv*0.6);
   award('Poacher',          m => m.unassistedGoals>0?m.unassistedGoals/Math.max(m.ps.games,1):0);
-  award('Predator',         m => m.myGoalEvents.filter(e=>e.min<=10).length);
+  award('Predator',         m => m.topScorerMatches>=2?m.topScorerMatches:0);
   award('Net Magnet',       m => m.sotpg);
   award('Rebound King',     m => m.postpg*2+m.sotpg*0.3);
   award('Ghost Runner',     m => m.gpg>0.2&&m.actpg<2.5?m.gpg*3/Math.max(m.actpg,0.5):0);
@@ -2808,9 +2843,10 @@ function buildTagAuction() {
   award('Glue Guy',         m => m.stdDev<0.5&&m.actpg>1?5-m.stdDev*5:0);
 
   // Timestamp
-  awardTime('Quick Strike',     m => { const early=m.myGoalEvents.filter(e=>e.min<=15).length; return early>=3?early:0; });
   awardTime('Clutch Factor',    m => m.lateGoals>=2?m.lateGoals:0);
-  awardTime('Icebreaker',       m => m.openers>=2?m.openers:0);
+  awardTime('Icebreaker',       m => { const early=m.myGoalEvents.filter(e=>e.min<=15).length; return early>=3?early:0; });
+  awardTime('Late Supplier',    m => m.lateAssists>=2?m.lateAssists:0);
+  awardTime('Leveller',         m => m.equaliserAssists>=2?m.equaliserAssists:0);
   awardTime('Momentum Shift',   m => m.trueEqualisers>=2?m.trueEqualisers:0);
   awardTime('Last Laugh',       m => m.finishers>=2?m.finishers:0);
   awardTime('Comeback Kid',     m => m.comebackGoals>=3?m.comebackGoals:0);
@@ -2857,7 +2893,7 @@ function buildTagAuction() {
   const statTagOrder = Object.keys(tagWinners).filter(t =>
     !['Quick Strike','Clutch Factor','Icebreaker','Momentum Shift','Last Laugh','Comeback Kid','Big Game Player'].includes(t)
   );
-  const timeTagOrder = ['Quick Strike','Clutch Factor','Icebreaker','Momentum Shift','Last Laugh','Comeback Kid','Big Game Player'];
+  const timeTagOrder = ['Quick Strike','Clutch Factor','Icebreaker','Momentum Shift','Last Laugh','Comeback Kid','Big Game Player','Late Supplier','Leveller'];
 
   // First pass: assign stat tags, max 2 per player (leave room for time tags)
   statTagOrder.forEach(label => {
@@ -2885,6 +2921,8 @@ function buildTagAuction() {
         'Last Laugh':     m => m.finishers>=2?m.finishers:0,
         'Comeback Kid':   m => (m.lateGoals+m.equalisers)>=3?m.lateGoals*0.5+m.equalisers*0.8:0,
         'Big Game Player':m => { const big=matchList.filter(x=>x.goalsA+x.goalsB>=20); if(big.length<4)return 0; const s=big.flatMap(x=>[...x.teamA,...x.teamB]).filter(r=>r.player===m.ps.player); if(s.length<3)return 0; const bgpg=s.reduce((a,r)=>a+Number(r.goals||0),0)/s.length; return bgpg>m.gpg*1.2?bgpg:0; },
+        'Late Supplier':  m => m.lateAssists>=2?m.lateAssists:0,
+        'Leveller':       m => m.equaliserAssists>=2?m.equaliserAssists:0,
       };
       const fn = scoreFnMap[label];
       if (!fn) return;
