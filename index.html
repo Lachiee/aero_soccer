@@ -9700,12 +9700,10 @@ document.addEventListener('DOMContentLoaded', () => {
         const scorer = cols[idx.scorer]?.trim();
         const assister = cols[idx.assister]?.trim() || null;
         const isOG = cols[idx.is_og]?.trim() === '1' || /\bOG\b|\bown\s*goal\b/i.test(scorer || '');
-        const isGoalHighlight   = cols[idx.is_goal_highlight]?.trim() === '1' || cols[idx.is_goal_highlight]?.includes('!') || cols.some(c=>c.trim()==='!');
-        const isAssistHighlight = cols[idx.is_assist_highlight]?.trim() === '1' || cols[idx.is_assist_highlight]?.includes('*') || cols.some(c=>c.trim()==='*');
-        // Also detect if ! or * appear anywhere in the row (for hand-edited CSVs)
-        const rowStr = cols.join(',');
-        const isGoalHL   = isGoalHighlight   || rowStr.includes('!');
-        const isAssistHL = isAssistHighlight || rowStr.includes('*');
+        const rawGoalHL   = cols[idx.is_goal_highlight]?.trim() || '';
+        const rawAssistHL = cols[idx.is_assist_highlight]?.trim() || '';
+        const isGoalHL   = rawGoalHL.includes('!') || rawGoalHL === '1' || cols.join(',').includes('!');
+        const isAssistHL = rawAssistHL.includes('*') || rawAssistHL === '1';
         if (!mid || !scorer) return;
         if (!loaded[mid]) loaded[mid] = { h1: [], h2: [] };
         const key = half === '2H' ? 'h2' : 'h1';
@@ -9714,6 +9712,8 @@ document.addEventListener('DOMContentLoaded', () => {
       // Merge with localStorage — GitHub file takes precedence
       goalCombos = loaded;
       _tagCache = null; // force tag rebuild with fresh combo data
+      // Rerender profile if open so highlights appear
+      if (currentPage === 'profile') renderAll();
       console.log(`✅ Loaded combos.csv — ${Object.keys(loaded).length} matches with combo data`);
     })
     .catch(err => {
