@@ -2859,6 +2859,17 @@ function getFifaTags(s, cs) {
 
   const myTagLabels = (_tagCache[s.player] || []);
 
+  // One-time diagnostic — show what Amin gets
+  if (s.player === 'Amin' && !window._tagDiagDone) {
+    window._tagDiagDone = true;
+    const allWinners = {};
+    Object.entries(_tagCache).forEach(([p,tags]) => tags.forEach(t => { allWinners[t] = p; }));
+    const timeTags = ['Quick Strike','Clutch Factor','Icebreaker','Momentum Shift','Last Laugh','Comeback Kid'];
+    const msg = 'Cache size: ' + Object.keys(_tagCache).length + '\nAmin tags: ' + JSON.stringify(myTagLabels) + '\n\nTime tags:\n' +
+      timeTags.map(t => t + ': ' + (allWinners[t] || 'NONE')).join('\n');
+    alert(msg);
+  }
+
   // Convert label strings → {label, cls, tip} objects
   const sorted = [...myTagLabels].sort((a,b) => {
     const primaryFirst = ['Golden Boot','Shot Stopper','Enforcer','Ball Hawk','Brick Wall',
