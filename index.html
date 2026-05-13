@@ -2697,11 +2697,13 @@ function buildTagAuction() {
     const winner = best(scoreFn, minScore);
     if (winner) tagWinners[label] = winner;
   };
-  // For timestamp tags — always award to whoever leads, even if count is 0
-  // Someone always has the most late goals, openers etc.
+  // Timestamp tags: always award to the leader among players with 10+ games AND scored goals
+  // Someone always has the most late goals, openers etc. — but must have actually scored
   const awardTime = (label, scoreFn) => {
+    const eligible = players.filter(p => metrics[p].ps.games >= 10 && metrics[p].ps.goals > 0 && metrics[p].myGoalEvents.length >= 1);
+    if (!eligible.length) return; // no eligible players, skip
     let bestP=null, bestV=-Infinity;
-    players.forEach(p=>{ const v=scoreFn(metrics[p]); if(v>bestV){bestV=v;bestP=p;} });
+    eligible.forEach(p=>{ const v=scoreFn(metrics[p]); if(v>bestV){bestV=v;bestP=p;} });
     if (bestP) tagWinners[label] = bestP;
   };
 
@@ -2784,7 +2786,7 @@ function buildTagAuction() {
   award('Glue Guy',         m => m.stdDev<0.5&&m.actpg>1?5-m.stdDev*5:0);
 
   // Timestamp
-  awardTime('Quick Strike',     m => m.myGoalEvents.length>=1?Math.max(0,60-m.avgMin):0);
+  awardTime('Quick Strike',     m => m.ps.goals>0&&m.myGoalEvents.length>=1?Math.max(0,60-m.avgMin):0);
   awardTime('Clutch Factor',    m => m.lateGoals);
   awardTime('Icebreaker',       m => m.openers);
   awardTime('Momentum Shift',   m => m.equalisers);
