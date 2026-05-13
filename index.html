@@ -2636,22 +2636,45 @@ function buildTagAuction() {
       const match=matchList.find(m=>m.id===mid); if(!match) return;
       const scorerTeam={};
       [...match.teamA,...match.teamB].forEach(r=>{ scorerTeam[r.player]=r.team; });
-      ['h1','h2'].forEach(half=>{
-        (data[half]||[]).forEach(p=>{
-          if(p.scorer!==ps.player||p.isOG||!p.time) return;
-          const [min]=p.time.split(':').map(Number);
-          const myTeam=scorerTeam[ps.player];
-          const all=[...(data.h1||[]).map(x=>({...x,half:'1H'})),...(data.h2||[]).map(x=>({...x,half:'2H'}))];
-          const sorted=all.filter(x=>x.time).sort((a,b)=>parseInt(a.time)-parseInt(b.time));
-          const idx=sorted.findIndex(x=>x.scorer===ps.player&&x.time===p.time&&x.half===half);
-          let tA=0,tB=0;
-          for(let i=0;i<idx;i++){const t=scorerTeam[sorted[i].scorer];if(t==='A')tA++;else tB++;}
-          const myScore=myTeam==='A'?tA:tB, oppScore=myTeam==='A'?tB:tA;
-          myGoalEvents.push({min,isOpener:idx===0,isFinal:idx===sorted.length-1,isEqualisingOrComeback:oppScore>myScore});
-        });
+      const myTeam=scorerTeam[ps.player];
+
+      // Build full sorted goal list for this match (absolute time, 2H continues from 1H)
+      const toSecs=t=>{ if(!t) return 0; const[a,b]=t.split(':').map(Number); return a*60+(b||0); };
+      const allGoals=[
+        ...(data.h1||[]).map(x=>({...x,halfKey:'h1',halfLabel:'1H'})),
+        ...(data.h2||[]).map(x=>({...x,halfKey:'h2',halfLabel:'2H'}))
+      ].filter(x=>x.time&&!x.isOG).sort((a,b)=>toSecs(a.time)-toSecs(b.time));
+
+      // Compute running score and flag each goal
+      let tA=0,tB=0;
+      allGoals.forEach((goal,idx)=>{
+        const goalTeam=scorerTeam[goal.scorer];
+        const isA=goalTeam==='A';
+        const scoreBefore={A:tA,B:tB};
+        if(isA) tA++; else tB++;
+
+        if(goal.scorer===ps.player&&myTeam){
+          const myScoreBefore=myTeam==='A'?scoreBefore.A:scoreBefore.B;
+          const oppScoreBefore=myTeam==='A'?scoreBefore.B:scoreBefore.A;
+          const [min]=goal.time.split(':').map(Number);
+          myGoalEvents.push({
+            min,
+            half: goal.halfLabel,
+            isOpener: idx===0,
+            isFinal: false, // set below
+            isEqualisingOrComeback: oppScoreBefore>myScoreBefore,
+          });
+        }
       });
+
+      // Mark isFinal — was this the last goal of the match scored by this player?
+      const lastGoalIdx=allGoals.length-1;
+      if(allGoals[lastGoalIdx]?.scorer===ps.player&&myGoalEvents.length){
+        myGoalEvents[myGoalEvents.length-1].isFinal=true;
+      }
     });
-    const avgMin=myGoalEvents.length>=3?myGoalEvents.reduce((s,e)=>s+e.min,0)/myGoalEvents.length:999;
+    const validMins=myGoalEvents.map(e=>e.min).filter(m=>m<60);
+    const avgMin=validMins.length>=2?validMins.reduce((s,v)=>s+v,0)/validMins.length:999;
 
     // Consistency
     const matchScores=matchList.filter(m=>[...m.teamA,...m.teamB].some(r=>r.player===ps.player))
