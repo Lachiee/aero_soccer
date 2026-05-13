@@ -2511,12 +2511,9 @@ const TAG_DEFS = {
   'Golden Boot':       { cls:'tag-striker',   tip:"Top scorer in the group — the team's most dangerous goal threat by goals per game" },
   'Clinical':          { cls:'tag-striker',   tip:'Converts more chances into goals per shot than anyone — ruthlessly efficient in front of goal' },
   'Silent Assassin':   { cls:'tag-striker',   tip:'Scores frequently but takes very few shots — needs almost nothing to be dangerous' },
-  'Avalanche':         { cls:'tag-striker',   tip:'Most multi-goal games — capable of completely taking over a match with a big performance' },
   'Finisher':          { cls:'tag-striker',   tip:'Consistently turns up in the right place at the right time — combines goal volume with finishing efficiency' },
   'Poacher':           { cls:'tag-striker',   tip:'Creates and converts their own chances independently — dangerous even without a teammate setting them up' },
-  'Predator':          { cls:'tag-striker',   tip:'Top scorer in a match (3+ goals) more times than anyone — completely dominates games offensively more than anyone' },
   'Hat-Trick Hero':    { cls:'tag-striker',   tip:'Scored 3+ goals in a single match more times than anyone — capable of completely taking over and dominating a game' },
-  'Double Trouble':    { cls:'tag-striker',   tip:'Most matches with exactly two goals — the most consistently dangerous scorer who reliably hits the target twice' },
   'Net Magnet':        { cls:'tag-striker',   tip:'Highest shots on target per game — constantly forces saves and rarely wastes a shooting opportunity' },
   'Rebound King':      { cls:'tag-striker',   tip:'Thrives off second chances and loose balls — hits the post and keeps scoring from rebounds around goal' },
   'Ghost Runner':      { cls:'tag-striker',   tip:'Scores quietly without dominating the stats — gets in the right positions without constant involvement' },
@@ -2823,12 +2820,9 @@ function buildTagAuction() {
   award('Golden Boot',      m => m.gpg);
   award('Clinical',         m => m.conv);
   award('Silent Assassin',  m => m.gpg>0&&m.spg>0?m.conv/Math.max(m.spg,0.1):0);
-  award('Avalanche',        m => m.multiGoalGames);
   award('Finisher',         m => m.gpg*0.4+m.conv*0.6);
   award('Poacher',          m => m.unassistedGoals>0?m.unassistedGoals/Math.max(m.ps.games,1):0);
-  award('Predator',         m => m.topScorerMatches>=2?m.topScorerMatches:0);
   award('Hat-Trick Hero',   m => m.hatTrickMatches>=2?m.hatTrickMatches:0);
-  award('Double Trouble',   m => m.doubleMatches>=3?m.doubleMatches:0);
   award('Brace Builder',    m => m.braceAssistMatches>=2?m.braceAssistMatches:0);
   award('Net Magnet',       m => m.sotpg);
   award('Rebound King',     m => m.postpg*2+m.sotpg*0.3);
@@ -3023,8 +3017,7 @@ function getFifaTags(s, cs) {
   // Convert label strings → {label, cls, tip} objects
   const sorted = [...myTagLabels].sort((a,b) => {
     const primaryFirst = ['Golden Boot','Shot Stopper','Enforcer','Ball Hawk','Brick Wall',
-      'Sauce Merchant','Architect','Thread Needle','Gunslinger','Target Locked','Deadeye',
-      'Avalanche','Clinical'];
+      'Sauce Merchant','Architect','Thread Needle','Gunslinger','Target Locked','Deadeye','Clinical'];
     const ai = primaryFirst.indexOf(a), bi = primaryFirst.indexOf(b);
     if (ai>=0 && bi<0) return -1;
     if (bi>=0 && ai<0) return 1;
