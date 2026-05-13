@@ -2580,9 +2580,9 @@ function renderLeaderTags(leaderTags) {
 }
 
 function getFifaTags(s, cs) {
-  // ALWAYS use all-time playerStats for tag calculation
-  // Tags are stable identity labels — they shouldn't flip when toggling Last 10
-  const ps = playerStats[s.player] || s;
+  // Use the passed-in stats (already filtered for L10/season/all)
+  // so tags reflect current form, not all-time
+  const ps = s;
   const g = Math.max(ps.games, 1);
 
   const gpg   = ps.goals / g;
@@ -2592,15 +2592,15 @@ function getFifaTags(s, cs) {
   const intpg = ps.interceptions / g;
   const tklpg = ps.tackles / g;
   const blkpg = ps.blocks / g;
-  const gkspg = (ps.goalkeeper_saves || 0) / g;  // goalkeeper saves ONLY — not total_saves
+  const gkspg = (ps.goalkeeper_saves || 0) / g;
   const nmpg  = ps.nutmegs / g;
   const enf   = cs ? n(cs.enforcer) : 0;
   const sta   = cs ? n(cs.stamina)  : 0;
   const conv  = spg > 0 ? gpg / spg : 0;
   const totalAct = ps.goals + ps.assists + ps.total_shots + ps.tackles + ps.interceptions;
 
-  // Pool: all-time players with 8+ games
-  const pool = Object.values(playerStats).filter(p => p.games >= 8);
+  // Pool: all players in current filtered stats with 3+ games in window
+  const pool = Object.values(getDisplayStats()).filter(p => p.games >= 3);
 
   // top(myVal, poolFn, n): is myVal in top n of pool?
   const top = (myVal, poolFn, n) => {
@@ -2608,7 +2608,7 @@ function getFifaTags(s, cs) {
     return above < n;
   };
 
-  // Pool stat functions — ALL use goalkeeper_saves only (not total_saves)
+  // Pool stat functions
   const pGPG   = p => p.goals / Math.max(p.games,1);
   const pAPG   = p => p.assists / Math.max(p.games,1);
   const pSPG   = p => p.total_shots / Math.max(p.games,1);
@@ -3147,31 +3147,42 @@ function parseGoalText(text) {
 }
 
 function getPlayerComboStats(playerName) {
-  // Returns { scoredFrom: [{assister, goals, matches}], assistedTo: [{scorer, goals, matches}] }
-  const scoredFrom = {}; // assister → {goals, matches}
-  const assistedTo = {}; // scorer  → {goals, matches}
+  // Returns { scoredFrom: [{assister, goals, comboMatches, sharedGames}], assistedTo: [...] }
+  const scoredFrom = {};
+  const assistedTo = {};
 
   Object.entries(goalCombos).forEach(([mid, data]) => {
     ['h1','h2'].forEach(half => {
       (data[half]||[]).forEach(p => {
-        // This player scored with an assist from someone
-        if (p.scorer === playerName && p.assister) {
-          if (!scoredFrom[p.assister]) scoredFrom[p.assister] = { goals:0, matches:new Set() };
+        if (p.scorer === playerName && p.assister && !p.isOG) {
+          if (!scoredFrom[p.assister]) scoredFrom[p.assister] = { goals:0, comboMatches:new Set() };
           scoredFrom[p.assister].goals++;
-          scoredFrom[p.assister].matches.add(mid);
+          scoredFrom[p.assister].comboMatches.add(mid);
         }
-        // This player assisted someone else's goal
-        if (p.assister === playerName) {
-          if (!assistedTo[p.scorer]) assistedTo[p.scorer] = { goals:0, matches:new Set() };
+        if (p.assister === playerName && !p.isOG) {
+          if (!assistedTo[p.scorer]) assistedTo[p.scorer] = { goals:0, comboMatches:new Set() };
           assistedTo[p.scorer].goals++;
-          assistedTo[p.scorer].matches.add(mid);
+          assistedTo[p.scorer].comboMatches.add(mid);
         }
       });
     });
   });
 
+  // Calculate shared games from match data (games both played together regardless of combo)
+  const getSharedGames = (otherPlayer) => {
+    return matchList.filter(m =>
+      [...m.teamA,...m.teamB].some(r => r.player === playerName) &&
+      [...m.teamA,...m.teamB].some(r => r.player === otherPlayer)
+    ).length;
+  };
+
   const toArr = (obj) => Object.entries(obj)
-    .map(([name, d]) => ({ name, goals: d.goals, matchCount: d.matches.size }))
+    .map(([name, d]) => ({
+      name,
+      goals: d.goals,
+      comboMatches: d.comboMatches.size,
+      sharedGames: getSharedGames(name)
+    }))
     .sort((a,b) => b.goals - a.goals);
 
   return { scoredFrom: toArr(scoredFrom), assistedTo: toArr(assistedTo) };
@@ -3306,19 +3317,26 @@ function getComboStats() {
 function renderComboLeaderboard() {
   const stats = getComboStats();
   if (!stats.length) return '<div style="color:var(--muted);font-size:.8rem">No combination data yet.</div>';
-  return stats.slice(0,15).map((c,i) => `
+  return stats.slice(0,15).map((c,i) => {
+    // Shared games between scorer and assister
+    const shared = matchList.filter(m =>
+      [...m.teamA,...m.teamB].some(r=>r.player===c.scorer) &&
+      [...m.teamA,...m.teamB].some(r=>r.player===c.assister)
+    ).length;
+    return `
     <div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid rgba(255,255,255,.04)">
-      <span style="font-family:\'Bebas Neue\',sans-serif;font-size:.9rem;color:var(--muted);width:18px">${i+1}</span>
+      <span style="font-family:'Bebas Neue',sans-serif;font-size:.9rem;color:var(--muted);width:18px">${i+1}</span>
       <div style="flex:1">
         <span style="color:var(--green);font-weight:600;font-size:.85rem">${c.scorer}</span>
-        <span style="color:var(--muted);font-size:.75rem;margin:0 5px">→</span>
+        <span style="color:var(--muted);font-size:.75rem;margin:0 5px">←</span>
         <span style="color:var(--text2);font-size:.85rem">${c.assister}</span>
       </div>
       <div style="text-align:right">
-        <div style="font-family:\'Bebas Neue\',sans-serif;font-size:1.1rem;color:var(--lime)">${c.goals}</div>
-        <div style="font-size:.6rem;color:var(--muted)">${c.matchCount} match${c.matchCount>1?'es':''}</div>
+        <div style="font-family:'Bebas Neue',sans-serif;font-size:1.1rem;color:var(--lime)">${c.goals}</div>
+        <div style="font-size:.6rem;color:var(--muted)">${c.matchCount} of ${shared || c.matchCount} games</div>
       </div>
-    </div>`).join('');
+    </div>`;
+  }).join('');
 }
 
 function renderAllCombos() {
@@ -4918,13 +4936,17 @@ function renderProfile(name) {
       if (!scoredFrom.length && !assistedTo.length) return '';
       const partnerCard = (p, type) => {
         const col = type === 'scored' ? 'var(--green)' : 'var(--lime)';
+        // Arrow: Scorer ← Assister (assister feeds scorer)
+        const relationship = type === 'scored'
+          ? `<span style="color:var(--text)">${name}</span> <span style="color:var(--muted)">←</span> <span style="color:${col}">${p.name}</span>`
+          : `<span style="color:${col}">${p.name}</span> <span style="color:var(--muted)">←</span> <span style="color:var(--text)">${name}</span>`;
         const label = type === 'scored'
-          ? `set up ${p.goals} goal${p.goals>1?'s':''} across ${p.matchCount} match${p.matchCount>1?'es':''}`
-          : `assisted on ${p.goals} goal${p.goals>1?'s':''} across ${p.matchCount} match${p.matchCount>1?'es':''}`;
+          ? `${p.goals} goal${p.goals>1?'s':''} in ${p.comboMatches} of ${p.sharedGames} games together`
+          : `${p.goals} goal${p.goals>1?'s':''} in ${p.comboMatches} of ${p.sharedGames} games together`;
         return `<div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid rgba(255,255,255,.04);cursor:pointer" onclick="nav('profile','${p.name}')">
           <div style="width:30px;height:30px;border-radius:6px;background:var(--card2);display:flex;align-items:center;justify-content:center;font-family:'Bebas Neue',sans-serif;font-size:.75rem;color:var(--muted);flex-shrink:0">${p.name.slice(0,2).toUpperCase()}</div>
           <div style="flex:1;min-width:0">
-            <div style="font-size:.82rem;font-weight:600;color:var(--text)">${p.name}</div>
+            <div style="font-size:.82rem;font-weight:600">${relationship}</div>
             <div style="font-size:.63rem;color:var(--muted)">${label}</div>
           </div>
           <div style="font-family:'Bebas Neue',sans-serif;font-size:1.4rem;color:${col};line-height:1">${p.goals}</div>
@@ -6059,16 +6081,27 @@ function renderAttackComboPrediction(tA, tB) {
   }
 
   const renderList = (combos, color) => combos.length
-    ? combos.map(c => `<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid rgba(255,255,255,.04);font-size:.76rem">
-        <span style="color:var(--text)">${c.scorer} <span style="color:var(--muted)">←</span> ${c.assister}</span>
-        <span style="color:${color};font-family:'Bebas Neue',sans-serif;font-size:1rem">${c.goals} <span style="color:var(--muted);font-size:.65rem">goals · ${c.rate}/g</span></span>
-      </div>`).join('')
+    ? combos.map(c => {
+        const shared = matchList.filter(m =>
+          [...m.teamA,...m.teamB].some(r=>r.player===c.scorer) &&
+          [...m.teamA,...m.teamB].some(r=>r.player===c.assister)
+        ).length;
+        return `<div style="display:flex;align-items:center;gap:10px;padding:5px 0;border-bottom:1px solid rgba(255,255,255,.04);font-size:.76rem">
+          <div style="flex:1">
+            <span style="color:${color}">${c.scorer}</span>
+            <span style="color:var(--muted)"> ← </span>
+            <span style="color:var(--text2)">${c.assister}</span>
+          </div>
+          <span style="color:var(--muted);font-size:.65rem">${c.goals} goals in ${c.matchCount}/${shared || c.matchCount} games</span>
+        </div>`;
+      }).join('')
     : `<div style="font-size:.74rem;color:var(--muted)">No combo data yet</div>`;
 
   sec.style.display = 'block';
   sec.innerHTML = `
     <div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin-top:12px">
-      <div style="font-family:'Barlow Condensed',sans-serif;font-size:.7rem;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-bottom:10px">⚽ Attack Partnerships In These Teams</div>
+      <div style="font-family:'Barlow Condensed',sans-serif;font-size:.7rem;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-bottom:4px">⚽ Historical Goal Combos Within Each Team</div>
+      <div style="font-size:.65rem;color:var(--muted);margin-bottom:10px;opacity:.7">Scorer ← Assister · based on past matches, not a prediction</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
         <div>
           <div style="font-size:.65rem;color:var(--green);letter-spacing:1px;text-transform:uppercase;margin-bottom:6px;font-family:'Barlow Condensed',sans-serif">Team A</div>
