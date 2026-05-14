@@ -6017,25 +6017,84 @@ let customPlayers = {}; // name → { attack, defense, enforcer, stamina, goalke
 function openCustomPlayerModal() {
   const modal = document.getElementById('custom-player-modal');
   const sliderDefs = [
-    ['cp-attack',     'Attack',      '⚽', 'Goals, shots, finishing ability'],
-    ['cp-defense',    'Defense',     '🛡', 'Tackles, interceptions, blocks'],
-    ['cp-enforcer',   'Enforcing',   '💪', 'Physical presence and duels'],
+    ['cp-attack',     'Attack',      '⚽', 'Goals and finishing — 5 = average scorer (~1.5 goals/game)'],
+    ['cp-defense',    'Defense',     '🛡', 'Tackles and interceptions — 5 = average defender'],
+    ['cp-enforcer',   'Enforcing',   '💪', 'Physical presence in duels'],
     ['cp-stamina',    'Stamina',     '🫁', 'Work rate and endurance'],
-    ['cp-goalkeeping','Goalkeeping', '🧤', 'Shot-stopping and distribution'],
-    ['cp-playmaking', 'Playmaking',  '🎯', 'Key passes and creativity'],
+    ['cp-goalkeeping','Goalkeeping', '🧤', 'Shot-stopping — 5 = average GK'],
+    ['cp-playmaking', 'Playmaking',  '🎯', 'Key passes and creativity — 5 = average creator'],
   ];
   document.getElementById('cp-sliders').innerHTML = sliderDefs.map(([id, lbl, icon, tip]) => `
-    <div style="margin-bottom:14px">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">
+    <div style="margin-bottom:12px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
         <label style="font-size:.7rem;color:var(--muted);font-family:'Barlow Condensed',sans-serif;letter-spacing:1px;text-transform:uppercase" title="${tip}">${icon} ${lbl}</label>
         <span id="${id}-val" style="font-family:'Bebas Neue',sans-serif;font-size:1.1rem;color:var(--green)">5</span>
       </div>
       <input type="range" id="${id}" min="1" max="10" value="5" step="1"
-        oninput="document.getElementById('${id}-val').textContent=this.value"
+        oninput="document.getElementById('${id}-val').textContent=this.value;updateCustomRatingPreview()"
         style="width:100%;accent-color:var(--green)">
-    </div>`).join('');
+    </div>`).join('') + `
+    <div style="border-top:1px solid var(--border);margin:14px 0 12px;padding-top:14px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <label style="font-size:.7rem;color:var(--muted);font-family:'Barlow Condensed',sans-serif;letter-spacing:1px;text-transform:uppercase">⭐ Rating Override</label>
+        <span style="font-size:.72rem;color:var(--muted)">Auto: <span id="cp-rating-preview" style="color:var(--amber);font-family:'Bebas Neue',sans-serif;font-size:1rem">–</span></span>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <input type="range" id="cp-rating-override" min="5" max="60" value="0" step="0.5"
+          oninput="document.getElementById('cp-override-val').textContent=parseFloat(this.value).toFixed(1)"
+          style="flex:1;accent-color:var(--amber)">
+        <span id="cp-override-val" style="font-family:'Bebas Neue',sans-serif;font-size:1.1rem;color:var(--amber);min-width:34px">–</span>
+        <button onclick="resetRatingOverride()" style="padding:3px 8px;border-radius:5px;border:1px solid var(--border);background:none;color:var(--muted);font-size:.7rem;cursor:pointer;font-family:'Barlow Condensed',sans-serif">Auto</button>
+      </div>
+      <div style="font-size:.62rem;color:var(--muted);margin-top:5px">Typical range: 12 (weak) → 45 (elite). Average ≈ 33. Drag to override, or click Auto to use sliders.</div>
+    </div>`;
   modal.style.display = 'flex';
+  updateCustomRatingPreview();
   document.getElementById('cp-name').focus();
+}
+
+function updateCustomRatingPreview() {
+  // Calculate what the auto rating would be from current sliders
+  // Scale: slider 1-10, where 5 = average player stat output
+  // Real player averages: goals/g≈1.5, assists/g≈0.9, shots/g≈7, def/g≈6, saves/g≈1.5, kp/g≈2
+  const atk = parseInt(document.getElementById('cp-attack')?.value||5);
+  const def = parseInt(document.getElementById('cp-defense')?.value||5);
+  const enf = parseInt(document.getElementById('cp-enforcer')?.value||5);
+  const sta = parseInt(document.getElementById('cp-stamina')?.value||5);
+  const gk  = parseInt(document.getElementById('cp-goalkeeping')?.value||5);
+  const plm = parseInt(document.getElementById('cp-playmaking')?.value||5);
+  const synth = buildCustomSynth({attack:atk,defense:def,enforcer:enf,stamina:sta,goalkeeping:gk,playmaking:plm});
+  const r = computeRating(synth, {enforcer:enf,stamina:sta});
+  const el = document.getElementById('cp-rating-preview');
+  if (el) el.textContent = r.toFixed(1);
+}
+
+function resetRatingOverride() {
+  const el = document.getElementById('cp-rating-override');
+  const valEl = document.getElementById('cp-override-val');
+  if (el) el.value = 0;
+  if (valEl) valEl.textContent = '–';
+}
+
+function buildCustomSynth(sliders) {
+  // Map slider 1-10 to stat per game values calibrated so 5=average, 10=elite
+  // Real ranges: goals/g ≈ 0.3–4.2, shots/g ≈ 2–17, def/g ≈ 2–12, saves/g ≈ 0–4, kp/g ≈ 0.5–5.5
+  const scale = (slider, min, max) => min + (slider-1)/(10-1)*(max-min);
+  return {
+    player: '__synth__',
+    games: 10,
+    goals:           scale(sliders.attack,    0.3, 4.2),
+    assists:         scale(sliders.playmaking, 0.2, 2.5),
+    total_shots:     scale(sliders.attack,    2.0, 17),
+    shots_on_target: scale(sliders.attack,    1.0, 10),
+    key_passes:      scale(sliders.playmaking, 0.5, 5.5),
+    tackles:         scale(sliders.defense,   1.0, 8.0),
+    interceptions:   scale(sliders.defense,   0.5, 5.0),
+    blocks:          scale(sliders.defense,   0.2, 2.0),
+    goalkeeper_saves:scale(sliders.goalkeeping, 0, 4.0),
+    total_saves:     scale(sliders.goalkeeping, 0, 4.0),
+    nutmegs: 0, post: 0, wins: 5, losses: 5, draws: 0,
+  };
 }
 
 function closeCustomPlayerModal() {
@@ -6047,43 +6106,35 @@ function addCustomPlayer() {
   const name = nameEl.value.trim();
   if (!name) { nameEl.focus(); return; }
 
-  const attack      = parseInt(document.getElementById('cp-attack').value);
-  const defense     = parseInt(document.getElementById('cp-defense').value);
-  const enforcer    = parseInt(document.getElementById('cp-enforcer').value);
-  const stamina     = parseInt(document.getElementById('cp-stamina').value);
-  const goalkeeping = parseInt(document.getElementById('cp-goalkeeping').value);
-  const playmaking  = parseInt(document.getElementById('cp-playmaking').value);
+  const attack      = parseInt(document.getElementById('cp-attack')?.value||5);
+  const defense     = parseInt(document.getElementById('cp-defense')?.value||5);
+  const enforcer    = parseInt(document.getElementById('cp-enforcer')?.value||5);
+  const stamina     = parseInt(document.getElementById('cp-stamina')?.value||5);
+  const goalkeeping = parseInt(document.getElementById('cp-goalkeeping')?.value||5);
+  const playmaking  = parseInt(document.getElementById('cp-playmaking')?.value||5);
 
-  // Build a synthetic player stat object from the sliders
-  // Scale slider (1-10) to stat values that make sense in computeRating
-  // attack=10 → ~3 goals/g, defense=10 → ~8 tackles+interceptions/g
-  const synth = {
-    player: name,
-    games: 10, // synthetic game count so per-game averages work
-    goals:           attack * 0.3,
-    assists:         playmaking * 0.25,
-    total_shots:     attack * 1.5,
-    shots_on_target: attack * 0.9,
-    key_passes:      playmaking * 0.8,
-    tackles:         defense * 0.5,
-    interceptions:   defense * 0.3,
-    blocks:          defense * 0.2,
-    goalkeeper_saves:goalkeeping * 0.8,
-    total_saves:     goalkeeping * 0.8,
-    nutmegs: 0, post: 0,
-    wins: 5, losses: 5, draws: 0,
-    _isCustom: true,
-    _sliders: { attack, defense, enforcer, stamina, goalkeeping, playmaking },
-  };
+  const synth = buildCustomSynth({attack, defense, enforcer, stamina, goalkeeping, playmaking});
+  synth.player = name;
+  synth._isCustom = true;
+  synth._sliders = {attack, defense, enforcer, stamina, goalkeeping, playmaking};
 
   customPlayers[name] = synth;
   if (!customStats[name]) customStats[name] = {};
   customStats[name].enforcer = enforcer;
   customStats[name].stamina  = stamina;
 
-  synth.rating = computeRating(synth, customStats[name]);
+  // Rating override via range slider (value=0 means auto)
+  const overrideEl = document.getElementById('cp-rating-override');
+  const overrideVal = overrideEl ? parseFloat(overrideEl.value) : 0;
+  const overrideActive = overrideVal > 0 && document.getElementById('cp-override-val')?.textContent !== '–';
+  if (overrideActive) {
+    synth._ratingOverride = overrideVal;
+    synth.rating = overrideVal;
+  } else {
+    synth.rating = computeRating(synth, customStats[name]);
+  }
+
   closeCustomPlayerModal();
-  // Reset name field; sliders are regenerated fresh each time modal opens
   nameEl.value = '';
   renderTeamBuilder();
 }
@@ -6653,8 +6704,9 @@ function renderTeamResult(tA, tB) {
   const recomputeRating = (p) => {
     const pen = getPenalty(playerNotes[p.player]);
     // Custom players use computeRating directly (no match history to weight)
+    // If they have a rating override, use that
     const weightedRating = p._isCustom
-      ? computeRating(p, customStats[p.player] || {})
+      ? (p._ratingOverride || computeRating(p, customStats[p.player] || {}))
       : computeWeightedRating(p.player);
     const streakMod = p._isCustom ? 1.0 : (p.streakMod || 1.0);
     const newRating = weightedRating * (1 - pen) * streakMod;
@@ -6719,8 +6771,9 @@ function renderTeamResult(tA, tB) {
         const penNote = (1 - (p.effectiveRating / (p.weightedRating * p.streakMod || 1))) > 0.01
           ? ` · injury ${Math.round((1-(p.effectiveRating/(p.weightedRating*p.streakMod||1)))*100)}% off` : '';
         const wrNote = p.streakMod !== 1 ? ` · WR ${p.streakMod > 1 ? '+' : ''}${Math.round((p.streakMod-1)*100)}%` : '';
-        const tip = `Base: ${base}${wrNote}${penNote} → Effective: ${eff}`;
-        return `<span data-tip="${tip}" style="cursor:help">${eff}</span>`;
+        const tip = p._isCustom ? `Custom player · Effective: ${eff}` : `Base: ${base}${wrNote}${penNote} → Effective: ${eff}`;
+        const display = p._isCustom ? parseFloat(eff).toFixed(1) : eff;
+        return `<span data-tip="${tip}" style="cursor:help">${display}</span>`;
       })() : ''}</span>
     </div>`;
   }).join('');
