@@ -5650,9 +5650,11 @@ function renderProfile(name) {
     <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:18px;margin-bottom:14px">
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
         <div style="font-family:'Barlow Condensed',sans-serif;font-size:.7rem;letter-spacing:2px;text-transform:uppercase;color:var(--muted)">Recent Matches</div>
-        <div style="font-size:.62rem;color:var(--muted);opacity:.6">· click row for full match</div>
+        <div style="font-size:.62rem;color:var(--muted);opacity:.6">· click for full match</div>
       </div>
-      <div style="overflow-x:auto">
+
+      <!-- Desktop table -->
+      <div class="mobile-hide" style="overflow-x:auto">
         <table style="width:100%;border-collapse:collapse;font-family:'Barlow Condensed',sans-serif">
           <thead>
             <tr style="border-bottom:1px solid var(--border)">
@@ -5674,7 +5676,6 @@ function renderProfile(name) {
               const teamDisplay = isSwapped
                 ? `${r.team} <span style="font-size:.58rem;color:#60a5fa;background:rgba(96,165,250,.15);padding:1px 4px;border-radius:3px">swap</span>`
                 : r.team;
-              // 1H/2H split rows if data exists
               const h1 = m ? m.rows.find(x => x.player === name && x.half === '1H') : null;
               const h2 = m ? m.rows.find(x => x.player === name && x.half === '2H') : null;
               const halfStr = h1 && h2
@@ -5707,6 +5708,47 @@ function renderProfile(name) {
           </tbody>
         </table>
       </div>
+
+      <!-- Mobile cards -->
+      <div class="mobile-cards">
+        ${sortedMatches.slice(0,20).map(r => {
+          const m = matchList.find(m => m.id === r.match_id);
+          const won = m && ((r.team==='A'&&m.goalsA>m.goalsB)||(r.team==='B'&&m.goalsB>m.goalsA));
+          const drew = m && m.goalsA===m.goalsB;
+          const resultCol = won?'var(--green)':drew?'var(--amber)':'var(--red)';
+          const resultLbl = won?'W':drew?'D':'L';
+          const isMvp = m?.mvpList?.[0]?.player === name;
+          const score = m ? `${m.goalsA}–${m.goalsB}` : '';
+          const dateStr = r.match_date?.replace(/(\d{4})-(\d{2})-(\d{2})/, '$3/$2/$1') || '';
+          const statGrid = [
+            ['G',  n(r.goals),              'var(--green)'],
+            ['A',  n(r.assists),            '#a0c4ff'],
+            ['SH', n(r.total_shots),        'var(--text2)'],
+            ['KP', n(r.key_passes),         'var(--text2)'],
+            ['TK', n(r.tackles),            'var(--text2)'],
+            ['INT',n(r.interceptions),      'var(--text2)'],
+            ['NM', n(r.nutmegs),            'var(--muted)'],
+            ['GKS',n(r.goalkeeper_saves),   'var(--muted)'],
+            ['BLK',n(r.blocks),             'var(--muted)'],
+          ].map(([lbl,val,col]) => `
+            <div style="text-align:center">
+              <div style="font-family:'Bebas Neue',sans-serif;font-size:1.1rem;color:${val>0?col:'rgba(255,255,255,.15)'};line-height:1">${val||'–'}</div>
+              <div style="font-size:.55rem;color:var(--muted);letter-spacing:.5px;text-transform:uppercase">${lbl}</div>
+            </div>`).join('');
+          return `<div onclick="navToMatch('${r.match_id}')" style="border:1px solid var(--border);border-radius:9px;padding:10px 12px;margin-bottom:8px;cursor:pointer;background:${won?'rgba(57,211,83,.04)':drew?'rgba(240,160,48,.04)':'rgba(240,96,96,.04)'}">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+              <div style="display:flex;align-items:center;gap:8px">
+                <span style="background:${won?'rgba(57,211,83,.2)':drew?'rgba(240,160,48,.2)':'rgba(240,96,96,.2)'};color:${resultCol};font-family:'Bebas Neue',sans-serif;font-size:1rem;padding:2px 10px;border-radius:4px">${resultLbl}</span>
+                <span style="font-size:.8rem;color:var(--muted)">${score}</span>
+                ${isMvp?`<span style="background:rgba(240,192,64,.2);color:var(--gold);font-size:.6rem;padding:1px 5px;border-radius:3px">★ MVP</span>`:''}
+              </div>
+              <span style="font-size:.68rem;color:var(--muted)">${dateStr}</span>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:6px">${statGrid}</div>
+          </div>`;
+        }).join('')}
+      </div>
+
       ${s.matches.length > 20 ? `<div style="font-size:.72rem;color:var(--muted);text-align:center;padding:8px 0;border-top:1px solid var(--border);margin-top:8px">${s.matches.length - 20} more matches not shown</div>` : ''}
     </div>`;
 
@@ -6012,7 +6054,7 @@ function savePlayerNote(name, val, rebalance = false) {
   }
   // Rebalance when note is committed (blur/enter), just rerender on keystrokes
   if (currentPage === 'teams' && selectedForTeams.size >= 2) {
-    if (rebalance) autoBalance();
+    if (rebalance) autoBalance(true); // rebalanceOnly — skip enforcer gate
     else if (teamA.length || teamB.length) renderTeamResult(teamA, teamB);
   }
 }
@@ -6154,7 +6196,7 @@ function toggleStreakAugment() {
   if (teamA.length || teamB.length) renderTeamResult(teamA, teamB);
 }
 
-function autoBalance() {
+function autoBalance(rebalanceOnly = false) {
   const sel = [...selectedForTeams].map(name => {
     const p = playerStats[name];
     if (!p) return null;
@@ -6280,11 +6322,14 @@ function autoBalance() {
     combos(sel, sizeA, 0, []);
 
     // Phase 1: find minimum enforcer diff across all splits
-    let minEnfDiff = Infinity;
-    allSplits.forEach(({ a, b }) => {
-      const ed = enforcerDiff(a, b);
-      if (ed < minEnfDiff) minEnfDiff = ed;
-    });
+    // Skip enforcer gate when rebalancing due to injury/note changes — just optimise balance
+    let minEnfDiff = rebalanceOnly ? 0 : Infinity;
+    if (!rebalanceOnly) {
+      allSplits.forEach(({ a, b }) => {
+        const ed = enforcerDiff(a, b);
+        if (ed < minEnfDiff) minEnfDiff = ed;
+      });
+    }
 
     // Phase 2: from splits within tolerance of min enforcer diff, pick best secondary balance
     // Allow tolerance of 1 enforcer point above minimum to give some flexibility
