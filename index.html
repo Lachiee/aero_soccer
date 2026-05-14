@@ -6343,7 +6343,7 @@ function autoBalance(rebalanceOnly = false) {
     if (!p) return null;
     const cs = customStats[name] || {};
     p.rating = computeRating(p, cs);
-    const weightedRating = computeWeightedRating(name);
+    const weightedRating = p._isCustom ? computeRating(p, cs) : computeWeightedRating(name);
     const note = (playerNotes[name] || '').toLowerCase();
     const pen = getPenalty(playerNotes[name]);
 
@@ -6652,10 +6652,12 @@ function renderTeamResult(tA, tB) {
   // Recompute effectiveRating for all players in case notes/penalties changed
   const recomputeRating = (p) => {
     const pen = getPenalty(playerNotes[p.player]);
-    const weightedRating = computeWeightedRating(p.player);
-    const streakMod = p.streakMod || 1.0;
+    // Custom players use computeRating directly (no match history to weight)
+    const weightedRating = p._isCustom
+      ? computeRating(p, customStats[p.player] || {})
+      : computeWeightedRating(p.player);
+    const streakMod = p._isCustom ? 1.0 : (p.streakMod || 1.0);
     const newRating = weightedRating * (1 - pen) * streakMod;
-    if (pen > 0) console.log(`${p.player}: base=${weightedRating.toFixed(1)} pen=${pen.toFixed(2)} → effective=${newRating.toFixed(1)}`);
     p.effectiveRating = newRating;
     p.weightedRating = weightedRating;
   };
@@ -6697,14 +6699,14 @@ function renderTeamResult(tA, tB) {
       <span style="font-size:.8rem;opacity:.5;cursor:grab;margin-right:2px">⠿</span>
       <span class="tp-name" onclick="nav('profile','${p.player}')" style="cursor:pointer">${p.player}</span>
       <span style="font-size:.7rem;opacity:.55">${roleIcon[role]} ${roleLabel[role]}</span>
-      ${p.streakLabel ? `<span style="font-size:.65rem;font-weight:600;padding:1px 6px;border-radius:4px;${p.streakLabel.type==='buff'?'background:rgba(96,165,250,.15);color:#60a5fa':'background:rgba(239,68,68,.12);color:#f87171'}" title="${p.streakLabel.type==='buff'?'On a loss streak — rating buffed to help balance teams':'On a win streak — rating slightly nerfed to help balance teams'}">${p.streakLabel.text}</span>` : ''}
+      ${p.streakLabel ? `<span style="font-size:.65rem;font-weight:600;padding:1px 6px;border-radius:4px;${p.streakLabel.type==='buff'?'background:rgba(96,165,250,.15);color:#60a5fa':'background:rgba(239,68,68,.12);color:#f87171'}" title="${p.streakLabel.type==='buff'?'Win rate is low — rating buffed to help balance teams':'Win rate is high — rating slightly nerfed to help balance teams'}">WR ${p.streakLabel.text}</span>` : ''}
       ${(() => {
-        const ps = playerStats[p.player] || customPlayers[p.player];
-        if (!ps || ps.momentum === null) return '';
+        const ps = playerStats[p.player];
+        if (!ps || ps.momentum == null || isNaN(ps.momentum)) return '';
         const m = ps.momentum;
         const col = m >= 15 ? '#4ade80' : m >= 0 ? '#a3e635' : m >= -15 ? '#fb923c' : '#f87171';
         const icon = m >= 15 ? '📈' : m >= 0 ? '➡' : '📉';
-        return `<span style="font-size:.68rem;color:${col}" title="Momentum: ${m > 0 ? '+' : ''}${m}% (last 5 vs prev 5)">${icon} ${m > 0 ? '+' : ''}${m}%</span>`;
+        return `<span style="font-size:.68rem;color:${col}" title="Form momentum: stats last 5 games vs previous 5 games">${icon} ${m > 0 ? '+' : ''}${m}%</span>`;
       })()}
       ${note ? (() => {
         const pen = getPenalty(note);
