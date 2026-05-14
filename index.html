@@ -641,23 +641,7 @@ canvas.spider{display:block;margin:0 auto}
           style="width:100%;background:var(--card);border:1px solid var(--border);border-radius:7px;padding:8px 10px;color:var(--text);font-size:.85rem;box-sizing:border-box">
       </div>
 
-      ${[
-        ['cp-attack',    'Attack',      '⚽', 'Goals, shots, finishing ability'],
-        ['cp-defense',   'Defense',     '🛡', 'Tackles, interceptions, blocks'],
-        ['cp-enforcer',  'Enforcing',   '💪', 'Physical presence and duels'],
-        ['cp-stamina',   'Stamina',     '🫁', 'Work rate and endurance'],
-        ['cp-goalkeeping','Goalkeeping','🧤', 'Shot-stopping and distribution'],
-        ['cp-playmaking','Playmaking',  '🎯', 'Key passes and creativity'],
-      ].map(([id, lbl, icon, tip]) => `
-        <div style="margin-bottom:14px">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">
-            <label style="font-size:.7rem;color:var(--muted);font-family:'Barlow Condensed',sans-serif;letter-spacing:1px;text-transform:uppercase" title="${tip}">${icon} ${lbl}</label>
-            <span id="${id}-val" style="font-family:'Bebas Neue',sans-serif;font-size:1.1rem;color:var(--green)">5</span>
-          </div>
-          <input type="range" id="${id}" min="1" max="10" value="5" step="1"
-            oninput="document.getElementById('${id}-val').textContent=this.value"
-            style="width:100%;accent-color:var(--green)">
-        </div>`).join('')}
+      <div id="cp-sliders"></div>
 
       <div style="display:flex;gap:8px;margin-top:18px">
         <button onclick="addCustomPlayer()" style="flex:1;padding:9px;border-radius:8px;cursor:pointer;font-family:'Barlow Condensed',sans-serif;font-size:.9rem;letter-spacing:.5px;text-transform:uppercase;border:none;background:var(--green);color:#000;font-weight:700">Add to Pool</button>
@@ -6032,6 +6016,24 @@ let customPlayers = {}; // name → { attack, defense, enforcer, stamina, goalke
 
 function openCustomPlayerModal() {
   const modal = document.getElementById('custom-player-modal');
+  const sliderDefs = [
+    ['cp-attack',     'Attack',      '⚽', 'Goals, shots, finishing ability'],
+    ['cp-defense',    'Defense',     '🛡', 'Tackles, interceptions, blocks'],
+    ['cp-enforcer',   'Enforcing',   '💪', 'Physical presence and duels'],
+    ['cp-stamina',    'Stamina',     '🫁', 'Work rate and endurance'],
+    ['cp-goalkeeping','Goalkeeping', '🧤', 'Shot-stopping and distribution'],
+    ['cp-playmaking', 'Playmaking',  '🎯', 'Key passes and creativity'],
+  ];
+  document.getElementById('cp-sliders').innerHTML = sliderDefs.map(([id, lbl, icon, tip]) => `
+    <div style="margin-bottom:14px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">
+        <label style="font-size:.7rem;color:var(--muted);font-family:'Barlow Condensed',sans-serif;letter-spacing:1px;text-transform:uppercase" title="${tip}">${icon} ${lbl}</label>
+        <span id="${id}-val" style="font-family:'Bebas Neue',sans-serif;font-size:1.1rem;color:var(--green)">5</span>
+      </div>
+      <input type="range" id="${id}" min="1" max="10" value="5" step="1"
+        oninput="document.getElementById('${id}-val').textContent=this.value"
+        style="width:100%;accent-color:var(--green)">
+    </div>`).join('');
   modal.style.display = 'flex';
   document.getElementById('cp-name').focus();
 }
@@ -6081,14 +6083,8 @@ function addCustomPlayer() {
 
   synth.rating = computeRating(synth, customStats[name]);
   closeCustomPlayerModal();
-
-  // Reset form for next use
+  // Reset name field; sliders are regenerated fresh each time modal opens
   nameEl.value = '';
-  ['cp-attack','cp-defense','cp-enforcer','cp-stamina','cp-goalkeeping','cp-playmaking'].forEach(id => {
-    document.getElementById(id).value = 5;
-    document.getElementById(id+'-val').textContent = '5';
-  });
-
   renderTeamBuilder();
 }
 
@@ -6103,19 +6099,20 @@ function openEditCustomPlayer(name, e) {
   e.stopPropagation();
   const p = customPlayers[name];
   if (!p) return;
-  document.getElementById('cp-name').value = name;
   const s = p._sliders || {};
   const cs = customStats[name] || {};
-  [['cp-attack',s.attack||5],['cp-defense',s.defense||5],['cp-enforcer',cs.enforcer||5],
-   ['cp-stamina',cs.stamina||5],['cp-goalkeeping',s.goalkeeping||5],['cp-playmaking',s.playmaking||5]
-  ].forEach(([id,val]) => {
-    document.getElementById(id).value = val;
-    document.getElementById(id+'-val').textContent = val;
-  });
-  // Remove old entry, adding new one will replace it
+  // Remove old entry — new one will be added when form is submitted
   delete customPlayers[name];
   selectedForTeams.delete(name);
   openCustomPlayerModal();
+  // Pre-fill after modal renders
+  document.getElementById('cp-name').value = name;
+  [['cp-attack',s.attack||5],['cp-defense',s.defense||5],['cp-enforcer',cs.enforcer||5],
+   ['cp-stamina',cs.stamina||5],['cp-goalkeeping',s.goalkeeping||5],['cp-playmaking',s.playmaking||5]
+  ].forEach(([id, val]) => {
+    const el = document.getElementById(id);
+    if (el) { el.value = val; document.getElementById(id+'-val').textContent = val; }
+  });
 }
 
 function renderTeamBuilder() {
