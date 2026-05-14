@@ -623,8 +623,47 @@ canvas.spider{display:block;margin:0 auto}
   <div class="section-hd"><h2>Team Builder</h2><span>Select players · Auto-balance by ability &amp; role · Drag to adjust</span></div>
 
   <div style="margin-bottom:14px">
-    <div style="font-size:.8rem;color:var(--muted);margin-bottom:8px;font-family:'Barlow Condensed',sans-serif;letter-spacing:1px;text-transform:uppercase">Available Players — click to select<span id="team-player-count" style="color:var(--lime)"></span></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;flex-wrap:wrap;gap:8px">
+      <div style="font-size:.8rem;color:var(--muted);font-family:'Barlow Condensed',sans-serif;letter-spacing:1px;text-transform:uppercase">Available Players — click to select<span id="team-player-count" style="color:var(--lime)"></span></div>
+      <button onclick="openCustomPlayerModal()" style="padding:5px 12px;border-radius:7px;cursor:pointer;font-family:'Barlow Condensed',sans-serif;font-size:.78rem;letter-spacing:.5px;text-transform:uppercase;border:1px solid var(--amber);background:rgba(240,160,48,.1);color:var(--amber)">+ Custom Player</button>
+    </div>
     <div class="avail-pool" id="avail-pool"></div>
+  </div>
+
+  <!-- Custom Player Modal -->
+  <div id="custom-player-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:1000;align-items:center;justify-content:center">
+    <div style="background:var(--bg);border:1px solid var(--border);border-radius:14px;padding:24px;width:340px;max-width:90vw;max-height:90vh;overflow-y:auto">
+      <div style="font-family:'Bebas Neue',sans-serif;font-size:1.4rem;letter-spacing:2px;color:var(--text);margin-bottom:16px">Custom Player</div>
+
+      <div style="margin-bottom:14px">
+        <label style="font-size:.7rem;color:var(--muted);font-family:'Barlow Condensed',sans-serif;letter-spacing:1px;text-transform:uppercase;display:block;margin-bottom:5px">Name</label>
+        <input id="cp-name" type="text" placeholder="e.g. Guest Player" maxlength="20"
+          style="width:100%;background:var(--card);border:1px solid var(--border);border-radius:7px;padding:8px 10px;color:var(--text);font-size:.85rem;box-sizing:border-box">
+      </div>
+
+      ${[
+        ['cp-attack',    'Attack',      '⚽', 'Goals, shots, finishing ability'],
+        ['cp-defense',   'Defense',     '🛡', 'Tackles, interceptions, blocks'],
+        ['cp-enforcer',  'Enforcing',   '💪', 'Physical presence and duels'],
+        ['cp-stamina',   'Stamina',     '🫁', 'Work rate and endurance'],
+        ['cp-goalkeeping','Goalkeeping','🧤', 'Shot-stopping and distribution'],
+        ['cp-playmaking','Playmaking',  '🎯', 'Key passes and creativity'],
+      ].map(([id, lbl, icon, tip]) => `
+        <div style="margin-bottom:14px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">
+            <label style="font-size:.7rem;color:var(--muted);font-family:'Barlow Condensed',sans-serif;letter-spacing:1px;text-transform:uppercase" title="${tip}">${icon} ${lbl}</label>
+            <span id="${id}-val" style="font-family:'Bebas Neue',sans-serif;font-size:1.1rem;color:var(--green)">5</span>
+          </div>
+          <input type="range" id="${id}" min="1" max="10" value="5" step="1"
+            oninput="document.getElementById('${id}-val').textContent=this.value"
+            style="width:100%;accent-color:var(--green)">
+        </div>`).join('')}
+
+      <div style="display:flex;gap:8px;margin-top:18px">
+        <button onclick="addCustomPlayer()" style="flex:1;padding:9px;border-radius:8px;cursor:pointer;font-family:'Barlow Condensed',sans-serif;font-size:.9rem;letter-spacing:.5px;text-transform:uppercase;border:none;background:var(--green);color:#000;font-weight:700">Add to Pool</button>
+        <button onclick="closeCustomPlayerModal()" style="padding:9px 14px;border-radius:8px;cursor:pointer;font-family:'Barlow Condensed',sans-serif;font-size:.9rem;border:1px solid var(--border);background:none;color:var(--muted)">Cancel</button>
+      </div>
+    </div>
   </div>
 
   <div class="notes-section" id="notes-section" style="display:none">
@@ -5988,13 +6027,105 @@ function setLbStat(s) { lbStat = s; renderLeaderboard(); }
 // =====================================================================
 // TEAM BUILDER
 // =====================================================================
+// ---- Custom Players ----
+let customPlayers = {}; // name → { attack, defense, enforcer, stamina, goalkeeping, playmaking }
+
+function openCustomPlayerModal() {
+  const modal = document.getElementById('custom-player-modal');
+  modal.style.display = 'flex';
+  document.getElementById('cp-name').focus();
+}
+
+function closeCustomPlayerModal() {
+  document.getElementById('custom-player-modal').style.display = 'none';
+}
+
+function addCustomPlayer() {
+  const nameEl = document.getElementById('cp-name');
+  const name = nameEl.value.trim();
+  if (!name) { nameEl.focus(); return; }
+
+  const attack      = parseInt(document.getElementById('cp-attack').value);
+  const defense     = parseInt(document.getElementById('cp-defense').value);
+  const enforcer    = parseInt(document.getElementById('cp-enforcer').value);
+  const stamina     = parseInt(document.getElementById('cp-stamina').value);
+  const goalkeeping = parseInt(document.getElementById('cp-goalkeeping').value);
+  const playmaking  = parseInt(document.getElementById('cp-playmaking').value);
+
+  // Build a synthetic player stat object from the sliders
+  // Scale slider (1-10) to stat values that make sense in computeRating
+  // attack=10 → ~3 goals/g, defense=10 → ~8 tackles+interceptions/g
+  const synth = {
+    player: name,
+    games: 10, // synthetic game count so per-game averages work
+    goals:           attack * 0.3,
+    assists:         playmaking * 0.25,
+    total_shots:     attack * 1.5,
+    shots_on_target: attack * 0.9,
+    key_passes:      playmaking * 0.8,
+    tackles:         defense * 0.5,
+    interceptions:   defense * 0.3,
+    blocks:          defense * 0.2,
+    goalkeeper_saves:goalkeeping * 0.8,
+    total_saves:     goalkeeping * 0.8,
+    nutmegs: 0, post: 0,
+    wins: 5, losses: 5, draws: 0,
+    _isCustom: true,
+    _sliders: { attack, defense, enforcer, stamina, goalkeeping, playmaking },
+  };
+
+  customPlayers[name] = synth;
+  if (!customStats[name]) customStats[name] = {};
+  customStats[name].enforcer = enforcer;
+  customStats[name].stamina  = stamina;
+
+  synth.rating = computeRating(synth, customStats[name]);
+  closeCustomPlayerModal();
+
+  // Reset form for next use
+  nameEl.value = '';
+  ['cp-attack','cp-defense','cp-enforcer','cp-stamina','cp-goalkeeping','cp-playmaking'].forEach(id => {
+    document.getElementById(id).value = 5;
+    document.getElementById(id+'-val').textContent = '5';
+  });
+
+  renderTeamBuilder();
+}
+
+function removeCustomPlayer(name, e) {
+  e.stopPropagation();
+  delete customPlayers[name];
+  selectedForTeams.delete(name);
+  renderTeamBuilder();
+}
+
+function openEditCustomPlayer(name, e) {
+  e.stopPropagation();
+  const p = customPlayers[name];
+  if (!p) return;
+  document.getElementById('cp-name').value = name;
+  const s = p._sliders || {};
+  const cs = customStats[name] || {};
+  [['cp-attack',s.attack||5],['cp-defense',s.defense||5],['cp-enforcer',cs.enforcer||5],
+   ['cp-stamina',cs.stamina||5],['cp-goalkeeping',s.goalkeeping||5],['cp-playmaking',s.playmaking||5]
+  ].forEach(([id,val]) => {
+    document.getElementById(id).value = val;
+    document.getElementById(id+'-val').textContent = val;
+  });
+  // Remove old entry, adding new one will replace it
+  delete customPlayers[name];
+  selectedForTeams.delete(name);
+  openCustomPlayerModal();
+}
+
 function renderTeamBuilder() {
   const pool = document.getElementById('avail-pool');
   if (!pool) return;
   const players = Object.values(playerStats).sort((a,b) => a.player.localeCompare(b.player));
   players.forEach(p => { p.rating = computeRating(p, customStats[p.player]); });
+  Object.values(customPlayers).forEach(p => { p.rating = computeRating(p, customStats[p.player]); });
 
-  pool.innerHTML = players.map(p => {
+  const regularChips = players.map(p => {
     const note = playerNotes[p.player];
     const cls = selectedForTeams.has(p.player) ? 'pchip sel-a' : 'pchip';
     return `<div class="${cls}" onclick="toggleTeamPlayer('${p.player}')">
@@ -6003,6 +6134,18 @@ function renderTeamBuilder() {
       ${note ? `<span class="inj" title="${note}">⚠</span>` : ''}
     </div>`;
   }).join('');
+
+  const customChips = Object.values(customPlayers).map(p => {
+    const cls = selectedForTeams.has(p.player) ? 'pchip sel-a' : 'pchip';
+    return `<div class="${cls}" onclick="toggleTeamPlayer('${p.player}')" style="border-color:var(--amber);position:relative">
+      <span style="color:var(--amber)">★</span> ${p.player}
+      ${adminMode ? `<span class="cr">${p.rating}</span>` : ''}
+      <span onclick="openEditCustomPlayer('${p.player}',event)" title="Edit" style="margin-left:4px;opacity:.6;font-size:.7rem;cursor:pointer">✏</span>
+      <span onclick="removeCustomPlayer('${p.player}',event)" title="Remove" style="margin-left:2px;opacity:.6;font-size:.7rem;cursor:pointer;color:var(--red)">✕</span>
+    </div>`;
+  }).join('');
+
+  pool.innerHTML = regularChips + (customChips ? `<div style="width:100%;height:0;border-bottom:1px solid rgba(240,160,48,.2);margin:6px 0"></div>${customChips}` : '');
 
   // Update count in the label
   const countEl = document.getElementById('team-player-count');
@@ -6198,7 +6341,8 @@ function toggleStreakAugment() {
 
 function autoBalance(rebalanceOnly = false) {
   const sel = [...selectedForTeams].map(name => {
-    const p = playerStats[name];
+    // Check custom players first, then regular player stats
+    const p = customPlayers[name] || playerStats[name];
     if (!p) return null;
     const cs = customStats[name] || {};
     p.rating = computeRating(p, cs);
@@ -6558,7 +6702,7 @@ function renderTeamResult(tA, tB) {
       <span style="font-size:.7rem;opacity:.55">${roleIcon[role]} ${roleLabel[role]}</span>
       ${p.streakLabel ? `<span style="font-size:.65rem;font-weight:600;padding:1px 6px;border-radius:4px;${p.streakLabel.type==='buff'?'background:rgba(96,165,250,.15);color:#60a5fa':'background:rgba(239,68,68,.12);color:#f87171'}" title="${p.streakLabel.type==='buff'?'On a loss streak — rating buffed to help balance teams':'On a win streak — rating slightly nerfed to help balance teams'}">${p.streakLabel.text}</span>` : ''}
       ${(() => {
-        const ps = playerStats[p.player];
+        const ps = playerStats[p.player] || customPlayers[p.player];
         if (!ps || ps.momentum === null) return '';
         const m = ps.momentum;
         const col = m >= 15 ? '#4ade80' : m >= 0 ? '#a3e635' : m >= -15 ? '#fb923c' : '#f87171';
