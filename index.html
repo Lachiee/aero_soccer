@@ -4680,9 +4680,10 @@ function renderMatches() {
       const medals = ['👑','🥈','🥉'];
       const medalSpan = mvpIdx >= 0 ? `<span style="margin-right:4px">${medals[mvpIdx]}</span>` : '';
       const mvpEntry = mvpIdx >= 0 ? m.mvpList[mvpIdx] : null;
+      const halfTag = r._swapHalf ? `<span style="font-size:.55rem;background:rgba(96,165,250,.2);color:#60a5fa;border-radius:3px;padding:1px 4px;margin-left:4px">${r._swapHalf}</span>` : '';
       return `
       <td class="${r.team==='A'?'team-a-cell':'team-b-cell'}" onclick="event.stopPropagation();nav('profile','${r.player}')" style="cursor:pointer">
-        ${medalSpan}${r.player}${mvpEntry ? `<span style="font-size:.65rem;color:var(--muted);margin-left:4px">${mvpEntry.score}pts</span>` : ''}
+        ${medalSpan}${r.player}${halfTag}${mvpEntry ? `<span style="font-size:.65rem;color:var(--muted);margin-left:4px">${mvpEntry.score}pts</span>` : ''}
       </td>
       <td><b>${n(r.goals)}</b></td>
       <td>${n(r.own_goals)>0?`<span style="color:var(--red);font-weight:700">${n(r.own_goals)}</span>`:'0'}</td>
@@ -4697,6 +4698,19 @@ function renderMatches() {
       <td>${n(r.blocks)}</td>
       <td>${n(r.tackles)}</td><td>${n(r.interceptions)}</td>
       <td>${n(r.nutmegs)}</td><td>${n(r.post)}</td>`
+    };
+
+    // Build swap-aware team rows for the inline table
+    const buildInlineTeamRows = (teamLetter) => {
+      const swappedNames = new Set((m.swappedPlayers||[]).map(s=>s.player));
+      const regularRows = (teamLetter==='A'?m.teamA:m.teamB).filter(r => !swappedNames.has(r.player));
+      const swapRows = (m.swappedPlayers||[]).map(swap => {
+        const half = swap.from === teamLetter ? '1H' : swap.to === teamLetter ? '2H' : null;
+        if (!half) return null;
+        const halfRow = m.rows.find(r => r.player === swap.player && r.half === half);
+        return halfRow ? { ...halfRow, _swapHalf: half } : null;
+      }).filter(Boolean);
+      return [...regularRows, ...swapRows];
     };
     const rowStyle = r => {
       const idx = m.mvpList ? m.mvpList.findIndex(e => e.player === r.player) : -1;
@@ -4846,10 +4860,10 @@ function renderMatches() {
             <thead><tr>${allStatsTH}</tr></thead>
             <tbody>
               <tr><td colspan="17" style="padding:4px 10px;background:rgba(57,211,83,.05);color:var(--green);font-family:'Barlow Condensed',sans-serif;font-size:.75rem;letter-spacing:1px">TEAM A</td></tr>
-              ${m.teamA.map(r => `<tr ${rowStyle(r)}>${allStatsTD(r)}</tr>`).join('')}
+              ${buildInlineTeamRows('A').map(r => `<tr ${rowStyle(r)}>${allStatsTD(r)}</tr>`).join('')}
               ${totalRow(m.teamA, 'var(--green)', 'A')}
               <tr><td colspan="17" style="padding:4px 10px;background:rgba(79,163,232,.05);color:var(--blue);font-family:'Barlow Condensed',sans-serif;font-size:.75rem;letter-spacing:1px">TEAM B</td></tr>
-              ${m.teamB.map(r => `<tr ${rowStyle(r)}>${allStatsTD(r)}</tr>`).join('')}
+              ${buildInlineTeamRows('B').map(r => `<tr ${rowStyle(r)}>${allStatsTD(r)}</tr>`).join('')}
               ${totalRow(m.teamB, 'var(--blue)', 'B')}
             </tbody>
           </table>
@@ -5709,8 +5723,10 @@ function renderProfile(name) {
               const isMvp = m?.mvpList?.[0]?.player === name;
               const mvpBadge = isMvp ? `<span style="background:rgba(240,192,64,.2);color:var(--gold);font-size:.6rem;padding:1px 5px;border-radius:3px;margin-left:4px">★ MVP</span>` : '';
               const isSwapped = m?.swappedPlayers?.some(sp => sp.player === name);
-              const teamDisplay = isSwapped
-                ? `${r.team} <span style="font-size:.58rem;color:#60a5fa;background:rgba(96,165,250,.15);padding:1px 4px;border-radius:3px">swap</span>`
+              const swapInfo = isSwapped ? m.swappedPlayers.find(sp => sp.player === name) : null;
+              const swapHalf = swapInfo ? (r.team === swapInfo.from ? '1H' : '2H') : null;
+              const teamDisplay = swapHalf
+                ? `${r.team} <span style="font-size:.58rem;color:#60a5fa;background:rgba(96,165,250,.15);padding:1px 4px;border-radius:3px">${swapHalf}</span>`
                 : r.team;
               const h1 = m ? m.rows.find(x => x.player === name && x.half === '1H') : null;
               const h2 = m ? m.rows.find(x => x.player === name && x.half === '2H') : null;
@@ -5756,6 +5772,9 @@ function renderProfile(name) {
           const isMvp = m?.mvpList?.[0]?.player === name;
           const score = m ? `${m.goalsA}–${m.goalsB}` : '';
           const dateStr = r.match_date?.replace(/(\d{4})-(\d{2})-(\d{2})/, '$3/$2/$1') || '';
+          const mSwapInfo = m?.swappedPlayers?.find(sp => sp.player === name);
+          const mSwapHalf = mSwapInfo ? (r.team === mSwapInfo.from ? '1H' : '2H') : null;
+          const mSwapBadge = mSwapHalf ? `<span style="font-size:.55rem;color:#60a5fa;background:rgba(96,165,250,.15);padding:1px 4px;border-radius:3px">${mSwapHalf}</span>` : '';
           const statGrid = [
             ['G',  n(r.goals),              'var(--green)'],
             ['A',  n(r.assists),            '#a0c4ff'],
@@ -5777,6 +5796,7 @@ function renderProfile(name) {
                 <span style="background:${won?'rgba(57,211,83,.2)':drew?'rgba(240,160,48,.2)':'rgba(240,96,96,.2)'};color:${resultCol};font-family:'Bebas Neue',sans-serif;font-size:1rem;padding:2px 10px;border-radius:4px">${resultLbl}</span>
                 <span style="font-size:.8rem;color:var(--muted)">${score}</span>
                 ${isMvp?`<span style="background:rgba(240,192,64,.2);color:var(--gold);font-size:.6rem;padding:1px 5px;border-radius:3px">★ MVP</span>`:''}
+                ${mSwapBadge}
               </div>
               <span style="font-size:.68rem;color:var(--muted)">${dateStr}</span>
             </div>
