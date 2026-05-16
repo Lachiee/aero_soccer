@@ -5762,7 +5762,7 @@ function renderProfile(name) {
       </div>
 
       <!-- Mobile cards -->
-      <div class="mobile-cards">
+      <div class="mobile-cards" style="display:none">
         ${sortedMatches.slice(0,20).map(r => {
           const m = matchList.find(m => m.id === r.match_id);
           const won = m && ((r.team==='A'&&m.goalsA>m.goalsB)||(r.team==='B'&&m.goalsB>m.goalsA));
