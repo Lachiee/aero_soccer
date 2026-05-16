@@ -4843,7 +4843,7 @@ function renderMatches() {
                 +'</div>';
             }).join('')
             +'</div>'
-            +(insights.length?'<div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:8px">'+insights.map(ins=>'<div style="background:var(--card2);border:1px solid var(--border);border-radius:5px;padding:2px 9px;font-size:.68rem;color:'+ins.col+'">'+ins.text+'</div>').join('')+'</div>':'')
+            +(insights.length?'<details style="margin-top:8px"><summary style="cursor:pointer;font-size:.68rem;color:var(--muted);font-family:\'Barlow Condensed\',sans-serif;letter-spacing:.5px;list-style:none;display:inline-flex;align-items:center;gap:4px;padding:2px 8px;background:var(--card2);border:1px solid var(--border);border-radius:5px;user-select:none">▶ Match Insights ('+insights.length+')</summary><div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:6px">'+insights.map(ins=>'<div style="background:var(--card2);border:1px solid var(--border);border-radius:5px;padding:2px 9px;font-size:.68rem;color:'+ins.col+'">'+ins.text+'</div>').join('')+'</div></details>':'')
             +'</div>';
         })()}
 
