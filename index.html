@@ -3098,71 +3098,47 @@ function getFifaTags(s, cs) {
   if (!_tagCache) _tagCache = buildTagAuction();
   const myTagLabels = (_tagCache[s.player] || []);
 
-  // Convert label strings → {label, cls, tip} objects
-  const sorted = [...myTagLabels].sort((a,b) => {
-    const primaryFirst = ['Golden Boot','Shot Stopper','Enforcer','Ball Hawk','Brick Wall',
-      'Sauce Merchant','Architect','Thread Needle','Gunslinger','Deadeye','Clinical'];
-    const ai = primaryFirst.indexOf(a), bi = primaryFirst.indexOf(b);
-    if (ai>=0 && bi<0) return -1;
-    if (bi>=0 && ai<0) return 1;
-    return ai - bi;
-  });
-
-  const result = sorted.slice(0,3).map(label => {
+  // Convert label strings → {label, cls, tip} objects — hard cap at 2
+  const result = myTagLabels.slice(0, 2).map(label => {
     const def = TAG_DEFS[label];
     return def ? {label, cls:def.cls, tip:def.tip} : null;
   }).filter(Boolean);
 
-  // Fallback if player has fewer than 3 won tags — award based on best ranked stat
-  if (result.length < 3) {
+  // Fallback only if auction gave this player 0 or 1 tags — fill to max 2
+  // Use pool-relative ranking but check against _tagCache for global uniqueness
+  if (result.length < 2) {
     const g = Math.max(s.games,1);
     const gpg=s.goals/g, apg=s.assists/g, kppg=s.key_passes/g;
     const intpg=s.interceptions/g, tklpg=s.tackles/g, blkpg=(s.blocks||0)/g;
     const gkspg=(s.goalkeeper_saves||0)/g, nmpg=(s.nutmegs||0)/g;
     const sotpg=(s.shots_on_target||0)/g, spg=s.total_shots/g;
     const actpg=(s.goals+s.assists+s.total_shots+s.tackles+s.interceptions)/g;
-    // Fallback: award tags based on this player's best stats relative to pool
-    // Each fallback tag still unique — awarded to the best-ranked eligible player
-    // But here we just check if THIS player is in top 25% for that stat
     const pool = Object.values(getDisplayStats()).filter(p => p.games >= 5);
-    const rank = (myVal, fn) => pool.filter(p => fn(p) > myVal).length; // 0 = best
+    const rank = (myVal, fn) => pool.filter(p => fn(p) > myVal).length;
     const pct25 = Math.ceil(pool.length * 0.25);
 
+    const allAuctionTags = new Set(
+      Object.values(_tagCache).flat()
+    );
+
     const fallbackCandidates = [
-      {r:rank(gpg,  p=>p.goals/Math.max(p.games,1)),                 tag:'Finisher',       cls:'tag-striker',   tip:'Among the top scorers in the group'},
-      {r:rank(nmpg, p=>(p.nutmegs||0)/Math.max(p.games,1)),          tag:'Sauce Merchant', cls:'tag-wizard',    tip:'Among the top flair players in the group'},
-      {r:rank(sotpg,p=>(p.shots_on_target||0)/Math.max(p.games,1)),  tag:'Front Foot',     cls:'tag-target',    tip:'Among the most threatening attackers in the group'},
+      {r:rank(gpg,  p=>p.goals/Math.max(p.games,1)),                  tag:'Finisher',      cls:'tag-striker',   tip:'Among the top scorers in the group'},
+      {r:rank(nmpg, p=>(p.nutmegs||0)/Math.max(p.games,1)),           tag:'Sauce Merchant',cls:'tag-wizard',    tip:'Among the top flair players in the group'},
+      {r:rank(sotpg,p=>(p.shots_on_target||0)/Math.max(p.games,1)),   tag:'Front Foot',    cls:'tag-target',    tip:'Among the most threatening attackers in the group'},
       {r:rank(gkspg+blkpg,p=>((p.goalkeeper_saves||0)+(p.blocks||0))/Math.max(p.games,1)), tag:'Fortress', cls:'tag-blocker', tip:'Strong across both saves and blocks'},
       {r:rank(gpg+tklpg,p=>(p.goals+p.tackles)/Math.max(p.games,1)), tag:'Two-Way Engine', cls:'tag-workhorse', tip:'Contributes in both attack and defense'},
+      {r:rank(actpg,p=>(p.goals+p.assists+p.total_shots+p.tackles+p.interceptions)/Math.max(p.games,1)), tag:'Box to Box', cls:'tag-workhorse', tip:'High involvement every match'},
+      {r:rank(kppg, p=>p.key_passes/Math.max(p.games,1)),             tag:'Play Driver',   cls:'tag-playmaker', tip:'Creates chances for teammates'},
+      {r:rank(tklpg+intpg,p=>(p.tackles+p.interceptions)/Math.max(p.games,1)), tag:'Lockdown', cls:'tag-guardian', tip:'Wins the ball consistently'},
     ]
-    .filter(f => f.r <= pct25) // must be in top 25%
-    .filter(f => !result.some(r => r.cls===f.cls || r.label===f.tag)) // no colour dupes
-    .filter(f => { // tag not already claimed by someone else in main auction
-      if (!_tagCache) return true;
-      return !Object.entries(_tagCache).some(([p, tags]) => p !== s.player && tags.includes(f.tag));
-    })
-    .sort((a,b) => a.r - b.r); // best rank first
+    .filter(f => f.r <= pct25)
+    .filter(f => !result.some(r => r.label === f.tag))
+    .filter(f => !allAuctionTags.has(f.tag)) // don't use tags already in the auction
+    .sort((a,b) => a.r - b.r);
 
     for (const f of fallbackCandidates) {
-      if (result.length >= 3) break;
+      if (result.length >= 2) break;
       result.push({label:f.tag, cls:f.cls, tip:f.tip});
-    }
-
-    // Last resort: if still under 3, drop the uniqueness requirement and just pick best stats
-    if (result.length < 3) {
-      const lastResort = [
-        {r:rank(gpg,  p=>p.goals/Math.max(p.games,1)),               tag:'Finisher',      cls:'tag-striker',   tip:'Scores consistently in the group'},
-        {r:rank(actpg,p=>(p.goals+p.assists+p.total_shots+p.tackles+p.interceptions)/Math.max(p.games,1)), tag:'Box to Box', cls:'tag-workhorse', tip:'High involvement every match'},
-        {r:rank(sotpg,p=>(p.shots_on_target||0)/Math.max(p.games,1)), tag:'Front Foot',   cls:'tag-target',    tip:'Keeps the team threatening'},
-        {r:rank(tklpg+intpg,p=>(p.tackles+p.interceptions)/Math.max(p.games,1)), tag:'Lockdown', cls:'tag-guardian', tip:'Wins the ball consistently'},
-        {r:rank(kppg, p=>p.key_passes/Math.max(p.games,1)),           tag:'Play Driver',  cls:'tag-playmaker', tip:'Creates chances for teammates'},
-        {r:rank(gkspg,p=>(p.goalkeeper_saves||0)/Math.max(p.games,1)),tag:'Fortress',     cls:'tag-sweeper',   tip:'Reliable defensive presence'},
-      ].filter(f => !result.some(r => r.cls===f.cls || r.label===f.tag))
-       .sort((a,b) => a.r - b.r);
-      for (const f of lastResort) {
-        if (result.length >= 3) break;
-        result.push({label:f.tag, cls:f.cls, tip:f.tip});
-      }
     }
   }
 
