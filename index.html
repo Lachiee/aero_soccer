@@ -3022,56 +3022,68 @@ function buildTagAuction() {
     tags.slice(1).forEach(t => { delete tagWinners[t.tag]; });
   });
 
-  // ── Assign tags: player-first approach guarantees exactly 2 per player ──
+  // ── Assign tags: player-first round-robin, exactly 2 per player ─────────
   const playerTags = {};
   players.forEach(p => { playerTags[p] = []; });
   const assignedTags = new Set();
 
-  // Build score map: player → [ {tag, score} ] sorted by score desc
-  const playerScores = {};
+  // Build per-player lists of won tags split into stat vs timestamp
+  const timeTagSet = new Set(['Clutch Factor','Icebreaker','Blitz','Momentum Shift',
+    'Last Laugh','Comeback Kid','Big Game Player','Leveller','Heartbreaker','Second Half Spark',
+    "Knife's Edge",'Insurance']);
+
+  const playerStatTags = {};   // tags won in stat auction
+  const playerTimeTags = {};   // tags won in time auction
   players.forEach(p => {
-    const m = metrics[p];
-    if (!m) return;
-    playerScores[p] = Object.entries(tagWinners)
-      .filter(([tag, winner]) => winner === p)
+    playerStatTags[p] = Object.entries(tagWinners)
+      .filter(([tag, winner]) => winner === p && !timeTagSet.has(tag))
+      .map(([tag]) => tag);
+    playerTimeTags[p] = Object.entries(tagWinners)
+      .filter(([tag, winner]) => winner === p && timeTagSet.has(tag))
       .map(([tag]) => tag);
   });
 
-  const timeTagSet = new Set(['Clutch Factor','Icebreaker','Blitz','Momentum Shift',
-    'Last Laugh','Comeback Kid','Big Game Player','Leveller','Heartbreaker','Second Half Spark']);
-
-  // Round-robin: each player picks their best unassigned tag, up to 2 rounds
-  for (let round = 0; round < 2; round++) {
-    // Prioritise players with fewest tags so far
-    const sortedPlayers = [...players].sort((a,b) => playerTags[a].length - playerTags[b].length);
-    for (const p of sortedPlayers) {
-      if (playerTags[p].length > round) continue; // already has enough for this round
-      const available = (playerScores[p] || []).filter(t => !assignedTags.has(t));
-      // Prefer stat tags in round 1, timestamp tags in round 2
-      const preferred = round === 0
-        ? available.filter(t => !timeTagSet.has(t))
-        : available;
-      const pick = preferred[0] || available[0];
-      if (pick) {
-        playerTags[p].push(pick);
-        assignedTags.add(pick);
-      }
-    }
+  // Round 1: every player gets their best unassigned STAT tag
+  const sortedByStatCount = [...players].sort((a,b) =>
+    playerStatTags[a].length - playerStatTags[b].length
+  );
+  for (const p of sortedByStatCount) {
+    const pick = playerStatTags[p].find(t => !assignedTags.has(t));
+    if (pick) { playerTags[p].push(pick); assignedTags.add(pick); }
   }
 
-  // Timestamp second-slot fill: for players who won a time tag but couldn't use it above
+  // Round 2: fill second slot — prefer timestamp tag, then next best stat tag
+  // Only give timestamp tag if player already has a stat tag (round 1 succeeded)
+  const sortedByTagCount = [...players].sort((a,b) => playerTags[a].length - playerTags[b].length);
+  for (const p of sortedByTagCount) {
+    if (playerTags[p].length >= 2) continue;
+    const hasStatTag = playerTags[p].length === 1;
+
+    // Try timestamp tag second (only if they already have a stat tag)
+    if (hasStatTag) {
+      const timePick = playerTimeTags[p].find(t => !assignedTags.has(t));
+      if (timePick) { playerTags[p].push(timePick); assignedTags.add(timePick); continue; }
+    }
+
+    // Try next stat tag
+    const statPick = playerStatTags[p].find(t => !assignedTags.has(t));
+    if (statPick) { playerTags[p].push(statPick); assignedTags.add(statPick); continue; }
+  }
+
+  // Timestamp fill: unassigned time tags go to the highest-eligible player with room
+  // who already has a stat tag
   const timeTagOrder = ['Clutch Factor','Icebreaker','Blitz','Momentum Shift',
     'Last Laugh','Comeback Kid','Big Game Player','Leveller','Heartbreaker','Second Half Spark'];
   const scoreFnMap = {
-    'Clutch Factor':   m => m.lateGoals>=2?m.lateGoals:0,
-    'Icebreaker':      m => m.openers>=2?m.openers:0,
-    'Blitz':           m => m.blitzMatches>=2?m.blitzMatches:0,
-    'Momentum Shift':  m => m.trueEqualisers>=2?m.trueEqualisers:0,
-    'Last Laugh':      m => m.finishers>=2?m.finishers:0,
-    'Comeback Kid':    m => m.comebackGoals>=3?m.comebackGoals:0,
-    'Big Game Player': m => { const big=matchList.filter(x=>x.goalsA+x.goalsB>=20); if(big.length<4)return 0; const s=big.flatMap(x=>[...x.teamA,...x.teamB]).filter(r=>r.player===m.ps.player); if(s.length<3)return 0; const bgpg=s.reduce((a,r)=>a+Number(r.goals||0),0)/s.length; return bgpg>m.gpg*1.2?bgpg:0; },
-    'Leveller':        m => m.equaliserAssists>=2?m.equaliserAssists:0,
-    'Heartbreaker':    m => (m.ps.post||0)*m.postpg,
+    'Clutch Factor':    m => m.lateGoals>=2?m.lateGoals:0,
+    'Icebreaker':       m => m.openers>=2?m.openers:0,
+    'Blitz':            m => m.blitzMatches>=2?m.blitzMatches:0,
+    'Momentum Shift':   m => m.trueEqualisers>=2?m.trueEqualisers:0,
+    'Last Laugh':       m => m.finishers>=2?m.finishers:0,
+    'Comeback Kid':     m => m.comebackGoals>=3?m.comebackGoals:0,
+    'Big Game Player':  m => { const big=matchList.filter(x=>x.goalsA+x.goalsB>=20); if(big.length<4)return 0; const s=big.flatMap(x=>[...x.teamA,...x.teamB]).filter(r=>r.player===m.ps.player); if(s.length<3)return 0; const bgpg=s.reduce((a,r)=>a+Number(r.goals||0),0)/s.length; return bgpg>m.gpg*1.2?bgpg:0; },
+    'Leveller':         m => m.equaliserAssists>=2?m.equaliserAssists:0,
+    'Heartbreaker':     m => (m.ps.post||0)*m.postpg,
     'Second Half Spark':m => m.secondHalfGoals>m.firstHalfGoals?m.secondHalfGoals-m.firstHalfGoals:0,
   };
   timeTagOrder.forEach(label => {
@@ -3079,10 +3091,14 @@ function buildTagAuction() {
     const fn = scoreFnMap[label];
     if (!fn) return;
     const eligible = players
-      .filter(p => { const m=metrics[p]; return m && m.ps.games>=10 && fn(m)>0; })
+      .filter(p => {
+        const m = metrics[p];
+        // Must have a stat tag already, and meet the time criteria
+        return m && m.ps.games>=10 && fn(m)>0 && playerTags[p].length===1 && !timeTagSet.has(playerTags[p][0]);
+      })
       .sort((a,b) => fn(metrics[b]) - fn(metrics[a]));
     for (const p of eligible) {
-      if (playerTags[p].length < 2 && !playerTags[p].includes(label)) {
+      if (!playerTags[p].includes(label)) {
         playerTags[p].push(label);
         assignedTags.add(label);
         break;
