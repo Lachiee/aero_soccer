@@ -2559,15 +2559,24 @@ const TAG_DEFS = {
   'Woodwork Warrior':  { cls:'tag-wizard',    tip:'Hits the woodwork more per game than anyone — constantly inches away from spectacular goals that deserve better' },
   'Showtime':          { cls:'tag-wizard',    tip:'Nutmegs in games where they also score or assist — delivers crowd-pleasing performances in the biggest moments' },
   'Breaker':           { cls:'tag-wizard',    tip:'Wins tackles and nutmegs opponents — a rare combination of defensive physicality and technical flair in one player' },
+  'The Interceptor':   { cls:'tag-guardian',  tip:'Cuts out more attacks per game than anyone — reads the game at a completely different level to everyone else in the group' },
+  'Postman':           { cls:'tag-striker',   tip:'Hits the woodwork more than anyone by a distance — the most relentlessly dangerous attacker who never stops testing the frame' },
+  'Conductor':         { cls:'tag-playmaker', tip:'Leads in assists while also winning possession through interceptions — orchestrates attacks from start to finish both ways' },
+  'Battering Ram':     { cls:'tag-guardian',  tip:'Most tackles combined with most key passes — wins the ball more physically than anyone then immediately drives attacks forward' },
+  'Box to Box':        { cls:'tag-workhorse', tip:'Highest combined shots and tackles per game — covers every blade of grass and impacts both penalty areas every single match' },
+  'The Magician':      { cls:'tag-wizard',    tip:'Most nutmegs per game combined with elite interceptions — beats defenders with skill and then immediately wins the ball back' },
+  'The Organiser':     { cls:'tag-playmaker', tip:'Elite key passes combined with high defensive involvement — controls the tempo of play and sets up attacks from deep positions' },
+  'Shadow Striker':    { cls:'tag-striker',   tip:'Scores frequently and assists at a high rate without dominating the raw stats — consistently in the right place at the right time' },
+  'The Commander':     { cls:'tag-sweeper',   tip:'Most goalkeeper saves per game in the group by a clear margin — dominates the goal and commands the area like no one else' },
+  'Rampart':           { cls:'tag-blocker',   tip:'Most blocks per game in the group — gets their body in front of more shots and attacks than anyone, the ultimate defensive shield' },
+  'Double Shift':      { cls:'tag-workhorse', tip:'High saves combined with a significant attacking contribution — gives everything at both ends and never takes a rest' },
+  'The Architect':     { cls:'tag-playmaker', tip:'Creates from deep with elite key passes and also contributes defensively — the engine behind every attack before it even starts' },
+  'Disruptor':         { cls:'tag-guardian',  tip:'Tackles and interceptions far above their offensive output — exists specifically to break up play and frustrate attackers' },
   // Creating
-  'Architect':         { cls:'tag-playmaker', tip:'Highest assists per game — sets up more goals than anyone and is the main creative force in every attack' },
-  'Thread Needle':     { cls:'tag-playmaker', tip:'Most key passes per game — consistently finds dangerous passes through tight spaces that unlock defences' },
   'Puppet Master':     { cls:'tag-playmaker', tip:'Elite in both assists and key passes — controls the entire flow of attacking play from creation to delivery' },
-  'The Supplier':      { cls:'tag-playmaker', tip:'Balances assists with high-quality key passes — a reliable creator who feeds teammates both directly and indirectly' },
   'Pathfinder':        { cls:'tag-playmaker', tip:'Assists the widest variety of teammates — connects the whole team together and finds whoever is in space' },
   'Play Driver':       { cls:'tag-playmaker', tip:'Highest combined scoring and creating output — central to almost every attack with both goals and assists' },
   'Traffic Controller':{ cls:'tag-playmaker', tip:'Wins possession through interceptions and immediately restarts attacks with key passes — reads the game in both directions' },
-  'Safety Valve':      { cls:'tag-playmaker', tip:'Intercepts danger and immediately creates attack — the most reliable player for winning possession and restarting play' },
   'Brace Builder':     { cls:'tag-playmaker', tip:'Set up 2+ goals in the same match more often than anyone — the most dangerous creator when they get going in a single game' },
   'Leveller':          { cls:'tag-playmaker', tip:'Most assists that directly equalled the score — sets up teammates to drag the team back into matches at the critical moment' },
   // Combo
@@ -2575,20 +2584,13 @@ const TAG_DEFS = {
   'One-Two Specialist':{ cls:'tag-engine',    tip:'Has been assisted by the same teammate more than any other pair — the most productive scoring partnership in the group' },
   'Duo Link':          { cls:'tag-engine',    tip:'Has assisted the same scorer more times than any other pair — forms the deadliest and most consistent attacking combination' },
   // Defending
-  'Enforcer':          { cls:'tag-guardian',  tip:'Wins more tackles per game than anyone — the most physical presence who dominates direct duels and wins possession' },
-  'Ball Hawk':         { cls:'tag-guardian',  tip:'Most interceptions per game — reads the game better than anyone and cuts out attacks before they develop' },
   'Lockdown':          { cls:'tag-guardian',  tip:'Blocks-dominant defensive force — gets in the way of shots and challenges more than anyone in the group' },
-  'Engine Room':       { cls:'tag-guardian',  tip:'Combines defensive work with playmaking — wins the ball through tackles and interceptions then drives attacks forward' },
   'Hunter':            { cls:'tag-guardian',  tip:'Intercepts and scores — tracks down turnovers defensively then capitalises going forward at the highest rate' },
   // GK/Blocking
-  'Brick Wall':        { cls:'tag-blocker',   tip:'Blocks more shots per game than anyone — throws themselves in front of attempts more than any other player' },
-  'Shot Stopper':      { cls:'tag-sweeper',   tip:'Highest GK saves per game — repeatedly bails the team out and is the single biggest reason they stay in matches' },
   'Fortress':          { cls:'tag-blocker',   tip:'Elite at both blocking shots and making saves — must be high in both stats, the complete multi-layer defensive presence' },
-  'Clean Hands':       { cls:'tag-sweeper',   tip:'GK-dominant defensive wall — makes the most goalkeeper saves while also contributing through outfield blocks' },
   // Hybrid
   'Two-Way Engine':    { cls:'tag-workhorse', tip:'Scores and tackles at the same elite rate — a genuinely rare dual-threat player who dominates both ends of the pitch' },
   'Swiss Army Knife':  { cls:'tag-workhorse', tip:'Most balanced stat profile in the group — contributes meaningfully across scoring, creating, defending and goalkeeping' },
-  'Iron Lung':         { cls:'tag-workhorse', tip:'Highest total actions per game — involved in attack and defence more than anyone and never stops running' },
   'Mr Reliable':       { cls:'tag-workhorse', tip:'Most consistent contributor across matches — delivers solid performances every single session with minimal variance' },
   'Lone Wolf':         { cls:'tag-workhorse', tip:'Scores without receiving tracked assists — creates and converts their own chances with minimal direct help from others' },
   // Timestamp — goal scoring
@@ -2612,15 +2614,16 @@ const TAG_DEFS = {
 let _tagCache = null; // { playerName: [{label,cls,tip},...] }
 
 function buildTagAuction() {
-  // Recency gate: active pool = played in last 10 matches AND 5+ games
+  // Use filtered stats (respects L10 / season / all toggle)
+  const ds = getDisplayStats();
+  // Recency gate: active pool = played in last 10 matches AND 5+ games in displayed window
   const last10Ids = [...matchList].sort((a,b)=>b.date.localeCompare(a.date)).slice(0,10).map(m=>m.id);
   const isActive = (player) => last10Ids.some(mid => {
     const m = matchList.find(x=>x.id===mid);
     return m && [...m.teamA,...m.teamB].some(r=>r.player===player);
   });
 
-  // Use all-time playerStats for metrics — timestamp tags should use career data
-  const allStats = Object.values(playerStats).filter(p => p.games >= 5 && isActive(p.player));
+  const allStats = Object.values(ds).filter(p => p.games >= 5 && isActive(p.player));
   if (!allStats.length) return {};
 
   const n = (v) => Number(v)||0;
@@ -2758,6 +2761,7 @@ function buildTagAuction() {
     metrics[ps.player] = {
       ps, gpg, apg, spg, sotpg, offpg, kppg, intpg, tklpg, blkpg, gkspg, nmpg, postpg,
       conv, acc, actpg, totalAct: totalAct/gm,
+      defpg: (tklpg+intpg+blkpg),
       dualGames, multiGoalGames, uniqueAssisted,
       topProvider, topReceiver, unassistedGoals,
       myGoalEvents, avgMin,
@@ -2864,43 +2868,117 @@ function buildTagAuction() {
   award('Showtime',         m => m.nmpg*(m.dualGames+m.multiGoalGames+1));
   award('Breaker',          m => m.tklpg+m.nmpg*1.5);
 
-  // Creating — clearly distinct
-  award('Architect',        m => m.apg);
-  award('Thread Needle',    m => m.kppg);
+  // Creating — Conductor owns assists, The Organiser owns KP+tackles, Puppet Master owns the combo
   award('Puppet Master',    m => Math.min(m.apg,m.kppg)*2);
-  award('The Supplier',     m => m.apg*0.4+m.kppg*0.6);
   award('Pathfinder',       m => m.uniqueAssisted*2+m.apg*0.1);
   award('Play Driver',      m => (m.gpg+m.apg)*0.5+m.kppg*0.3);
   award('Traffic Controller',m => m.kppg*0.4+m.intpg*1.6);
-  award('Safety Valve',     m => m.apg*0.2+m.intpg*2);
 
   // Combo
   award('Combo King',       m => m.dualGames);
   award('Duo Link',         m => m.topProvider?m.topProvider.goals:0);
   award('One-Two Specialist',m => m.topReceiver?m.topReceiver.goals:0);
 
-  // Defending — each primary stat distinct
-  award('Enforcer',         m => m.tklpg);
-  award('Ball Hawk',        m => m.intpg);
+  // Defending — Battering Ram owns tackles, The Interceptor owns interceptions
   award('Lockdown',         m => m.blkpg*2+m.tklpg*0.3+m.intpg*0.3);
-  award('Engine Room',      m => m.kppg*0.8+m.tklpg*0.6+m.intpg*0.6);
   award('Hunter',           m => m.intpg*0.6+m.gpg*1.4);
 
-  // GK/Blocking — truly distinct
-  award('Brick Wall',       m => m.blkpg);
-  award('Shot Stopper',     m => m.gkspg);
-  award('Fortress',         m => Math.min(m.blkpg,m.gkspg)*3);
-  award('Clean Hands',      m => m.gkspg*1.8+m.blkpg*0.2);
+  // GK/Blocking — The Commander owns saves, Rampart owns blocks
+  award('Fortress',         m => Math.min(m.blkpg,m.gkspg)*3); // needs both high — different winner
 
   // Hybrid
   award('Two-Way Engine',   m => Math.min(m.gpg,m.tklpg)*4);
   award('Swiss Army Knife', m => m.stdDev<0.4?10-m.stdDev*20:0);
-  award('Iron Lung',        m => m.actpg);
   award('Lone Wolf',        m => m.asScorer.length===0&&m.gpg>0?m.gpg*3:0);
   award('Mr Reliable',      m => m.reliabilityScore);
 
   // Timestamp
   awardTime('Clutch Factor',    m => m.lateGoals>=2?m.lateGoals:0);
+  // ── Unique personality tags — very specific criteria, one winner each ──
+  // The Interceptor: Richard — elite interceptions (uses all-time stats for stability)
+  award('The Interceptor',  m => {
+    const pool2 = Object.values(playerStats).filter(p=>p.games>=8);
+    const sorted = pool2.map(p=>p.interceptions/Math.max(p.games,1)).sort((a,b)=>b-a);
+    const gap = sorted.length>1 ? sorted[0]-sorted[1] : 0;
+    return (m.intpg === sorted[0] && gap > 2.0) ? m.intpg * 2 : m.intpg; // gap bonus for standout leader
+  });
+  // Postman: Amin — most posts hit, must be 2× average
+  award('Postman',          m => {
+    const pool2 = Object.values(playerStats).filter(p=>p.games>=8);
+    const avg = pool2.reduce((s,p)=>s+(p.post||0)/Math.max(p.games,1),0)/Math.max(pool2.length,1);
+    return m.postpg > avg*1.8 ? m.postpg*4 : 0;
+  });
+  // Conductor: Gio — top assists AND high interceptions (creative interceptor)
+  // Distinguished from Architect by being assist-dominant not KP-dominant
+  award('Conductor',        m => {
+    const topAssist = Object.values(metrics).filter(x=>x.apg>m.apg).length < 2;
+    return topAssist ? m.apg*4 + m.intpg*0.5 : 0; // must be #1 in assists
+  });
+  // Battering Ram: Andres — highest tackles per game, must also have decent KP
+  // Distinguished from Enforcer by requiring high KP too
+  award('Battering Ram',    m => {
+    const topTkl = Object.values(metrics).filter(x=>x.tklpg>m.tklpg).length === 0; // must be #1
+    const pool2 = Object.values(playerStats).filter(p=>p.games>=5);
+    const avgKP = pool2.reduce((s,p)=>s+p.key_passes/Math.max(p.games,1),0)/Math.max(pool2.length,1);
+    return (topTkl && m.kppg > avgKP*1.5) ? m.tklpg*3 + m.kppg : 0;
+  });
+  // Box to Box: Jake — highest combined shots + tackles (not Andres who is low shots)
+  // Andres wins Battering Ram; Jake wins Box to Box via shot volume
+  award('Box to Box',       m => m.spg*0.8 + m.tklpg*1.5); // shots weighted more — Jake's identity
+  // The Magician: Austin — top nutmegs AND top interceptions (flair + defensive)
+  award('The Magician',     m => {
+    const topNM = Object.values(metrics).filter(x=>x.nmpg>m.nmpg).length < 2;
+    const topINT = Object.values(metrics).filter(x=>x.intpg>m.intpg).length < 3;
+    return (topNM && topINT) ? m.nmpg*4 + m.intpg*0.5 : 0;
+  });
+  // The Organiser: James2 — high KP + high tackles but NOT top assists (pure midfield engine)
+  // Distinguished from Conductor (assist-dominant) and Architect (KP + int)
+  award('The Organiser',    m => {
+    const notTopAssist = Object.values(metrics).filter(x=>x.apg>m.apg).length >= 2; // not top assister
+    return notTopAssist ? m.kppg*2 + m.tklpg*1.2 : 0;
+  });
+  // Shadow Striker: David — goals + assists but below-average shots (efficient)
+  award('Shadow Striker',   m => {
+    const pool2 = Object.values(playerStats).filter(p=>p.games>=5);
+    const avgS = pool2.reduce((s,p)=>s+p.total_shots/Math.max(p.games,1),0)/Math.max(pool2.length,1);
+    return (m.gpg>=1.0 && m.apg>=1.0 && m.spg<avgS*0.75) ? (m.gpg+m.apg)*3 : 0;
+  });
+  // The Commander: Xavier — #1 GK saves per game (goalkeeper identity)
+  // Distinguished from Double Shift by being purely GK-dominant with low attack
+  award('The Commander',    m => {
+    const topSaves = Object.values(metrics).filter(x=>x.gkspg>m.gkspg).length === 0; // must be #1
+    return topSaves ? m.gkspg*3 : 0;
+  });
+  // Rampart: Lachlan — #1 blocks per game (shield identity)
+  award('Rampart',          m => {
+    const topBlocks = Object.values(metrics).filter(x=>x.blkpg>m.blkpg).length === 0; // must be #1
+    return topBlocks ? m.blkpg*5 : 0;
+  });
+  // Double Shift: James — high saves AND significant goals (GK who also scores)
+  // Distinguished from The Commander (pure GK) by requiring attacking output
+  award('Double Shift',     m => {
+    const pool2 = Object.values(playerStats).filter(p=>p.games>=8);
+    const avgG = pool2.reduce((s,p)=>s+p.goals/Math.max(p.games,1),0)/Math.max(pool2.length,1);
+    return (m.gkspg>=4 && m.gpg>=avgG*1.2) ? m.gkspg*0.5 + m.gpg*3 : 0; // goals weighted — James's scoring
+  });
+  // The Architect: James2/Gio — top KP + above-avg interceptions
+  // This will go to whoever has best KP+INT combo not already winning Conductor
+  award('The Architect',    m => {
+    const notConductorWinner = Object.values(metrics).filter(x=>x.apg>m.apg).length >= 1;
+    const topKP = Object.values(metrics).filter(x=>x.kppg>m.kppg).length < 3;
+    const pool2 = Object.values(playerStats).filter(p=>p.games>=5);
+    const avgI = pool2.reduce((s,p)=>s+p.interceptions/Math.max(p.games,1),0)/Math.max(pool2.length,1);
+    return (notConductorWinner && topKP && m.intpg>avgI) ? m.kppg*2+m.intpg*0.8 : 0;
+  });
+  // Disruptor: Dexter/Richard — very high tackles+interceptions, low goals
+  // Richard already wins The Interceptor so Disruptor targets others
+  award('Disruptor',        m => {
+    const pool2 = Object.values(playerStats).filter(p=>p.games>=5);
+    const avgG = pool2.reduce((s,p)=>s+p.goals/Math.max(p.games,1),0)/Math.max(pool2.length,1);
+    const highDef = m.tklpg + m.intpg >= 15; // must have elite combined tackles+ints
+    return (highDef && m.gpg < avgG*0.4) ? (m.tklpg+m.intpg)*1.5 : 0;
+  });
+
   awardTime('Icebreaker',       m => m.openers>=2?m.openers:0);
   awardTime('Blitz',            m => m.blitzMatches>=2?m.blitzMatches:0);
   awardTime('Blitz',            m => m.blitzMatches>=2?m.blitzMatches:0);
@@ -2944,73 +3022,72 @@ function buildTagAuction() {
     tags.slice(1).forEach(t => { delete tagWinners[t.tag]; });
   });
 
-  // Build reverse map: player → [tags they won], capped at 3 per player
-  // Process in order: stat tags first, then timestamp tags
-  // This ensures timestamp tags aren't crowded out by players who win everything
+  // Build reverse map: player → [tags they won], capped at exactly 2 per player
+  // No tag can appear on more than one player (global uniqueness)
   const playerTags = {};
   players.forEach(p => { playerTags[p] = []; });
+  const assignedTags = new Set(); // global uniqueness tracker
 
   const statTagOrder = Object.keys(tagWinners).filter(t =>
-    !['Quick Strike','Clutch Factor','Icebreaker','Momentum Shift','Last Laugh','Comeback Kid','Big Game Player'].includes(t)
+    !['Clutch Factor','Icebreaker','Blitz','Momentum Shift','Last Laugh','Comeback Kid','Big Game Player','Leveller'].includes(t)
   );
   const timeTagOrder = ['Clutch Factor','Icebreaker','Blitz','Momentum Shift','Last Laugh','Comeback Kid','Big Game Player','Leveller'];
 
-  // First pass: assign stat tags, max 2 per player (leave room for time tags)
+  // First pass: each player gets their top 1 stat tag
   statTagOrder.forEach(label => {
+    if (assignedTags.has(label)) return;
     const winner = tagWinners[label];
-    if (winner && playerTags[winner] && playerTags[winner].length < 2) {
+    if (winner && playerTags[winner] && playerTags[winner].length < 1) {
       playerTags[winner].push(label);
+      assignedTags.add(label);
     }
   });
 
-  // Second pass: assign timestamp tags — each goes to its winner regardless of cap
-  // but if winner already has 3, reassign to next best eligible player
+  // Second pass: timestamp tags — fill second slot for players who haven't got one
   timeTagOrder.forEach(label => {
+    if (assignedTags.has(label)) return;
     const winner = tagWinners[label];
     if (!winner) return;
-    if (playerTags[winner] && playerTags[winner].length < 3) {
+    if (playerTags[winner] && playerTags[winner].length < 2) {
       playerTags[winner].push(label);
+      assignedTags.add(label);
     } else {
-      // Winner is full — give to next best eligible player who has room
-      // Find all eligible players for this tag and pick highest scorer with < 3 tags
+      // Winner is full — find next best eligible with room
       const scoreFnMap = {
-        'Clutch Factor':      m => m.lateGoals>=2?m.lateGoals:0,
-        'Icebreaker':         m => m.openers>=2?m.openers:0,
-        'Blitz':              m => m.blitzMatches>=2?m.blitzMatches:0,
-                    'Momentum Shift':     m => m.trueEqualisers>=2?m.trueEqualisers:0,
-        'Last Laugh':         m => m.finishers>=2?m.finishers:0,
-        'Comeback Kid':       m => m.comebackGoals>=3?m.comebackGoals:0,
-        'Big Game Player':    m => { const big=matchList.filter(x=>x.goalsA+x.goalsB>=20); if(big.length<4)return 0; const s=big.flatMap(x=>[...x.teamA,...x.teamB]).filter(r=>r.player===m.ps.player); if(s.length<3)return 0; const bgpg=s.reduce((a,r)=>a+Number(r.goals||0),0)/s.length; return bgpg>m.gpg*1.2?bgpg:0; },
-              'Leveller':           m => m.equaliserAssists>=2?m.equaliserAssists:0,
-            };
+        'Clutch Factor':   m => m.lateGoals>=2?m.lateGoals:0,
+        'Icebreaker':      m => m.openers>=2?m.openers:0,
+        'Blitz':           m => m.blitzMatches>=2?m.blitzMatches:0,
+        'Momentum Shift':  m => m.trueEqualisers>=2?m.trueEqualisers:0,
+        'Last Laugh':      m => m.finishers>=2?m.finishers:0,
+        'Comeback Kid':    m => m.comebackGoals>=3?m.comebackGoals:0,
+        'Big Game Player': m => { const big=matchList.filter(x=>x.goalsA+x.goalsB>=20); if(big.length<4)return 0; const s=big.flatMap(x=>[...x.teamA,...x.teamB]).filter(r=>r.player===m.ps.player); if(s.length<3)return 0; const bgpg=s.reduce((a,r)=>a+Number(r.goals||0),0)/s.length; return bgpg>m.gpg*1.2?bgpg:0; },
+        'Leveller':        m => m.equaliserAssists>=2?m.equaliserAssists:0,
+      };
       const fn = scoreFnMap[label];
       if (!fn) return;
       const eligible = players
         .filter(p => {
           const m = metrics[p];
-          const allTimeGames = (playerStats[p]||m.ps).games||0;
-          return allTimeGames>=10 && m.ps.goals>0 && m.myGoalEvents.length>=2 && fn(m)>0;
+          return m && m.ps.games>=10 && m.ps.goals>0 && m.myGoalEvents.length>=2 && fn(m)>0;
         })
         .sort((a,b) => fn(metrics[b]) - fn(metrics[a]));
       for (const alt of eligible) {
-        if (playerTags[alt] && playerTags[alt].length < 3 && !playerTags[alt].includes(label)) {
+        if (playerTags[alt] && playerTags[alt].length < 2 && !playerTags[alt].includes(label)) {
           playerTags[alt].push(label);
+          assignedTags.add(label);
           break;
         }
       }
     }
   });
 
-  // Third pass: fill anyone with < 3 tags using remaining stat tags
+  // Third pass: fill second slot with next best unassigned stat tag
   statTagOrder.forEach(label => {
+    if (assignedTags.has(label)) return;
     const winner = tagWinners[label];
-    if (!winner) return;
-    players.forEach(p => {
-      // already assigned or already has 3
-    });
-    // Give to winner if they still have room
-    if (winner && playerTags[winner] && playerTags[winner].length < 3 && !playerTags[winner].includes(label)) {
+    if (winner && playerTags[winner] && playerTags[winner].length < 2 && !playerTags[winner].includes(label)) {
       playerTags[winner].push(label);
+      assignedTags.add(label);
     }
   });
 
@@ -3052,18 +3129,10 @@ function getFifaTags(s, cs) {
     const pct25 = Math.ceil(pool.length * 0.25);
 
     const fallbackCandidates = [
-      {r:rank(gkspg,p=>(p.goalkeeper_saves||0)/Math.max(p.games,1)), tag:'Shot Stopper',   cls:'tag-sweeper',   tip:'Among the best goalkeepers in the group'},
-      {r:rank(tklpg,p=>p.tackles/Math.max(p.games,1)),               tag:'Enforcer',       cls:'tag-guardian',  tip:'Among the best tacklers in the group'},
-      {r:rank(intpg,p=>p.interceptions/Math.max(p.games,1)),         tag:'Ball Hawk',      cls:'tag-guardian',  tip:'Among the best interceptors in the group'},
-      {r:rank(kppg, p=>p.key_passes/Math.max(p.games,1)),            tag:'Thread Needle',  cls:'tag-playmaker', tip:'Among the best creators in the group'},
-      {r:rank(apg,  p=>p.assists/Math.max(p.games,1)),               tag:'Architect',      cls:'tag-playmaker', tip:'Among the top assisters in the group'},
       {r:rank(gpg,  p=>p.goals/Math.max(p.games,1)),                 tag:'Finisher',       cls:'tag-striker',   tip:'Among the top scorers in the group'},
-      {r:rank(blkpg,p=>(p.blocks||0)/Math.max(p.games,1)),           tag:'Brick Wall',     cls:'tag-blocker',   tip:'Among the best shot blockers in the group'},
       {r:rank(nmpg, p=>(p.nutmegs||0)/Math.max(p.games,1)),          tag:'Sauce Merchant', cls:'tag-wizard',    tip:'Among the top flair players in the group'},
       {r:rank(sotpg,p=>(p.shots_on_target||0)/Math.max(p.games,1)),  tag:'Front Foot',     cls:'tag-target',    tip:'Among the most threatening attackers in the group'},
-      {r:rank(actpg,p=>(p.goals+p.assists+p.total_shots+p.tackles+p.interceptions)/Math.max(p.games,1)), tag:'Relentless', cls:'tag-workhorse', tip:'Among the most active players in the group'},
-      {r:rank(gkspg+blkpg,p=>((p.goalkeeper_saves||0)+(p.blocks||0))/Math.max(p.games,1)), tag:'Fortress', cls:'tag-blocker', tip:'Strong defensive presence in the group'},
-      {r:rank(apg+intpg,p=>(p.assists+p.interceptions)/Math.max(p.games,1)), tag:'Safety Valve', cls:'tag-playmaker', tip:'Wins possession and restarts attacks'},
+      {r:rank(gkspg+blkpg,p=>((p.goalkeeper_saves||0)+(p.blocks||0))/Math.max(p.games,1)), tag:'Fortress', cls:'tag-blocker', tip:'Strong across both saves and blocks'},
       {r:rank(gpg+tklpg,p=>(p.goals+p.tackles)/Math.max(p.games,1)), tag:'Two-Way Engine', cls:'tag-workhorse', tip:'Contributes in both attack and defense'},
     ]
     .filter(f => f.r <= pct25) // must be in top 25%
@@ -3083,11 +3152,11 @@ function getFifaTags(s, cs) {
     if (result.length < 3) {
       const lastResort = [
         {r:rank(gpg,  p=>p.goals/Math.max(p.games,1)),               tag:'Finisher',      cls:'tag-striker',   tip:'Scores consistently in the group'},
-        {r:rank(actpg,p=>(p.goals+p.assists+p.total_shots+p.tackles+p.interceptions)/Math.max(p.games,1)), tag:'Relentless', cls:'tag-workhorse', tip:'High involvement every match'},
+        {r:rank(actpg,p=>(p.goals+p.assists+p.total_shots+p.tackles+p.interceptions)/Math.max(p.games,1)), tag:'Box to Box', cls:'tag-workhorse', tip:'High involvement every match'},
         {r:rank(sotpg,p=>(p.shots_on_target||0)/Math.max(p.games,1)), tag:'Front Foot',   cls:'tag-target',    tip:'Keeps the team threatening'},
-        {r:rank(tklpg,p=>p.tackles/Math.max(p.games,1)),              tag:'Enforcer',     cls:'tag-guardian',  tip:'Wins the ball consistently'},
-        {r:rank(kppg, p=>p.key_passes/Math.max(p.games,1)),           tag:'Thread Needle',cls:'tag-playmaker', tip:'Creates chances for teammates'},
-        {r:rank(gkspg,p=>(p.goalkeeper_saves||0)/Math.max(p.games,1)),tag:'Shot Stopper', cls:'tag-sweeper',   tip:'Reliable in goal'},
+        {r:rank(tklpg+intpg,p=>(p.tackles+p.interceptions)/Math.max(p.games,1)), tag:'Lockdown', cls:'tag-guardian', tip:'Wins the ball consistently'},
+        {r:rank(kppg, p=>p.key_passes/Math.max(p.games,1)),           tag:'Play Driver',  cls:'tag-playmaker', tip:'Creates chances for teammates'},
+        {r:rank(gkspg,p=>(p.goalkeeper_saves||0)/Math.max(p.games,1)),tag:'Fortress',     cls:'tag-sweeper',   tip:'Reliable defensive presence'},
       ].filter(f => !result.some(r => r.cls===f.cls || r.label===f.tag))
        .sort((a,b) => a.r - b.r);
       for (const f of lastResort) {
@@ -3119,7 +3188,7 @@ const LEADER_STATS = [
 ];
 
 function getLeaderTags(playerName) {
-  const pool = Object.values(playerStats).filter(p => p.games >= 8);
+  const pool = Object.values(getDisplayStats()).filter(p => p.games >= 5);
   if (!pool.length) return [];
   const leaders = [];
   for (const stat of LEADER_STATS) {
