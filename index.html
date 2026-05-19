@@ -5237,7 +5237,7 @@ function renderProfile(name) {
       const pos  = bannerPos[name]  != null ? bannerPos[name]  : 50;
       const zoom = bannerZoom[name] != null ? bannerZoom[name] : 100;
       const objPos = `center ${pos}%`;
-      const mediaStyle = `width:100%;height:100%;object-fit:cover;object-position:${objPos};display:block;transform:scale(${zoom/100});transform-origin:center ${pos}%;position:relative;z-index:1`;
+      const mediaStyle = `width:100%;height:100%;object-fit:cover;object-position:${objPos};display:block;transform:scale(${zoom/100});transform-origin:center ${pos}%`;
       return `
     <div id="banner-wrap-${gifKey}" style="position:relative;width:100%;height:${bannerHeights[name]||180}px;border-radius:14px;overflow:hidden;margin-bottom:0;background:linear-gradient(135deg,var(--card),var(--card2));border:1px solid var(--border);border-bottom-left-radius:0;border-bottom-right-radius:0">
       ${playerGifs[name]
@@ -5260,7 +5260,7 @@ function renderProfile(name) {
       }
       ${adminMode ? `
       <!-- Banner Admin Controls -->
-      <div style="position:absolute;bottom:0;left:0;right:0;background:linear-gradient(transparent,rgba(0,0,0,.75));padding:20px 12px 8px;display:flex;flex-direction:column;gap:6px" onclick="event.stopPropagation()">
+      <div style="position:absolute;bottom:0;left:0;right:0;z-index:10;background:linear-gradient(transparent,rgba(0,0,0,.75));padding:20px 12px 8px;display:flex;flex-direction:column;gap:6px" onclick="event.stopPropagation()">
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
 
           <!-- Height -->
