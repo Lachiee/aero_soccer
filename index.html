@@ -5267,8 +5267,7 @@ function renderProfile(name) {
           <div style="display:flex;align-items:center;gap:5px;background:rgba(0,0,0,.5);border-radius:6px;padding:3px 8px;backdrop-filter:blur(4px)">
             <span style="font-size:.58rem;color:rgba(255,255,255,.5);font-family:'Barlow Condensed',sans-serif;white-space:nowrap">HEIGHT</span>
             <input type="range" min="80" max="420" step="10" value="${bannerHeights[name]||180}"
-              oninput="const w=document.getElementById('banner-wrap-${gifKey}');if(w)w.style.height=this.value+'px';document.getElementById('bh-val-${gifKey}').textContent=this.value+'px'"
-              onchange="bannerHeights['${name.replace(/'/g,"\\'")}']= parseInt(this.value);saveSettings()"
+              oninput="const w=document.getElementById('banner-wrap-${gifKey}');if(w)w.style.height=this.value+'px';document.getElementById('bh-val-${gifKey}').textContent=this.value+'px';bannerHeights['${name.replace(/'/g,"\\'")}']= parseInt(this.value)"
               style="width:65px;accent-color:var(--lime);cursor:pointer">
             <span id="bh-val-${gifKey}" style="font-size:.65rem;color:var(--lime);font-family:'Bebas Neue',sans-serif;min-width:34px">${bannerHeights[name]||180}px</span>
           </div>
@@ -5279,16 +5278,10 @@ function renderProfile(name) {
             <input type="range" min="0" max="100" step="5" value="${pos}"
               oninput="
                 const p=this.value;
-                const z=${zoom}/100;
                 const el=document.getElementById('banner-wrap-${gifKey}');
-                if(el){
-                  el.querySelectorAll('img,video').forEach(m=>{
-                    m.style.objectPosition='center '+p+'%';
-                    m.style.transformOrigin='center '+p+'%';
-                  });
-                }
-                document.getElementById('bp-val-${gifKey}').textContent=p+'%'"
-              onchange="bannerPos['${name.replace(/'/g,"\\'")}']= parseInt(this.value);saveSettings()"
+                if(el) el.querySelectorAll('img,video').forEach(m=>{m.style.objectPosition='center '+p+'%';m.style.transformOrigin='center '+p+'%'});
+                document.getElementById('bp-val-${gifKey}').textContent=p+'%';
+                bannerPos['${name.replace(/'/g,"\\'")}']= parseInt(p)"
               style="width:65px;accent-color:var(--amber);cursor:pointer">
             <span id="bp-val-${gifKey}" style="font-size:.65rem;color:var(--amber);font-family:'Bebas Neue',sans-serif;min-width:28px">${pos}%</span>
           </div>
@@ -5301,21 +5294,16 @@ function renderProfile(name) {
                 const z=this.value/100;
                 const p=document.getElementById('bp-val-${gifKey}')?.textContent?.replace('%','')||50;
                 const el=document.getElementById('banner-wrap-${gifKey}');
-                if(el){
-                  el.querySelectorAll('img,video').forEach(m=>{
-                    m.style.transform='scale('+z+')';
-                    m.style.transformOrigin='center '+p+'%';
-                  });
-                }
-                document.getElementById('bz-val-${gifKey}').textContent=this.value+'%'"
-              onchange="bannerZoom['${name.replace(/'/g,"\\'")}']= parseInt(this.value);saveSettings()"
+                if(el) el.querySelectorAll('img,video').forEach(m=>{m.style.transform='scale('+z+')';m.style.transformOrigin='center '+p+'%'});
+                document.getElementById('bz-val-${gifKey}').textContent=this.value+'%';
+                bannerZoom['${name.replace(/'/g,"\\'")}']= parseInt(this.value)"
               style="width:65px;accent-color:#c084fc;cursor:pointer">
             <span id="bz-val-${gifKey}" style="font-size:.65rem;color:#c084fc;font-family:'Bebas Neue',sans-serif;min-width:34px">${zoom}%</span>
           </div>
 
           <!-- Slowmo (video only) -->
           <button id="slowmo-btn-${gifKey}"
-            onclick="const v=document.getElementById('banner-video-${gifKey}');const on=!bannerSlowmo['${name.replace(/'/g,"\\'")}'];if(v&&v._toggleSlowmo)v._toggleSlowmo(on);else{bannerSlowmo['${name.replace(/'/g,"\\'")}']= on;saveSettings()};this.style.background=on?'var(--lime)':'rgba(0,0,0,.5)';this.style.color=on?'#071009':'rgba(255,255,255,.5)';this.textContent=on?'⏱ Slowmo ON':'⏱ Slowmo'"
+            onclick="const v=document.getElementById('banner-video-${gifKey}');const on=!bannerSlowmo['${name.replace(/'/g,"\\'")}'];if(v&&v._toggleSlowmo)v._toggleSlowmo(on);bannerSlowmo['${name.replace(/'/g,"\\'")}']= on;this.style.background=on?'var(--lime)':'rgba(0,0,0,.5)';this.style.color=on?'#071009':'rgba(255,255,255,.5)';this.textContent=on?'⏱ Slowmo ON':'⏱ Slowmo'"
             style="font-size:.62rem;font-family:'Barlow Condensed',sans-serif;letter-spacing:.5px;padding:3px 8px;border-radius:6px;border:none;cursor:pointer;backdrop-filter:blur(4px);background:${bannerSlowmo[name]?'var(--lime)':'rgba(0,0,0,.5)'};color:${bannerSlowmo[name]?'#071009':'rgba(255,255,255,.5)'};white-space:nowrap"
             title="Gradually slow video to freeze on last frame">${bannerSlowmo[name]?'⏱ Slowmo ON':'⏱ Slowmo'}</button>
 
@@ -5325,6 +5313,11 @@ function renderProfile(name) {
                <button onclick="triggerGifUpload('${safeName}')" style="font-size:.62rem;font-family:'Barlow Condensed',sans-serif;padding:3px 8px;border-radius:6px;border:none;cursor:pointer;background:rgba(57,211,83,.3);color:var(--green);backdrop-filter:blur(4px)">⬆ Change</button>`
             : `<button onclick="triggerGifUpload('${safeName}')" style="font-size:.62rem;font-family:'Barlow Condensed',sans-serif;padding:3px 8px;border-radius:6px;border:none;cursor:pointer;background:rgba(57,211,83,.3);color:var(--green);backdrop-filter:blur(4px)">⬆ Upload</button>`
           }
+
+          <!-- Save settings button -->
+          <button onclick="saveSettings();this.textContent='✅ Saved';this.style.background='rgba(57,211,83,.4)';setTimeout(()=>{this.textContent='⬇ Save Settings';this.style.background='rgba(255,255,255,.1)'},2000)"
+            style="font-size:.62rem;font-family:'Barlow Condensed',sans-serif;letter-spacing:.5px;padding:3px 10px;border-radius:6px;border:1px solid rgba(255,255,255,.2);cursor:pointer;background:rgba(255,255,255,.1);color:rgba(255,255,255,.8);backdrop-filter:blur(4px);white-space:nowrap;margin-left:auto"
+            title="Download settings.json and push to GitHub to save banner settings">⬇ Save Settings</button>
         </div>
       </div>` : ''}
     </div>
