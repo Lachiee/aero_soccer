@@ -3197,6 +3197,9 @@ function buildTagAuction() {
 }
 
 function getFifaTags(s, cs) {
+  // Players with fewer than 8 games don't get tags — sample size too small
+  if (s.games < 8) return [];
+
   if (!_tagCache) _tagCache = buildTagAuction();
   const myTagLabels = (_tagCache[s.player] || []);
 
@@ -3331,7 +3334,7 @@ const LEADER_STATS = [
 ];
 
 function getLeaderTags(playerName) {
-  const pool = Object.values(getDisplayStats()).filter(p => p.games >= 5);
+  const pool = Object.values(getDisplayStats()).filter(p => p.games >= 8);
   if (!pool.length) return [];
   const leaders = [];
   for (const stat of LEADER_STATS) {
