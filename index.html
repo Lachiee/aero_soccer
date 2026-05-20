@@ -2573,6 +2573,38 @@ const TAG_DEFS = {
   'The Architect':     { cls:'tag-playmaker', tip:'Creates from deep with elite key passes and also contributes defensively — the engine behind every attack before it even starts' },
   'Disruptor':         { cls:'tag-guardian',  tip:'Tackles and interceptions far above their offensive output — exists specifically to break up play and frustrate attackers' },
   // Creating
+  'Sharp':             { cls:'tag-striker',   tip:'High conversion combined with frequent scoring — deadly volume and efficiency at once' },
+  'Opportunist':       { cls:'tag-striker',   tip:'Scores the most goals per shot — makes every attempt count more than anyone else' },
+  'Last Touch':        { cls:'tag-striker',   tip:'Always involved at the finish through goals, assists and elite conversion' },
+  'Volume Shooter':    { cls:'tag-target',    tip:'Highest combined shot volume — relentless pressure on goal every single match' },
+  'Rapid Fire':        { cls:'tag-target',    tip:'Shoots frequently and scores frequently — the most dangerous volume-plus-goals combination' },
+  'Space Creator':     { cls:'tag-playmaker', tip:'Elite key passes and assists in equal measure — creates space and delivers the final ball' },
+  'Second Assist':     { cls:'tag-playmaker', tip:'Most key passes per game — the invisible thread behind every goal in the group' },
+  'Deep Threat':       { cls:'tag-playmaker', tip:'Assist-heavy creator who also generates key passes — the most complete attacking creator' },
+  'Link Up':           { cls:'tag-playmaker', tip:'Combines creative output with defensive responsibility — the connective tissue between defence and attack' },
+  'Spark Plug':        { cls:'tag-engine',    tip:'Consistent goal and assist involvement every game — makes things happen in both boxes reliably' },
+  'Sweeper':           { cls:'tag-guardian',  tip:'Balanced tackles and interceptions — wins the ball cleanly all over the pitch without overcommitting' },
+  'Press King':        { cls:'tag-guardian',  tip:'High tackle volume backed by strong interceptions — the most relentless pressing force in the group' },
+  'Cut Out':           { cls:'tag-guardian',  tip:'Reads the game to intercept and block — cuts out attacks before they even develop' },
+  'Wall':              { cls:'tag-guardian',  tip:'Blocks more attacks than anyone — puts their body in front of shots and crosses constantly' },
+  'Enforcer':          { cls:'tag-guardian',  tip:'Most tackles per game — wins physical duels and sets the defensive tone' },
+  'Ball Hawk':         { cls:'tag-guardian',  tip:'Highest interceptions per game — reads the game to cut out passes before they reach their target' },
+  'Steel Wall':        { cls:'tag-guardian',  tip:'Highest total defensive actions — tackles, interceptions and blocks all combined into one defensive unit' },
+  'The Shield':        { cls:'tag-blocker',   tip:'Blocks shots and contributes saves — protects the goal from both outfield and goalkeeper positions' },
+  'Guardian':          { cls:'tag-blocker',   tip:'All-round defensive presence across saves, interceptions and blocks — protects from every angle' },
+  'Brick Wall':        { cls:'tag-blocker',   tip:'Block-heavy goalkeeper who also makes saves — gets their body in front of everything' },
+  'Shot Stopper':      { cls:'tag-sweeper',   tip:'Pure goalkeeping quality — faces and saves more shots than almost anyone in the group' },
+  'Clean Hands':       { cls:'tag-sweeper',   tip:'High saves combined with solid blocking — a complete goalkeeper who keeps the area clean' },
+  'Safe Hands':        { cls:'tag-sweeper',   tip:'Elite saves while also contributing to attacks — the most complete goalkeeper overall' },
+  'Last Line':         { cls:'tag-sweeper',   tip:'Saves constantly and distributes well — a goalkeeper who impacts both phases of play' },
+  'Sweeper Keeper':    { cls:'tag-sweeper',   tip:'Saves constantly while also winning interceptions outside the area — reads the game beyond the goal line' },
+  'Complete Player':   { cls:'tag-workhorse', tip:'Contributes across every stat category — no weakness, covers every aspect of the game at a high level' },
+  'Workhorse':         { cls:'tag-workhorse', tip:'High activity combined with elite defensive work — covers every blade of grass and never stops' },
+  'Impact Player':     { cls:'tag-workhorse', tip:'Quality over quantity — when involved they change the game more than anyone through efficient output' },
+  'All Action':        { cls:'tag-workhorse', tip:'Involved in everything — attacking, defensive and creative stats all above average across the full match' },
+  'Engine':            { cls:'tag-workhorse', tip:'Highest total actions per game — touches the ball most and is involved in every phase of play' },
+  'Water Carrier':     { cls:'tag-workhorse', tip:'Wins the ball and immediately starts attacks — the ultimate team player who does the unglamorous work' },
+  'Grafter':           { cls:'tag-workhorse', tip:'Wins defensive duels while also contributing creatively — does the work that makes the team tick' },
   'Puppet Master':     { cls:'tag-playmaker', tip:'Elite in both assists and key passes — controls the entire flow of attacking play from creation to delivery' },
   'Pathfinder':        { cls:'tag-playmaker', tip:'Assists the widest variety of teammates — connects the whole team together and finds whoever is in space' },
   'Play Driver':       { cls:'tag-playmaker', tip:'Highest combined scoring and creating output — central to almost every attack with both goals and assists' },
@@ -2834,8 +2866,7 @@ function buildTagAuction() {
     if (bestP && scoreFn(metrics[bestP]) > 0) tagWinners[label] = bestP;
   };
 
-  // Attacking
-  // Attacking — each formula emphasises a distinct dimension
+  // ── Attacking ──────────────────────────────────────────────────────────
   award('Golden Boot',      m => m.gpg);
   award('Clinical',         m => m.conv);
   award('Silent Assassin',  m => m.gpg>0&&m.spg>0?m.conv/Math.max(m.spg,0.1):0);
@@ -2847,8 +2878,11 @@ function buildTagAuction() {
   award('Rebound King',     m => m.postpg*2+m.sotpg*0.3);
   award('Ghost Runner',     m => m.gpg>0.2&&m.actpg<2.5?m.gpg*3/Math.max(m.actpg,0.5):0);
   award('Wave Maker',       m => (m.gpg+m.apg)*m.ps.games);
+  award('Sharp',            m => m.conv*m.gpg);
+  award('Opportunist',      m => m.gpg/Math.max(m.spg,0.1));
+  award('Last Touch',       m => m.gpg*0.5+m.apg*0.5+m.conv*2);
 
-  // Shooting — clearly distinct stats
+  // ── Shooting ───────────────────────────────────────────────────────────
   award('Gunslinger',       m => m.spg);
   award('Deadeye',          m => m.acc);
   award('Heat Check',       m => m.offpg);
@@ -2857,8 +2891,10 @@ function buildTagAuction() {
   award('Sledgehammer',     m => m.spg*0.7+m.postpg*2);
   award('Pinball',          m => m.postpg+m.offpg*0.5);
   award('High Voltage',     m => m.gpg+m.tklpg+m.actpg*0.2);
+  award('Volume Shooter',   m => m.spg*0.6+m.sotpg*0.4);
+  award('Rapid Fire',       m => m.spg*m.gpg);
 
-  // Flair — nutmeg-based, deduped after
+  // ── Flair ──────────────────────────────────────────────────────────────
   award('Sauce Merchant',   m => m.nmpg);
   award('Streetballer',     m => m.nmpg*2+m.gpg);
   award('Risk Taker',       m => m.nmpg+m.offpg*0.8);
@@ -2866,31 +2902,58 @@ function buildTagAuction() {
   award('Chaos Agent',      m => m.offpg*2+m.spg*0.3);
   award('Woodwork Warrior', m => m.postpg);
   award('Showtime',         m => m.nmpg*(m.dualGames+m.multiGoalGames+1));
-  award('Breaker',          m => m.tklpg+m.nmpg*1.5);
+  award('Breaker',          m => m.tklpg*0.5+m.nmpg*2);
 
-  // Creating — Conductor owns assists, The Organiser owns KP+tackles, Puppet Master owns the combo
+  // ── Creating ───────────────────────────────────────────────────────────
   award('Puppet Master',    m => Math.min(m.apg,m.kppg)*2);
   award('Pathfinder',       m => m.uniqueAssisted*2+m.apg*0.1);
   award('Play Driver',      m => (m.gpg+m.apg)*0.5+m.kppg*0.3);
   award('Traffic Controller',m => m.kppg*0.4+m.intpg*1.6);
+  award('Space Creator',    m => m.kppg*0.7+m.apg*0.7);
+  award('Second Assist',    m => m.kppg);
+  award('Deep Threat',      m => m.apg*2+m.kppg*0.5);
+  award('Link Up',          m => (m.apg+m.kppg)*0.5+m.tklpg*0.3);
 
-  // Combo
+  // ── Combo ──────────────────────────────────────────────────────────────
   award('Combo King',       m => m.dualGames);
   award('Duo Link',         m => m.topProvider?m.topProvider.goals:0);
   award('One-Two Specialist',m => m.topReceiver?m.topReceiver.goals:0);
+  award('Spark Plug',       m => m.gpg*0.5+m.apg*0.5+m.dualGames*0.3);
 
-  // Defending — Battering Ram owns tackles, The Interceptor owns interceptions
+  // ── Defending ──────────────────────────────────────────────────────────
   award('Lockdown',         m => m.blkpg*2+m.tklpg*0.3+m.intpg*0.3);
   award('Hunter',           m => m.intpg*0.6+m.gpg*1.4);
+  award('Sweeper',          m => m.tklpg*0.5+m.intpg*0.5);
+  award('Press King',       m => m.tklpg*1.2+m.intpg*0.8);
+  award('Cut Out',          m => m.intpg*1.5+m.blkpg*0.5);
+  award('Wall',             m => m.blkpg*1.5+m.tklpg*0.5);
+  award('Enforcer',         m => m.tklpg);
+  award('Ball Hawk',        m => m.intpg);
+  award('Steel Wall',       m => m.defpg);
+  award('The Shield',       m => m.blkpg*1.2+m.gkspg*0.5);
+  award('Guardian',         m => m.gkspg*0.8+m.intpg*0.4+m.blkpg*0.4);
 
-  // GK/Blocking — The Commander owns saves, Rampart owns blocks
-  award('Fortress',         m => Math.min(m.blkpg,m.gkspg)*3); // needs both high — different winner
+  // ── GK / Blocking ──────────────────────────────────────────────────────
+  award('Fortress',         m => Math.min(m.blkpg,m.gkspg)*3);
+  award('Brick Wall',       m => m.gkspg*0.5+m.blkpg*1.5);
+  award('Shot Stopper',     m => m.gkspg);
+  award('Clean Hands',      m => m.gkspg*1.5+m.blkpg*0.5);
+  award('Safe Hands',       m => m.gkspg*2+m.apg*0.5);
+  award('Last Line',        m => m.gkspg*1.2+m.kppg*0.4);
+  award('Sweeper Keeper',   m => m.gkspg*0.8+m.intpg*0.6);
 
-  // Hybrid
+  // ── Hybrid ─────────────────────────────────────────────────────────────
   award('Two-Way Engine',   m => Math.min(m.gpg,m.tklpg)*4);
   award('Swiss Army Knife', m => m.stdDev<0.4?10-m.stdDev*20:0);
   award('Lone Wolf',        m => m.asScorer.length===0&&m.gpg>0?m.gpg*3:0);
   award('Mr Reliable',      m => m.reliabilityScore);
+  award('Complete Player',  m => m.gpg*0.8+m.apg*0.8+m.tklpg*0.3+m.intpg*0.3+m.gkspg*0.2);
+  award('Workhorse',        m => m.actpg*0.5+m.tklpg*0.5);
+  award('Impact Player',    m => m.gpg*1.5+m.apg*0.5+m.conv*2);
+  award('All Action',       m => m.actpg*0.4+m.defpg*0.3+m.kppg*0.3);
+  award('Engine',           m => m.actpg);
+  award('Water Carrier',    m => m.tklpg*0.6+m.kppg*0.6+m.apg*0.4);
+  award('Grafter',          m => m.tklpg*0.7+m.intpg*0.4+m.kppg*0.3);
 
   // Timestamp
   awardTime('Clutch Factor',    m => m.lateGoals>=2?m.lateGoals:0);
