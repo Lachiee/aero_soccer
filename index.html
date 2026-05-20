@@ -5408,10 +5408,12 @@ function renderProfile(name) {
   const s = ds[name] || playerStats[name];
   if (!s) { document.getElementById('profile-content').innerHTML = '<p style="color:var(--muted)">Player not found.</p>'; return; }
   const cs = customStats[name] || { enforcer: 5, stamina: 5 };
-  // Always use the same tag cache that was built for the player cards
-  // (don't rebuild — just read from the existing cache)
+  // Use the exact same tags shown on the player card — read directly from cache
   if (!_tagCache) _tagCache = buildTagAuction();
-  const tags = getFifaTags(s, cs);
+  const cachedLabels = _tagCache[name] || [];
+  const tags = cachedLabels.length > 0
+    ? cachedLabels.slice(0,2).map(label => TAG_DEFS[label] ? {label, cls:TAG_DEFS[label].cls, tip:TAG_DEFS[label].tip} : null).filter(Boolean)
+    : getFifaTags(s, cs); // fallback only if player has no auction tags at all
   const rating = computeRating(s, cs);
   const g = Math.max(s.games, 1);
   const { labels, values } = getSpiderValues(s, cs);
