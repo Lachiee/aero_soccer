@@ -2547,7 +2547,7 @@ const TAG_DEFS = {
   // Shooting
   'Gunslinger':        { cls:'tag-target',    tip:'Takes more shots per game than anyone — never stops attacking and always has a shot in mind' },
   'Deadeye':           { cls:'tag-target',    tip:'Highest shot accuracy in the group — a greater percentage of shots hit the target than anyone else' },
-  'Heat Check':        { cls:'tag-target',    tip:'Most off-target shots — fires from bold angles and distances without hesitation, high volume high risk' },
+  'Heat Check':        { cls:'tag-target',    tip:'Most shots on target combined with goals — firing on all cylinders and consistently converting dangerous attempts' },
   'Trigger Finger':    { cls:'tag-target',    tip:'Best ratio of shots on target to shots taken — the most precise shooter when pulling the trigger' },
   'Front Foot':        { cls:'tag-target',    tip:'Highest shots on target combined with assists — always threatening the goal directly while also creating for teammates' },
   'Sledgehammer':      { cls:'tag-target',    tip:'High shot volume and regularly rattles the woodwork — a powerful attacker who constantly tests the frame' },
@@ -2558,7 +2558,7 @@ const TAG_DEFS = {
   'Streetballer':      { cls:'tag-wizard',    tip:'Combines the most nutmegs with genuine scoring threat — flair that translates directly into attacking output' },
   'Risk Taker':        { cls:'tag-wizard',    tip:'Attempts nutmegs and fires ambitious off-target shots constantly — always trying something difficult' },
   'Chaos Creator':     { cls:'tag-wizard',    tip:'Produces high nutmegs, key passes and shots together — the most unpredictably dangerous attacker available' },
-  'Chaos Agent':       { cls:'tag-wizard',    tip:'Most off-target shots in the group — applies relentless attacking pressure even if the execution is erratic' },
+  'Chaos Agent':       { cls:'tag-wizard',    tip:'Combines nutmegs with high shot volume — brings unpredictability and constant pressure that defenders can never plan for' },
   'Woodwork Warrior':  { cls:'tag-wizard',    tip:'Hits the woodwork more per game than anyone — constantly inches away from spectacular goals that deserve better' },
   'Showtime':          { cls:'tag-wizard',    tip:'Nutmegs in games where they also score or assist — delivers crowd-pleasing performances in the biggest moments' },
   'Breaker':           { cls:'tag-wizard',    tip:'Wins tackles and nutmegs opponents — a rare combination of defensive physicality and technical flair in one player' },
@@ -2658,7 +2658,7 @@ function buildTagAuction() {
     return m && [...m.teamA,...m.teamB].some(r=>r.player===player);
   });
 
-  const allStats = Object.values(ds).filter(p => p.games >= 5 && isActive(p.player));
+  const allStats = Object.values(ds).filter(p => p.games >= 8 && isActive(p.player));
   if (!allStats.length) return {};
 
   const n = (v) => Number(v)||0;
@@ -2870,60 +2870,56 @@ function buildTagAuction() {
   };
 
   // ── ATTACKING ───────────────────────────────────────────────────────────
-  // Amin: #1 goals, #1 shots → Golden Boot, Gunslinger
-  award('Golden Boot',      m => m.gpg);                                          // → Amin
-  award('Gunslinger',       m => m.spg);                                          // → Amin (30 shots/g)
-  // Andres: #1 goals tied, #1 tackles, #1 KP → many tags, needs careful targeting
-  award('Hat-Trick Hero',   m => m.hatTrickMatches>=2?m.hatTrickMatches*3:0);     // → Andres/Amin
-  award('Clinical',         m => m.conv);                                          // → Craig
+  award('Golden Boot',      m => m.gpg);
+  award('Hat-Trick Hero',   m => m.hatTrickMatches>=2?m.hatTrickMatches*3:0);
+  award('Rebound King',     m => m.postpg*3+m.gpg*0.5);
+  award('Wave Maker',       m => (m.gpg+m.apg)*m.apg);
+  award('Brace Builder',    m => m.braceAssistMatches>=2?m.braceAssistMatches:0);
+  award('Last Touch',       m => m.gpg*0.4+m.apg*0.6+m.conv*2);
+  award('Clinical',         m => m.conv);
+  award('Sharp',            m => m.conv*m.gpg*4);
+  award('Shadow Striker',   m => m.spg<12&&m.gpg>0.8&&m.apg>0.8?(m.gpg+m.apg)*3:0);
+  award('Opportunist',      m => m.gpg/Math.max(m.spg,0.1));
+  award('Impact Player',    m => m.gpg*1.5+m.apg*1.5+m.conv*3);
+  award('Ghost Runner',     m => m.gpg>0.5&&m.spg<12?m.gpg*4/Math.max(m.spg,1):0);
   award('Poacher',          m => m.unassistedGoals>0?m.unassistedGoals/Math.max(m.ps.games,1):0);
-  award('Rebound King',     m => m.postpg*3+m.gpg*0.5);                          // → Amin (posts)
-  award('Ghost Runner',     m => m.gpg>0.5&&m.spg<15?m.gpg*4/Math.max(m.spg,1):0); // low shots but scores → David
-  // Bailey: #2 G+A, high assists, high interceptions → needs G+A+INT combo
-  award('Wave Maker',       m => (m.gpg+m.apg)*m.apg);                           // → Bailey (G+A weighted by assists)
-  award('Brace Builder',    m => m.braceAssistMatches>=2?m.braceAssistMatches:0); // → Bailey
-  // David: modest shots but good conv + assists → efficient contributor
-  award('Shadow Striker',   m => m.spg<12&&m.gpg>0.8&&m.apg>0.8?(m.gpg+m.apg)*3:0); // → David
-  award('Opportunist',      m => m.gpg/Math.max(m.spg,0.1));                     // → David/Craig
-  award('Impact Player',    m => m.gpg*1.5+m.apg*1.5+m.conv*3);                 // → David
-  award('Last Touch',       m => m.gpg*0.4+m.apg*0.6+m.conv*2);                 // → Bailey
-  award('Sharp',            m => m.conv*m.gpg*4);                                // → Andres
+  award('Spark Plug',       m => (m.gpg+m.apg)*0.5+(m.gpg>0&&m.apg>0?2:0));
+  award('Finisher',         m => m.gpg*0.4+m.conv*0.6);
+  award('Silent Assassin',  m => m.spg>0?m.gpg/m.spg*5:0);
 
-  // ── SHOOTING ────────────────────────────────────────────────────────────
-  award('Deadeye',          m => m.acc);                                          // → Bailey (23% accuracy)
-  award('Heat Check',       m => m.offpg);                                        // → Amin (off target)
-  award('Trigger Finger',   m => m.sotpg);                                        // → Amin/Andres (shots on target)
-  award('Front Foot',       m => m.sotpg+m.apg*0.3);                            // → Andres
-  award('Sledgehammer',     m => m.spg*0.7+m.postpg*2);                          // → Amin
-  award('Pinball',          m => m.postpg+m.offpg*0.4);                          // → Amin/Andres
-  award('Volume Shooter',   m => m.spg*0.5+m.gkspg*0.5);                        // → James (shots + saves)
-  award('Rapid Fire',       m => m.spg*m.conv);                                  // → Andres (shots × conv)
-  award('Net Magnet',       m => m.sotpg+m.postpg*2);                            // → Amin
+  // ── SHOOTING — all positive framings ────────────────────────────────────
+  award('Gunslinger',       m => m.spg);
+  award('Deadeye',          m => m.acc);
+  award('Trigger Finger',   m => m.sotpg);
+  award('Net Magnet',       m => m.sotpg+m.postpg*2);
+  award('Front Foot',       m => m.sotpg+m.apg*0.3);
+  award('Heat Check',       m => m.sotpg*1.5+m.gpg);            // on target + goals — POSITIVE
+  award('Sledgehammer',     m => m.spg*0.7+m.postpg*2);
+  award('Volume Shooter',   m => m.spg*0.6+m.gkspg*0.4);
+  award('Rapid Fire',       m => m.spg*m.conv);
+  award('Pinball',          m => m.postpg*2+m.sotpg*0.3);
+  award('High Voltage',     m => m.gpg*0.5+m.tklpg*0.5+m.actpg*0.1);
 
   // ── FLAIR ───────────────────────────────────────────────────────────────
-  award('Sauce Merchant',   m => m.nmpg);                                         // → Lachlan/Austin
-  award('Showtime',         m => m.nmpg*(m.gpg+m.apg+1));                        // → Lachlan
-  award('Streetballer',     m => m.nmpg*2+m.gpg);                               // → Austin
-  award('Risk Taker',       m => m.nmpg+m.offpg*0.5);                           // → Amin
-  award('Chaos Creator',    m => m.nmpg*1.5+m.kppg*0.5);                        // → Austin
-  award('Woodwork Warrior', m => m.postpg*4);                                    // → Amin
-  award('Breaker',          m => m.tklpg*0.3+m.nmpg*2.5);                       // → Austin
-  award('Chaos Agent',      m => m.offpg*1.5+m.nmpg*1.5);                       // → Amin
+  award('Sauce Merchant',   m => m.nmpg);
+  award('Showtime',         m => m.nmpg*(m.gpg+m.apg+1));
+  award('Streetballer',     m => m.nmpg*2+m.gpg);
+  award('Chaos Creator',    m => m.nmpg*1.5+m.kppg*0.5);
+  award('Breaker',          m => m.tklpg*0.3+m.nmpg*2.5);
+  award('Woodwork Warrior', m => m.postpg*4);
+  award('Risk Taker',       m => m.nmpg+m.offpg*0.3+m.spg*0.1);
+  award('Chaos Agent',      m => m.nmpg*2+m.offpg*0.5);
 
   // ── CREATING ────────────────────────────────────────────────────────────
-  // Gio: #1 assists, #2 KP → Puppet Master, Deep Threat
-  award('Puppet Master',    m => Math.min(m.apg,m.kppg)*2.5);                   // → Gio
-  award('Deep Threat',      m => m.apg*2.5+m.kppg*0.3);                         // → Gio
-  // Andres: #1 KP (10.8/g) → Traffic Controller
-  award('Second Assist',    m => m.kppg);                                         // → Andres
-  award('Traffic Controller',m => m.kppg*0.5+m.intpg*1.2);                      // → Richard (KP+INT)
-  // James2: #3 KP (8.25) + #6 INT (12.0) → Link Up
-  award('Link Up',          m => m.kppg*0.8+m.intpg*0.8);                        // → James2
+  award('Puppet Master',    m => Math.min(m.apg,m.kppg)*2.5);
+  award('Deep Threat',      m => m.apg*2.5+m.kppg*0.3);
+  award('Second Assist',    m => m.kppg);
+  award('Traffic Controller',m => m.kppg*0.5+m.intpg*1.2);
+  award('Link Up',          m => m.kppg*0.8+m.intpg*0.8);
   award('Pathfinder',       m => m.uniqueAssisted*2+m.apg*0.2);
-  // Ines: saves (6.5/g) + KP (4.78/g) → GK who creates
-  award('Play Driver',      m => m.gkspg*0.3+m.kppg*0.7+m.apg*0.5);           // → Ines (saves+KP)
-  award('Space Creator',    m => m.kppg*0.6+m.apg*0.8+m.blkpg*0.3);           // → Bailey (KP+assists+blocks)
-  award('Spark Plug',       m => (m.gpg+m.apg)*0.5+(m.gpg>0&&m.apg>0?2:0));   // → David (both goals and assists)
+  award('Play Driver',      m => m.gkspg*0.3+m.kppg*0.7+m.apg*0.5);
+  award('Space Creator',    m => m.kppg*0.6+m.apg*0.8+m.blkpg*0.3);
+  award('Water Carrier',    m => m.tklpg*0.4+m.kppg*0.5+m.apg*0.6);
 
   // ── COMBO ───────────────────────────────────────────────────────────────
   award('Combo King',       m => m.dualGames);
@@ -2931,52 +2927,39 @@ function buildTagAuction() {
   award('One-Two Specialist',m => m.topReceiver?m.topReceiver.goals:0);
 
   // ── DEFENDING ───────────────────────────────────────────────────────────
-  // Richard: #1 INT (17.6), #1 DEF (27), #1 blocks (#2) → many defensive tags
-  award('Ball Hawk',        m => m.intpg);                                         // → Richard
-  award('Steel Wall',       m => m.defpg);                                         // → Richard
-  award('Cut Out',          m => m.intpg*1.8+m.blkpg*0.3);                       // → Richard
-  // Austin: #2 INT (16.1), #2 nutmegs → Sweeper
-  award('Press King',       m => m.tklpg*1.0+m.intpg*1.0);                       // → Austin/Richard
-  award('Sweeper',          m => m.tklpg*0.6+m.intpg*0.6);                       // → Austin
-  award('Enforcer',         m => m.tklpg);                                         // → Andres
-  // Lockdown: blocks heavy — Richard #2 blocks, Lachlan #1
-  award('Lockdown',         m => m.blkpg*2.5+m.intpg*0.2);                       // → Lachlan/Richard
-  award('Wall',             m => m.blkpg*2+m.tklpg*0.3);                          // → Lachlan
-  award('Hunter',           m => m.intpg*0.5+m.gpg*1.8);                         // → Andres (int+goals)
-  // Dexter: high INT (9.3) but low goals, high saves (3.8) → tackles+saves combo
-  award('Guardian',         m => m.gkspg*0.6+m.intpg*0.5+m.tklpg*0.4);         // → Dexter (saves+int+tkl)
-  award('The Shield',       m => m.blkpg*0.8+m.gkspg*0.6+m.tklpg*0.4);         // → Ines/Dexter
-  award('Grafter',          m => m.tklpg*0.5+m.intpg*0.3+m.kppg*0.5);          // → James2
-  award('Water Carrier',    m => m.tklpg*0.4+m.kppg*0.5+m.apg*0.6);            // → Bailey
+  award('Ball Hawk',        m => m.intpg);
+  award('Steel Wall',       m => m.defpg);
+  award('Cut Out',          m => m.intpg*1.8+m.blkpg*0.3);
+  award('Press King',       m => m.tklpg*1.0+m.intpg*1.0);
+  award('Sweeper',          m => m.tklpg*0.6+m.intpg*0.6);
+  award('Enforcer',         m => m.tklpg);
+  award('Lockdown',         m => m.blkpg*2.5+m.intpg*0.2);
+  award('Wall',             m => m.blkpg*2+m.tklpg*0.3);
+  award('Hunter',           m => m.intpg*0.5+m.gpg*1.8);
+  award('Guardian',         m => m.gkspg*0.6+m.intpg*0.5+m.tklpg*0.4);
+  award('The Shield',       m => m.blkpg*0.8+m.gkspg*0.6+m.tklpg*0.4);
+  award('Grafter',          m => m.tklpg*0.5+m.intpg*0.3+m.kppg*0.5);
 
   // ── GK / BLOCKING ───────────────────────────────────────────────────────
-  // Xavier: #1 saves (8.4) → Shot Stopper, Last Line
-  award('Shot Stopper',     m => m.gkspg);                                         // → Xavier
-  award('Last Line',        m => m.gkspg*1.3+m.kppg*0.2);                        // → Xavier
-  // Alberto: #3 saves (7.0) + #5 blocks (2.3) → Clean Hands, Fortress
-  award('Clean Hands',      m => m.gkspg*1.2+m.blkpg*0.8);                       // → Alberto
-  award('Fortress',         m => Math.min(m.blkpg,m.gkspg)*3.5);                 // → Alberto/Xavier
-  // James: saves (6.5) + shots (18.2) + goals (2.7) → Double Shift
-  award('Safe Hands',       m => m.gkspg*1.5+m.gpg*0.8);                        // → James (saves+goals)
-  // Ines: saves (6.5) + KP (4.78)
-  award('Sweeper Keeper',   m => m.gkspg*0.7+m.kppg*0.5);                        // → Ines (saves+KP)
-  award('Brick Wall',       m => m.blkpg*1.8+m.gkspg*0.3);                      // → Lachlan
+  award('Shot Stopper',     m => m.gkspg);
+  award('Last Line',        m => m.gkspg*1.3+m.kppg*0.2);
+  award('Clean Hands',      m => m.gkspg*1.2+m.blkpg*0.8);
+  award('Fortress',         m => Math.min(m.blkpg,m.gkspg)*3.5);
+  award('Safe Hands',       m => m.gkspg*1.5+m.gpg*0.8);
+  award('Sweeper Keeper',   m => m.gkspg*0.7+m.kppg*0.5);
+  award('Brick Wall',       m => m.blkpg*1.8+m.gkspg*0.3);
 
   // ── HYBRID ──────────────────────────────────────────────────────────────
-  // Jake: #1 activity (52/g), high shots + tackles
-  award('Engine',           m => m.actpg);                                         // → Jake
-  award('Box to Box',       m => m.spg*0.6+m.tklpg*2);                           // → Jake
-  award('Two-Way Engine',   m => Math.min(m.gpg,m.tklpg)*5);                     // → Jake/Andres
-  // Gio: balanced stats
-  award('Complete Player',  m => m.gpg*0.7+m.apg*0.7+m.kppg*0.3+m.intpg*0.2);  // → Gio
+  award('Engine',           m => m.actpg);
+  award('Box to Box',       m => m.spg*0.6+m.tklpg*2);
+  award('Two-Way Engine',   m => Math.min(m.gpg,m.tklpg)*5);
+  award('Complete Player',  m => m.gpg*0.7+m.apg*0.7+m.kppg*0.3+m.intpg*0.2);
   award('Mr Reliable',      m => m.reliabilityScore);
-  award('Workhorse',        m => m.actpg*0.4+m.tklpg*0.6);                       // → Jake/Andres
-  award('All Action',       m => m.actpg*0.3+m.defpg*0.3+m.kppg*0.4);           // → James2
+  award('Workhorse',        m => m.actpg*0.4+m.tklpg*0.6);
+  award('All Action',       m => m.actpg*0.3+m.defpg*0.3+m.kppg*0.4);
   award('Swiss Army Knife', m => m.stdDev<0.4?10-m.stdDev*20:0);
   award('Lone Wolf',        m => m.asScorer.length===0&&m.gpg>0?m.gpg*3:0);
-  award('Finisher',         m => m.gpg*0.4+m.conv*0.6);                          // gpg + efficiency
-  award('High Voltage',     m => m.gpg*0.5+m.tklpg*0.5+m.actpg*0.15);          // scores + tackles + active
-  award('Silent Assassin',  m => m.spg>0?m.gpg/m.spg*5:0);                      // goals per shot (low volume scorer)
+  award('Double Shift',     m => m.gkspg>=4&&(m.gpg+m.apg)>=1.5?m.gkspg*0.5+(m.gpg+m.apg)*2:0);
 
   // ── TIMESTAMP TAGS ──────────────────────────────────────────────────────
   // Each uses a distinct goal-event criterion — all go to different players
