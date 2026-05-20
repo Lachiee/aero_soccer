@@ -2658,7 +2658,7 @@ function buildTagAuction() {
     return m && [...m.teamA,...m.teamB].some(r=>r.player===player);
   });
 
-  const allStats = Object.values(ds).filter(p => p.games >= 8 && isActive(p.player));
+  const allStats = Object.values(ds).filter(p => p.games >= 5 && isActive(p.player));
   if (!allStats.length) return {};
 
   const n = (v) => Number(v)||0;
@@ -2842,9 +2842,15 @@ function buildTagAuction() {
 
   const players = Object.keys(metrics);
   const best = (scoreFn, minScore = 0) => {
-    // Returns the player name with highest score (must be >= minScore)
+    // Scale score by sqrt(games/10) so small samples can't dominate veterans
+    // A 5-game player needs ~41% better per-game stats to beat a 30-game player
     let bestP=null, bestV=-Infinity;
-    players.forEach(p=>{ const v=scoreFn(metrics[p]); if(v>bestV){bestV=v;bestP=p;} });
+    players.forEach(p=>{
+      const m = metrics[p];
+      const gameWeight = Math.sqrt(Math.min(m.ps.games, 30) / 10);
+      const v = scoreFn(m) * gameWeight;
+      if(v>bestV){bestV=v;bestP=p;}
+    });
     return bestV >= minScore ? bestP : null;
   };
 
@@ -3197,8 +3203,8 @@ function buildTagAuction() {
 }
 
 function getFifaTags(s, cs) {
-  // Players with fewer than 8 games don't get tags — sample size too small
-  if (s.games < 8) return [];
+  // Players with fewer than 5 games don't get tags — sample size too small
+  if (s.games < 5) return [];
 
   if (!_tagCache) _tagCache = buildTagAuction();
   const myTagLabels = (_tagCache[s.player] || []);
@@ -3334,7 +3340,7 @@ const LEADER_STATS = [
 ];
 
 function getLeaderTags(playerName) {
-  const pool = Object.values(getDisplayStats()).filter(p => p.games >= 8);
+  const pool = Object.values(getDisplayStats()).filter(p => p.games >= 5);
   if (!pool.length) return [];
   const leaders = [];
   for (const stat of LEADER_STATS) {
