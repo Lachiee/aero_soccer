@@ -3211,21 +3211,24 @@ function getFifaTags(s, cs) {
   if (s.games < 5) return [];
 
   if (!_tagCache) _tagCache = buildTagAuction();
-  const myTagLabels = (_tagCache[s.player] || []);
 
-  // Convert label strings → {label, cls, tip} objects — hard cap at 2
-  const result = myTagLabels.slice(0, 2).map(label => {
+  // Always read from the auction cache first — same result every time
+  const cachedLabels = _tagCache[s.player] || [];
+  if (cachedLabels.length >= 2) {
+    return cachedLabels.slice(0, 2).map(label => {
+      const def = TAG_DEFS[label];
+      return def ? {label, cls: def.cls, tip: def.tip} : null;
+    }).filter(Boolean);
+  }
+
+  // Partial or no auction result — fill remaining slots with best-fit stat tags
+  // This is deterministic: same player always gets same fallback tags
+  const result = cachedLabels.map(label => {
     const def = TAG_DEFS[label];
-    return def ? {label, cls:def.cls, tip:def.tip} : null;
+    return def ? {label, cls: def.cls, tip: def.tip} : null;
   }).filter(Boolean);
 
-  // Fallback: guarantee every player gets exactly 2 tags
-  // _fallbackTagCache tracks which fallback tags have already been assigned globally
-  if (!_tagCache._fallbackUsed) _tagCache._fallbackUsed = new Set();
-  const globallyUsed = new Set([
-    ...Object.values(_tagCache).flat().filter(x => typeof x === 'string'),
-    ..._tagCache._fallbackUsed
-  ]);
+  const allAuctionTags = new Set(Object.values(_tagCache).flat().filter(x => typeof x === 'string'));
 
   if (result.length < 2) {
     const g = Math.max(s.games, 1);
@@ -3309,17 +3312,16 @@ function getFifaTags(s, cs) {
     for (const c of candidates) {
       if (result.length >= 2) break;
       if (usedLabels.has(c.tag)) continue;
-      if (globallyUsed.has(c.tag)) continue;  // skip if another player already has this
-      // Try to avoid same colour class if alternatives exist
-      if (usedClasses.has(c.cls) && candidates.some(x =>
-        !usedClasses.has(x.cls) && !usedLabels.has(x.tag) && !globallyUsed.has(x.tag)
-      )) continue;
+      if (allAuctionTags.has(c.tag)) continue; // don't use tags already won in auction
       const def = TAG_DEFS[c.tag]; if (!def) continue;
+      // Try to avoid same colour class if alternatives exist
+      if (usedClasses.has(def.cls) && candidates.some(x => {
+        const d = TAG_DEFS[x.tag];
+        return d && !usedClasses.has(d.cls) && !usedLabels.has(x.tag) && !allAuctionTags.has(x.tag);
+      })) continue;
       result.push({ label: c.tag, cls: def.cls, tip: def.tip });
       usedLabels.add(c.tag);
-      usedClasses.add(c.cls);
-      _tagCache._fallbackUsed.add(c.tag);
-      globallyUsed.add(c.tag);
+      usedClasses.add(def.cls);
     }
   }
 
@@ -5408,12 +5410,8 @@ function renderProfile(name) {
   const s = ds[name] || playerStats[name];
   if (!s) { document.getElementById('profile-content').innerHTML = '<p style="color:var(--muted)">Player not found.</p>'; return; }
   const cs = customStats[name] || { enforcer: 5, stamina: 5 };
-  // Use the exact same tags shown on the player card — read directly from cache
   if (!_tagCache) _tagCache = buildTagAuction();
-  const cachedLabels = _tagCache[name] || [];
-  const tags = cachedLabels.length > 0
-    ? cachedLabels.slice(0,2).map(label => TAG_DEFS[label] ? {label, cls:TAG_DEFS[label].cls, tip:TAG_DEFS[label].tip} : null).filter(Boolean)
-    : getFifaTags(s, cs); // fallback only if player has no auction tags at all
+  const tags = getFifaTags(s, cs);
   const rating = computeRating(s, cs);
   const g = Math.max(s.games, 1);
   const { labels, values } = getSpiderValues(s, cs);
