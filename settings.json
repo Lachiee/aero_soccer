@@ -101,6 +101,8 @@
   "bannerSlowmo": {
     "Richard": true
   },
+  "bannerPos": {},
+  "bannerZoom": {},
   "matchVideos": {
     "2026-04-23#1": "ylb15aE4V9I",
     "2026-04-16#1": "LfgfLgZDZtM",
@@ -118,7 +120,8 @@
     "2026-22-01#1": "va0FsRpL9S4",
     "2026-15-01#1": "ZPfbG_OCdsM",
     "2026-04-02#1": "uPrI0re8T6k",
-    "2026-05-07#1": "RdSRRYbHovI"
+    "2026-05-07#1": "RdSRRYbHovI",
+    "2026-05-14#1": "KQujndXe4Ng"
   },
   "ytHalfOffset": 0
 }
