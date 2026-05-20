@@ -5444,11 +5444,29 @@ function renderPlayers() {
     const wl = p.wins + p.losses + (p.draws||0) > 0 ? `<div class="wl-badge"><span class="wl-w">${p.wins}W</span><span class="wl-d">${p.draws||0}D</span><span class="wl-l">${p.losses}L</span>${(p.mvps||0)>0?`<span class="mvp-counter">👑${p.mvps}</span>`:''}</div>` : '';
     const trend = p.formTrend;
     const mom = p.momentum;
-    const momArrow = mom !== null && mom !== undefined
-      ? `<span data-tip="Momentum: ${mom > 0 ? '+' : ''}${mom}% — stats compared to 5 games ago" style="font-size:.72rem;cursor:help;margin-left:4px;${mom >= 15 ? 'color:var(--green)' : mom >= 0 ? 'color:var(--lime)' : mom >= -15 ? 'color:var(--amber)' : 'color:var(--red)'}">
-        ${mom >= 15 ? '▲▲' : mom >= 0 ? '▲' : mom >= -15 ? '▼' : '▼▼'} ${mom > 0 ? '+' : ''}${mom}%
-      </span>` : '';
-    const trendHtml = trend ? `<span style="font-size:.75rem;${trend==='up'?'color:var(--green)':trend==='down'?'color:var(--red)':'color:var(--muted)'}">${trend==='up'?'▲ Trending up':trend==='down'?'▼ Trending down':'● Neutral'}</span>${momArrow}` : '';
+
+    // Trend row — form over last 5 vs previous 5 (win rate)
+    const trendHtml = trend ? (() => {
+      const up = trend === 'up', down = trend === 'down';
+      const col = up ? 'var(--green)' : down ? 'var(--red)' : 'var(--muted)';
+      const icon = up ? '▲' : down ? '▼' : '●';
+      const lbl = up ? 'Form up' : down ? 'Form down' : 'Form steady';
+      return `<span style="font-size:.72rem;color:${col}">${icon} ${lbl}</span>`;
+    })() : '';
+
+    // Momentum row — stat change vs 5 games ago
+    const momHtml = mom !== null && mom !== undefined ? (() => {
+      const col = mom >= 15 ? 'var(--green)' : mom >= 0 ? 'var(--lime)' : mom >= -15 ? 'var(--amber)' : 'var(--red)';
+      const icon = mom >= 15 ? '▲▲' : mom >= 0 ? '▲' : mom >= -15 ? '▼' : '▼▼';
+      const sign = mom > 0 ? '+' : '';
+      return `<span data-tip="Stats vs 5 games ago across goals, assists, shots, tackles, interceptions and key passes" style="font-size:.72rem;color:${col};cursor:help">${icon} Momentum ${sign}${mom}%</span>`;
+    })() : '';
+
+    const trendMomHtml = (trendHtml || momHtml) ? `
+      <div style="display:flex;flex-direction:column;gap:2px;margin-top:4px">
+        ${trendHtml ? `<div>${trendHtml}</div>` : ''}
+        ${momHtml ? `<div>${momHtml}</div>` : ''}
+      </div>` : '';
     return `<div class="pcard" onclick="nav('profile','${p.player}')">
       <div style="display:flex;align-items:baseline;gap:6px;flex-wrap:wrap">
         <div class="pcard-name">${p.player}</div>
@@ -5474,8 +5492,8 @@ function renderPlayers() {
           <span class="stat-val" style="color:${col}">${sc > 0 ? '+' : ''}${sc}% ${lbl}${conf}</span>
         </div>`;
       })() : ''}
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px">
-        <div style="font-size:.72rem">${trendHtml}</div>
+      <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-top:6px">
+        ${trendMomHtml}
         ${streakHtml(p)}
       </div>
       <span class="games-badge">${p.games} games${p.attendanceRate != null && p.attendanceGames > 0 ? ` · ${p.attendanceRate}% attendance` : ''}</span>
