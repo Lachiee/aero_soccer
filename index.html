@@ -2623,6 +2623,21 @@ const TAG_DEFS = {
   'Complete Player':   { cls:'tag-workhorse', tip:'Contributes across goals, assists, key passes and interceptions — no statistical weakness across the full season' },
   'Swiss Army Knife':  { cls:'tag-workhorse', tip:'The most balanced stat profile in the group — contributes meaningfully across scoring, creating, defending and goalkeeping equally' },
   'Mr Reliable':       { cls:'tag-workhorse', tip:'The most consistent performer match to match — delivers solid numbers in every game with minimal variance' },
+  'Complete Forward':   { cls:'tag-striker',   tip:'Top 5 in both goals per game AND assists per game — a genuine dual threat who scores and creates in equal measure' },
+  'Deadly':            { cls:'tag-striker',   tip:'Top 5 in both goals per game AND conversion rate — scores frequently and wastes almost nothing' },
+  'Laser Guided':      { cls:'tag-target',    tip:'Top 5 in both total shots AND shot accuracy — fires constantly and hits the target more than almost anyone' },
+  'On Fire':           { cls:'tag-target',    tip:'Top 5 in both shots on target AND goals per game — the most threatening combination of volume and finishing' },
+  'The Architect':     { cls:'tag-playmaker', tip:'Top 5 in assists, key passes AND interceptions simultaneously — creates attacks and immediately wins the ball back' },
+  'Metronome':         { cls:'tag-playmaker', tip:'Top 5 in both key passes AND tackles — sets the tempo going forward and wins it back when needed' },
+  'Box to Box Keeper': { cls:'tag-sweeper',   tip:'Top 5 in both goalkeeper saves AND assists — a goalkeeper who contributes at both ends of the pitch' },
+  'Iron Curtain':      { cls:'tag-guardian',  tip:'Top 5 in tackles, interceptions AND blocks simultaneously — the most complete defensive presence in the group' },
+  'Poacher Hawk':      { cls:'tag-guardian',  tip:'Top 5 in both interceptions AND goals — wins possession then immediately punishes the opposition going forward' },
+  'Enforcer Striker':  { cls:'tag-guardian',  tip:'Top 5 in both tackles AND goals — physically dominant in defence and clinical going the other way' },
+  'Glove and Boot':    { cls:'tag-sweeper',   tip:'Top 5 in goalkeeper saves AND shot accuracy — elite between the sticks and a precise striker of the ball' },
+  'Keeper Creator':    { cls:'tag-sweeper',   tip:'Top 5 in goalkeeper saves AND assists — one of the best shot-stoppers who also sets up teammates more than most outfielders' },
+  'Total Keeper':      { cls:'tag-sweeper',   tip:'Top 5 in saves, blocks AND interceptions simultaneously — protects the goal through every possible defensive action' },
+  'All Rounder':       { cls:'tag-workhorse', tip:'Top 5 in goals, tackles AND goalkeeper saves — contributes at the very highest level across three completely different roles' },
+  'Triple Threat':     { cls:'tag-workhorse', tip:'Top 5 in goals, assists AND tackles simultaneously — a complete player who scores, creates and wins the ball back' },
   'Match Winner':      { cls:'tag-workhorse', tip:'Combines saves, goals and assists — the only player who contributes significantly at both ends of every game' },
   'Last Defender':     { cls:'tag-sweeper',   tip:'A goalkeeper who also sets up teammates with assists — saves constantly while also contributing to attacks through build-up' },
   'Silent Keeper':     { cls:'tag-sweeper',   tip:'Makes saves and generates key passes — a goalkeeper who reads the game and contributes to possession rather than just stopping shots' },
@@ -2870,6 +2885,28 @@ function buildTagAuction() {
     const winner = best(scoreFn, minScore);
     if (winner) tagWinners[label] = winner;
   };
+
+  // Rank-based award: player must be in top N for ALL listed stat functions
+  // Winner = best score among those who qualify; score = sum of their ranks (lower is better inverted)
+  const awardRank = (label, statFns, topN = 5) => {
+    // For each stat, build a sorted rank list
+    const ranks = statFns.map(fn => {
+      const sorted = [...players].sort((a,b) => fn(metrics[b]) - fn(metrics[a]));
+      const rankMap = {};
+      sorted.forEach((p,i) => { rankMap[p] = i+1; });
+      return rankMap;
+    });
+    // Eligible = top N in every stat
+    const eligible = players.filter(p => ranks.every(r => r[p] <= topN));
+    if (!eligible.length) return;
+    // Winner = best combined rank (lowest sum of ranks)
+    const scored = eligible.map(p => ({
+      p, score: ranks.reduce((sum,r) => sum + r[p], 0)
+    }));
+    scored.sort((a,b) => a.score - b.score);
+    tagWinners[label] = scored[0].p;
+  };
+
   // Timestamp tags: require 10+ all-time games AND scored goals AND 2+ goal events
   // Use playerStats (all-time) for game count, not filtered display stats
   const awardTime = (label, scoreFn, minEvents = 2) => {
@@ -2901,6 +2938,11 @@ function buildTagAuction() {
   award('Spark Plug',       m => (m.gpg+m.apg)*0.5+(m.gpg>0&&m.apg>0?2:0));
   award('Finisher',         m => m.gpg*0.4+m.conv*0.6);
   award('Silent Assassin',  m => m.spg>0?m.gpg/m.spg*5:0);
+  // Rank-based: top 5 in goals AND top 5 in assists — true dual threat
+  awardRank('Complete Forward', [m=>m.gpg, m=>m.apg], 5);
+  // Rank-based: top 5 in goals AND top 5 in conversion — scores often AND efficiently
+  awardRank('Deadly',           [m=>m.gpg, m=>m.conv], 5);
+
 
   // ── SHOOTING — all positive framings ────────────────────────────────────
   award('Gunslinger',       m => m.spg);
@@ -2908,12 +2950,17 @@ function buildTagAuction() {
   award('Trigger Finger',   m => m.sotpg);
   award('Net Magnet',       m => m.sotpg+m.postpg*2);
   award('Front Foot',       m => m.sotpg+m.apg*0.3);
-  award('Heat Check',       m => m.sotpg*1.5+m.gpg);            // on target + goals — POSITIVE
+  award('Heat Check',       m => m.sotpg*1.5+m.gpg);
   award('Sledgehammer',     m => m.spg*0.7+m.postpg*2);
   award('Volume Shooter',   m => m.spg*0.6+m.gkspg*0.4);
   award('Rapid Fire',       m => m.spg*m.conv);
   award('Pinball',          m => m.postpg*2+m.sotpg*0.3);
   award('High Voltage',     m => m.gpg*0.5+m.tklpg*0.5+m.actpg*0.1);
+  // Rank-based: top 5 shots AND top 5 shot accuracy — shoots a lot AND precisely
+  awardRank('Laser Guided',    [m=>m.spg, m=>m.acc], 5);
+  // Rank-based: top 5 shots on target AND top 5 goals — relentless AND clinical
+  awardRank('On Fire',         [m=>m.sotpg, m=>m.gpg], 5);
+
 
   // ── FLAIR ───────────────────────────────────────────────────────────────
   award('Sauce Merchant',   m => m.nmpg);
@@ -2935,6 +2982,13 @@ function buildTagAuction() {
   award('Play Driver',      m => m.gkspg*0.3+m.kppg*0.7+m.apg*0.5);
   award('Space Creator',    m => m.kppg*0.6+m.apg*0.8+m.blkpg*0.3);
   award('Water Carrier',    m => m.tklpg*0.4+m.kppg*0.5+m.apg*0.6);
+  // Rank-based: top 5 assists AND top 5 key passes AND top 5 interceptions
+  awardRank('The Architect',   [m=>m.apg, m=>m.kppg, m=>m.intpg], 5);
+  // Rank-based: top 5 key passes AND top 5 tackles — creates and wins it back
+  awardRank('Metronome',       [m=>m.kppg, m=>m.tklpg], 5);
+  // Rank-based: top 5 assists AND top 5 GK saves — contributes at both ends
+  awardRank('Box to Box Keeper',[m=>m.apg, m=>m.gkspg], 5);
+
 
   // ── COMBO ───────────────────────────────────────────────────────────────
   award('Combo King',       m => m.dualGames);
@@ -2954,6 +3008,13 @@ function buildTagAuction() {
   award('Guardian',         m => m.gkspg*0.6+m.intpg*0.5+m.tklpg*0.4);
   award('The Shield',       m => m.blkpg*0.8+m.gkspg*0.6+m.tklpg*0.4);
   award('Grafter',          m => m.tklpg*0.5+m.intpg*0.3+m.kppg*0.5);
+  // Rank-based: top 5 tackles AND top 5 interceptions AND top 5 blocks
+  awardRank('Iron Curtain',    [m=>m.tklpg, m=>m.intpg, m=>m.blkpg], 5);
+  // Rank-based: top 5 interceptions AND top 5 goals — wins ball then scores
+  awardRank('Poacher Hawk',    [m=>m.intpg, m=>m.gpg], 5);
+  // Rank-based: top 5 tackles AND top 5 goals — physically dominant and clinical
+  awardRank('Enforcer Striker',[m=>m.tklpg, m=>m.gpg], 5);
+
 
   // ── GK / BLOCKING ───────────────────────────────────────────────────────
   award('Shot Stopper',     m => m.gkspg);                                          // Xavier #1 (8.4)
@@ -2968,6 +3029,11 @@ function buildTagAuction() {
   award('Last Defender',    m => m.gkspg*1.0+m.apg*1.8+m.blkpg*0.5);             // Alberto: saves+assists (not goals)
   award('Silent Keeper',    m => m.gkspg*0.8+m.kppg*0.7+m.apg*0.4);              // Ines: saves+KP+assists
   award('Brick Hands',      m => m.gkspg*2.5+m.blkpg*0.2);                        // Xavier: pure save dominance
+  // Rank-based GK: must be elite in multiple independent stats
+  awardRank('Glove and Boot',  [m=>m.gkspg, m=>m.acc], 5);         // top 5 saves AND top 5 shot accuracy
+  awardRank('Keeper Creator',  [m=>m.gkspg, m=>m.apg], 5);         // top 5 saves AND top 5 assists
+  awardRank('Total Keeper',    [m=>m.gkspg, m=>m.blkpg, m=>m.intpg], 5); // top 5 saves, blocks AND ints
+
 
   // ── HYBRID ──────────────────────────────────────────────────────────────
   award('Engine',           m => m.actpg);                                          // Jake #1 (52.3)
@@ -2982,6 +3048,10 @@ function buildTagAuction() {
   award('Lone Wolf',        m => m.asScorer.length===0&&m.gpg>0?m.gpg*3:0);
   award('Double Shift',     m => m.gkspg>=4&&(m.gpg+m.apg)>=1.5?m.gkspg*0.5+(m.gpg+m.apg)*2:0);
   // Formulas for players with 0 auction tags
+  // Rank-based hybrid: must be elite across truly independent categories
+  awardRank('All Rounder',     [m=>m.gpg, m=>m.tklpg, m=>m.gkspg], 5); // top 5 goals, tackles AND saves
+  awardRank('Triple Threat',   [m=>m.gpg, m=>m.apg, m=>m.tklpg], 5);   // top 5 goals, assists AND tackles
+
   award('Precision',        m => m.apg*2.5+m.conv*5+m.gpg*0.3);                   // David: assists+conversion
   award('Engine Room',      m => m.tklpg*0.9+m.kppg*0.9+m.intpg*0.4);            // James2: defensive creator
   award('Shadow Defender',  m => m.intpg*0.8+m.gkspg*0.6+m.tklpg*0.2);           // Dexter: int+saves+tackles
