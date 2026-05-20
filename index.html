@@ -3182,41 +3182,89 @@ function getFifaTags(s, cs) {
     return def ? {label, cls:def.cls, tip:def.tip} : null;
   }).filter(Boolean);
 
-  // Fallback only if auction gave this player 0 or 1 tags — fill to max 2
-  // Use pool-relative ranking but check against _tagCache for global uniqueness
+  // Fallback: guarantee every player gets exactly 2 tags
   if (result.length < 2) {
-    const g = Math.max(s.games,1);
-    const gpg=s.goals/g, apg=s.assists/g, kppg=s.key_passes/g;
-    const intpg=s.interceptions/g, tklpg=s.tackles/g, blkpg=(s.blocks||0)/g;
-    const gkspg=(s.goalkeeper_saves||0)/g, nmpg=(s.nutmegs||0)/g;
-    const sotpg=(s.shots_on_target||0)/g, spg=s.total_shots/g;
-    const actpg=(s.goals+s.assists+s.total_shots+s.tackles+s.interceptions)/g;
-    const pool = Object.values(getDisplayStats()).filter(p => p.games >= 5);
-    const rank = (myVal, fn) => pool.filter(p => fn(p) > myVal).length;
-    const pct25 = Math.ceil(pool.length * 0.25);
+    const g = Math.max(s.games, 1);
+    const gpg  = s.goals / g;
+    const apg  = s.assists / g;
+    const kppg = s.key_passes / g;
+    const intpg= s.interceptions / g;
+    const tklpg= s.tackles / g;
+    const blkpg= (s.blocks || 0) / g;
+    const gkspg= (s.goalkeeper_saves || 0) / g;
+    const nmpg = (s.nutmegs || 0) / g;
+    const sotpg= (s.shots_on_target || 0) / g;
+    const spg  = s.total_shots / g;
+    const actpg= (s.goals + s.assists + s.total_shots + s.tackles + s.interceptions) / g;
+    const defpg= (s.tackles + s.interceptions + (s.blocks || 0)) / g;
+    const conv = s.goals / Math.max(s.total_shots, 1);
 
-    const allAuctionTags = new Set(
-      Object.values(_tagCache).flat()
-    );
+    // Full candidate list — ranked by how well this player fits each tag
+    // No global uniqueness filter in fallback — let each player have what suits them best
+    const candidates = [
+      // Attacking
+      { score: gpg*4.5,                    tag:'Golden Boot',     cls:'tag-striker',   tip:'One of the group\'s top scorers' },
+      { score: conv*10+gpg*1.5,            tag:'Clinical',        cls:'tag-striker',   tip:'Highly efficient in front of goal' },
+      { score: gpg*2+conv*5,               tag:'Finisher',        cls:'tag-striker',   tip:'Scores consistently for the team' },
+      { score: gpg/Math.max(spg,0.1)*8,   tag:'Opportunist',     cls:'tag-striker',   tip:'Makes every shot count' },
+      { score: gpg*1.5+apg*1.5+conv*3,    tag:'Last Touch',      cls:'tag-striker',   tip:'Always involved at the finish' },
+      { score: gpg*2+apg*2,               tag:'Wave Maker',      cls:'tag-striker',   tip:'Contributes heavily in both goals and assists' },
+      // Shooting
+      { score: spg,                        tag:'Gunslinger',      cls:'tag-target',    tip:'Shoots more than almost anyone' },
+      { score: sotpg*2,                    tag:'Net Magnet',      cls:'tag-target',    tip:'Gets shots on target constantly' },
+      { score: sotpg/Math.max(spg,0.1)*8, tag:'Deadeye',         cls:'tag-target',    tip:'Most accurate shooter in the group' },
+      { score: spg*0.6+sotpg*0.4,         tag:'Volume Shooter',  cls:'tag-target',    tip:'Generates a huge amount of shot volume' },
+      { score: sotpg+apg*0.5,             tag:'Front Foot',      cls:'tag-target',    tip:'Always attacking and threatening' },
+      // Flair
+      { score: nmpg*4,                     tag:'Sauce Merchant',  cls:'tag-wizard',    tip:'Nutmegs opponents more than anyone' },
+      { score: nmpg*3+gpg,                 tag:'Showtime',        cls:'tag-wizard',    tip:'Brings flair and goals in equal measure' },
+      { score: nmpg*2+apg,                 tag:'Streetballer',    cls:'tag-wizard',    tip:'Technical skill combined with creativity' },
+      // Creating
+      { score: apg*4,                      tag:'Conductor',       cls:'tag-playmaker', tip:'Sets up goals more than anyone' },
+      { score: kppg*3,                     tag:'Second Assist',   cls:'tag-playmaker', tip:'Creates more key passes than almost anyone' },
+      { score: apg*2+kppg,                 tag:'Deep Threat',     cls:'tag-playmaker', tip:'Combines assists and key passes at a high level' },
+      { score: kppg*1.5+apg,              tag:'Play Driver',     cls:'tag-playmaker', tip:'Drives attacks forward through passing' },
+      { score: kppg*0.7+apg*0.7,          tag:'Space Creator',   cls:'tag-playmaker', tip:'Creates space and opportunities for teammates' },
+      { score: (apg+kppg)*0.5+tklpg*0.3, tag:'Link Up',         cls:'tag-playmaker', tip:'Bridges defence and attack through passing' },
+      // Defending
+      { score: intpg*3,                    tag:'Ball Hawk',       cls:'tag-guardian',  tip:'Wins interceptions constantly' },
+      { score: tklpg*3,                    tag:'Enforcer',        cls:'tag-guardian',  tip:'Wins more tackles than almost anyone' },
+      { score: tklpg*1.2+intpg*0.8,       tag:'Press King',      cls:'tag-guardian',  tip:'Relentlessly wins the ball back' },
+      { score: tklpg*0.5+intpg*0.5,       tag:'Sweeper',         cls:'tag-guardian',  tip:'Balanced across all defensive actions' },
+      { score: defpg,                      tag:'Steel Wall',      cls:'tag-guardian',  tip:'Highest total defensive actions in the group' },
+      { score: intpg*1.5+blkpg*0.5,       tag:'Cut Out',         cls:'tag-guardian',  tip:'Reads the game to intercept and block' },
+      { score: blkpg*2+tklpg*0.3,         tag:'Wall',            cls:'tag-guardian',  tip:'Blocks more attacks than almost anyone' },
+      { score: tklpg*0.6+kppg*0.6+apg*0.4,tag:'Water Carrier',  cls:'tag-workhorse', tip:'Wins the ball then immediately starts attacks' },
+      { score: tklpg*0.7+intpg*0.4+kppg*0.3,tag:'Grafter',      cls:'tag-workhorse', tip:'Does the hard defensive work while also creating' },
+      // GK
+      { score: gkspg*4,                    tag:'Shot Stopper',    cls:'tag-sweeper',   tip:'Faces and saves shots more than anyone' },
+      { score: gkspg*2+blkpg,             tag:'Clean Hands',     cls:'tag-sweeper',   tip:'Saves shots and blocks attacks consistently' },
+      { score: Math.min(blkpg,gkspg)*3,   tag:'Fortress',        cls:'tag-blocker',   tip:'Strong across both saves and blocking' },
+      { score: gkspg*2+apg*0.5,           tag:'Safe Hands',      cls:'tag-sweeper',   tip:'Saves goals and contributes going forward' },
+      { score: gkspg*0.8+intpg*0.6,       tag:'Sweeper Keeper',  cls:'tag-sweeper',   tip:'Makes saves and wins interceptions outside the area' },
+      { score: blkpg*1.2+gkspg*0.5,       tag:'The Shield',      cls:'tag-blocker',   tip:'Puts their body in front of shots and attacks' },
+      // Hybrid
+      { score: actpg,                      tag:'Engine',          cls:'tag-workhorse', tip:'Involved in more actions per game than almost anyone' },
+      { score: actpg*0.5+tklpg*0.5,       tag:'Workhorse',       cls:'tag-workhorse', tip:'Never stops running and working for the team' },
+      { score: Math.min(gpg,tklpg)*4,      tag:'Two-Way Engine',  cls:'tag-workhorse', tip:'Contributes at both ends of the pitch' },
+      { score: gpg*0.8+apg*0.8+tklpg*0.3+intpg*0.3+gkspg*0.2, tag:'Complete Player', cls:'tag-workhorse', tip:'Contributes across every part of the game' },
+      { score: actpg*0.4+defpg*0.3+kppg*0.3, tag:'All Action',   cls:'tag-workhorse', tip:'Involved in attack, defence and creation every match' },
+      { score: gpg*0.5+apg*0.5+conv*2,    tag:'Impact Player',   cls:'tag-workhorse', tip:'Changes matches through efficient goal involvement' },
+    ].filter(c => c.score > 0);
 
-    const fallbackCandidates = [
-      {r:rank(gpg,  p=>p.goals/Math.max(p.games,1)),                  tag:'Finisher',      cls:'tag-striker',   tip:'Among the top scorers in the group'},
-      {r:rank(nmpg, p=>(p.nutmegs||0)/Math.max(p.games,1)),           tag:'Sauce Merchant',cls:'tag-wizard',    tip:'Among the top flair players in the group'},
-      {r:rank(sotpg,p=>(p.shots_on_target||0)/Math.max(p.games,1)),   tag:'Front Foot',    cls:'tag-target',    tip:'Among the most threatening attackers in the group'},
-      {r:rank(gkspg+blkpg,p=>((p.goalkeeper_saves||0)+(p.blocks||0))/Math.max(p.games,1)), tag:'Fortress', cls:'tag-blocker', tip:'Strong across both saves and blocks'},
-      {r:rank(gpg+tklpg,p=>(p.goals+p.tackles)/Math.max(p.games,1)), tag:'Two-Way Engine', cls:'tag-workhorse', tip:'Contributes in both attack and defense'},
-      {r:rank(actpg,p=>(p.goals+p.assists+p.total_shots+p.tackles+p.interceptions)/Math.max(p.games,1)), tag:'Box to Box', cls:'tag-workhorse', tip:'High involvement every match'},
-      {r:rank(kppg, p=>p.key_passes/Math.max(p.games,1)),             tag:'Play Driver',   cls:'tag-playmaker', tip:'Creates chances for teammates'},
-      {r:rank(tklpg+intpg,p=>(p.tackles+p.interceptions)/Math.max(p.games,1)), tag:'Lockdown', cls:'tag-guardian', tip:'Wins the ball consistently'},
-    ]
-    .filter(f => f.r <= pct25)
-    .filter(f => !result.some(r => r.label === f.tag))
-    .filter(f => !allAuctionTags.has(f.tag)) // don't use tags already in the auction
-    .sort((a,b) => a.r - b.r);
+    // Sort by score descending, skip already-used labels for this player
+    candidates.sort((a,b) => b.score - a.score);
+    const usedLabels = new Set(result.map(r => r.label));
+    const usedClasses = new Set(result.map(r => r.cls));
 
-    for (const f of fallbackCandidates) {
+    for (const c of candidates) {
       if (result.length >= 2) break;
-      result.push({label:f.tag, cls:f.cls, tip:f.tip});
+      if (usedLabels.has(c.tag)) continue;
+      // Allow same class only if we have no choice (avoid colour repeats when possible)
+      if (usedClasses.has(c.cls) && candidates.some(x => !usedClasses.has(x.cls) && !usedLabels.has(x.tag))) continue;
+      result.push({ label: c.tag, cls: c.cls, tip: c.tip });
+      usedLabels.add(c.tag);
+      usedClasses.add(c.cls);
     }
   }
 
