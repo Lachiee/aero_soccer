@@ -2853,13 +2853,11 @@ function buildTagAuction() {
 
   const players = Object.keys(metrics);
   const best = (scoreFn, minScore = 0) => {
-    // Scale score by sqrt(games/10) so small samples can't dominate veterans
-    // A 5-game player needs ~41% better per-game stats to beat a 30-game player
+    // Pure per-game comparison — game minimum (5+) already handled by allStats filter
+    // No weight scaling: a 7-game player's per-game stats are valid
     let bestP=null, bestV=-Infinity;
     players.forEach(p=>{
-      const m = metrics[p];
-      const gameWeight = Math.sqrt(Math.min(m.ps.games, 30) / 10);
-      const v = scoreFn(m) * gameWeight;
+      const v = scoreFn(metrics[p]);
       if(v>bestV){bestV=v;bestP=p;}
     });
     return bestV >= minScore ? bestP : null;
@@ -3265,61 +3263,59 @@ function getFifaTags(s, cs) {
 
     const candidates = [
       // Attacking
-      { score: gpg*4.5,                         tag:'Golden Boot',    cls:'tag-striker',   tip:'One of the group\'s top scorers' },
-      { score: conv*10+gpg*1.5,                 tag:'Clinical' },
-      { score: gpg*2+conv*5,                    tag:'Finisher' },
-      { score: gpg/Math.max(spg,0.1)*8,        tag:'Opportunist',    cls:'tag-striker',   tip:'Makes every shot count' },
-      { score: gpg*1.5+apg*1.5+conv*3,         tag:'Last Touch' },
-      { score: (gpg+apg)*apg,                   tag:'Wave Maker' },
-      { score: gpg>0.5&&spg<12?(gpg/spg)*8:0,  tag:'Ghost Runner' },
-      { score: gpg*0.4+conv*0.6,               tag:'Sharp' },
+      { score: gpg*5,                              tag:'Golden Boot'      },
+      { score: conv*12+gpg*1,                      tag:'Clinical'         },
+      { score: gpg*1.5+conv*4,                     tag:'Sharp'            },
+      { score: gpg/Math.max(spg,0.1)*10,          tag:'Opportunist'      },
+      { score: gpg*0.4+conv*0.6,                   tag:'Finisher'         },
+      { score: gpg*1.5+apg*1.5+conv*3,            tag:'Impact Player'    },
+      { score: gpg>0.5&&spg<12?(gpg/spg)*10:0,   tag:'Ghost Runner'     },
+      { score: spg<12&&gpg>0.8&&apg>0.8?(gpg+apg)*3:0, tag:'Shadow Striker'},
       // Shooting
-      { score: spg,                             tag:'Gunslinger' },
-      { score: sotpg*2,                         tag:'Net Magnet' },
-      { score: sotpg/Math.max(spg,0.1)*8,      tag:'Deadeye',        cls:'tag-target',    tip:'Most accurate shooter in the group' },
-      { score: spg*0.6+sotpg*0.4,              tag:'Volume Shooter' },
-      { score: sotpg+apg*0.5,                  tag:'Front Foot' },
-      { score: spg*0.7+gpg*2,                  tag:'Sledgehammer' },
-      { score: spg*conv,                        tag:'Rapid Fire' },
+      { score: spg*1.5,                             tag:'Gunslinger'       },
+      { score: sotpg*2.5,                           tag:'Trigger Finger'   },
+      { score: sotpg/Math.max(spg,0.1)*10,         tag:'Deadeye'          },
+      { score: sotpg*1.2+apg*0.5,                  tag:'Front Foot'       },
+      { score: sotpg*1.5+gpg,                      tag:'Heat Check'       },
+      { score: spg*0.7+gpg*1.5,                    tag:'Sledgehammer'     },
+      { score: spg*conv*3,                          tag:'Rapid Fire'       },
       // Flair
-      { score: nmpg*4,                          tag:'Sauce Merchant' },
-      { score: nmpg*3+gpg,                      tag:'Showtime' },
-      { score: nmpg*2+apg,                      tag:'Streetballer' },
-      { score: nmpg+spg*0.2,                   tag:'Risk Taker' },
-      { score: nmpg*1.5+kppg*0.5,             tag:'Chaos Creator' },
+      { score: nmpg*5,                              tag:'Sauce Merchant'   },
+      { score: nmpg*3+gpg,                          tag:'Showtime'         },
       // Creating
-      { score: apg*4,                           tag:'Conductor' },
-      { score: kppg*3,                          tag:'Second Assist' },
-      { score: apg*2.5+kppg*0.3,              tag:'Deep Threat' },
-      { score: kppg*0.7+apg*0.7,              tag:'Space Creator' },
-      { score: (apg+kppg)*0.5+tklpg*0.3,     tag:'Link Up' },
-      { score: gkspg*0.3+kppg*0.7+apg*0.5,  tag:'Play Driver' },
-      { score: Math.min(apg,kppg)*2.5,        tag:'Puppet Master',  cls:'tag-playmaker', tip:'Elite in both assists and key passes' },
+      { score: apg*5,                               tag:'Conductor'        },
+      { score: kppg*4,                              tag:'Second Assist'    },
+      { score: apg*2.5+kppg*0.5,                  tag:'Deep Threat'      },
+      { score: kppg*0.8+apg*0.8,                  tag:'Space Creator'    },
+      { score: kppg*0.6+intpg*1.0,                tag:'Traffic Controller'},
+      { score: gkspg*0.3+kppg*0.7+apg*0.5,       tag:'Play Driver'      },
+      { score: Math.min(apg,kppg)*3,               tag:'Puppet Master'    },
+      { score: tklpg*0.4+kppg*0.5+apg*0.7,       tag:'Water Carrier'    },
       // Defending
-      { score: intpg*3,                         tag:'Ball Hawk' },
-      { score: tklpg*3,                         tag:'Enforcer' },
-      { score: tklpg+intpg,                     tag:'Press King' },
-      { score: tklpg*0.6+intpg*0.6,           tag:'Sweeper' },
-      { score: defpg,                           tag:'Steel Wall' },
-      { score: intpg*1.8+blkpg*0.3,           tag:'Cut Out' },
-      { score: blkpg*2+tklpg*0.3,             tag:'Wall' },
-      { score: gkspg*0.6+intpg*0.5+tklpg*0.4,tag:'Guardian' },
-      { score: tklpg*0.4+kppg*0.5+apg*0.6,  tag:'Water Carrier' },
-      { score: tklpg*0.5+intpg*0.3+kppg*0.5,tag:'Grafter' },
+      { score: intpg*4,                             tag:'Ball Hawk'        },
+      { score: tklpg*4,                             tag:'Enforcer'         },
+      { score: tklpg*1.2+intpg*0.8,               tag:'Press King'       },
+      { score: tklpg*0.7+intpg*0.7,               tag:'Sweeper'          },
+      { score: intpg*1.8+blkpg*0.5,               tag:'Cut Out'          },
+      { score: blkpg*3+tklpg*0.3,                 tag:'Wall'             },
+      { score: defpg*1.5,                           tag:'Steel Wall'       },
+      { score: tklpg*0.5+intpg*0.4+kppg*0.6,     tag:'Grafter'          },
+      { score: gkspg*0.7+intpg*0.5+tklpg*0.4,    tag:'Guardian'         },
       // GK
-      { score: gkspg*4,                         tag:'Shot Stopper' },
-      { score: gkspg*1.2+blkpg*0.8,           tag:'Clean Hands' },
-      { score: Math.min(blkpg,gkspg)*3,        tag:'Fortress',       cls:'tag-blocker',   tip:'Strong across both saves and blocking' },
-      { score: gkspg*1.5+gpg*0.8,             tag:'Safe Hands' },
-      { score: gkspg*0.7+kppg*0.5,            tag:'Sweeper Keeper' },
-      { score: blkpg*1.2+gkspg*0.5,          tag:'The Shield' },
-      // Hybrid — diverse enough that different players win different ones
-      { score: actpg*0.4+defpg*0.3+kppg*0.3, tag:'All Action' },
-      { score: actpg*0.5+tklpg*0.5,           tag:'Workhorse' },
-      { score: Math.min(gpg,tklpg)*5,          tag:'Two-Way Engine', cls:'tag-workhorse', tip:'Contributes at both ends of the pitch' },
-      { score: gpg*0.7+apg*0.7+kppg*0.3+intpg*0.2, tag:'Complete Player' },
-      { score: gpg*1.5+apg*1.5+conv*3,        tag:'Impact Player' },
-      { score: actpg,                           tag:'Engine' },
+      { score: gkspg*5,                             tag:'Shot Stopper'     },
+      { score: gkspg*1.5+blkpg,                   tag:'Clean Hands'      },
+      { score: Math.min(blkpg,gkspg)*4,           tag:'Fortress'         },
+      { score: gkspg*1.8+gpg*0.5,                 tag:'Safe Hands'       },
+      { score: gkspg*0.8+kppg*0.6,               tag:'Sweeper Keeper'   },
+      { score: blkpg*1.5+gkspg*0.5,              tag:'The Shield'       },
+      // Hybrid — specific combos targeting different players
+      { score: gpg*0.8+apg*0.8+kppg*0.4+intpg*0.2, tag:'Complete Player'},
+      { score: Math.min(gpg,tklpg)*6,              tag:'Two-Way Engine'   },
+      { score: gpg*0.5+tklpg*0.5+actpg*0.1,      tag:'High Voltage'     },
+      { score: tklpg*0.9+kppg*0.9+intpg*0.4,     tag:'Engine Room'      },
+      { score: gkspg*0.5+gpg*1.2+apg*0.8,        tag:'Match Winner'     },
+      { score: apg*2.5+conv*6+gpg*0.3,           tag:'Precision'        },
+      { score: intpg*0.8+gkspg*0.6+tklpg*0.3,   tag:'Shadow Defender'  },
     ].filter(c => c.score > 0 && TAG_DEFS[c.tag]);
 
     candidates.sort((a,b) => b.score - a.score);
@@ -3329,12 +3325,11 @@ function getFifaTags(s, cs) {
     for (const c of candidates) {
       if (result.length >= 2) break;
       if (usedLabels.has(c.tag)) continue;
-      if (allAuctionTags.has(c.tag)) continue; // don't use tags already won in auction
       const def = TAG_DEFS[c.tag]; if (!def) continue;
-      // Try to avoid same colour class if alternatives exist
+      // Avoid same colour class if a different-coloured option exists
       if (usedClasses.has(def.cls) && candidates.some(x => {
         const d = TAG_DEFS[x.tag];
-        return d && !usedClasses.has(d.cls) && !usedLabels.has(x.tag) && !allAuctionTags.has(x.tag);
+        return d && !usedClasses.has(d.cls) && !usedLabels.has(x.tag);
       })) continue;
       result.push({ label: c.tag, cls: def.cls, tip: def.tip });
       usedLabels.add(c.tag);
