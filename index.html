@@ -2623,6 +2623,13 @@ const TAG_DEFS = {
   'Complete Player':   { cls:'tag-workhorse', tip:'Contributes across goals, assists, key passes and interceptions — no statistical weakness across the full season' },
   'Swiss Army Knife':  { cls:'tag-workhorse', tip:'The most balanced stat profile in the group — contributes meaningfully across scoring, creating, defending and goalkeeping equally' },
   'Mr Reliable':       { cls:'tag-workhorse', tip:'The most consistent performer match to match — delivers solid numbers in every game with minimal variance' },
+  'Match Winner':      { cls:'tag-workhorse', tip:'Combines saves, goals and assists — the only player who contributes significantly at both ends of every game' },
+  'Last Defender':     { cls:'tag-sweeper',   tip:'A goalkeeper who also sets up teammates with assists — saves constantly while also contributing to attacks through build-up' },
+  'Silent Keeper':     { cls:'tag-sweeper',   tip:'Makes saves and generates key passes — a goalkeeper who reads the game and contributes to possession rather than just stopping shots' },
+  'Brick Hands':       { cls:'tag-sweeper',   tip:'Pure save dominance — the most prolific shot-stopper in the group when weighting save volume above all else' },
+  'Precision':         { cls:'tag-striker',   tip:'High assists combined with elite conversion rate — creates for others and finishes their own chances with minimal waste' },
+  'Engine Room':       { cls:'tag-workhorse', tip:'Combines tackles, interceptions and key passes — wins the ball and immediately uses it productively, the midfield engine' },
+  'Shadow Defender':   { cls:'tag-guardian',  tip:'Combines interceptions, saves and tackles — a defensive presence across multiple layers who protects in ways no one else does' },
   'Lone Wolf':         { cls:'tag-workhorse', tip:'Scores goals without receiving tracked combo assists — creates and finishes their own chances without needing direct setup' },
 
   // ── Combo ─────────────────────────────────────────────────────────────────
@@ -2951,25 +2958,35 @@ function buildTagAuction() {
   award('Grafter',          m => m.tklpg*0.5+m.intpg*0.3+m.kppg*0.5);
 
   // ── GK / BLOCKING ───────────────────────────────────────────────────────
-  award('Shot Stopper',     m => m.gkspg);
-  award('Last Line',        m => m.gkspg*1.3+m.kppg*0.2);
-  award('Clean Hands',      m => m.gkspg*1.2+m.blkpg*0.8);
-  award('Fortress',         m => Math.min(m.blkpg,m.gkspg)*3.5);
-  award('Safe Hands',       m => m.gkspg*1.5+m.gpg*0.8);
-  award('Sweeper Keeper',   m => m.gkspg*0.7+m.kppg*0.5);
-  award('Brick Wall',       m => m.blkpg*1.8+m.gkspg*0.3);
+  award('Shot Stopper',     m => m.gkspg);                                          // Xavier #1 (8.4)
+  award('Last Line',        m => m.gkspg*1.3+m.kppg*0.2);                          // Xavier
+  award('Clean Hands',      m => m.gkspg*1.2+m.blkpg*0.8);                         // Alberto
+  award('Fortress',         m => Math.min(m.blkpg,m.gkspg)*3.5);                   // Alberto
+  award('Safe Hands',       m => m.gkspg*1.5+m.gpg*0.8);                           // James (saves+goals unique combo)
+  award('Sweeper Keeper',   m => m.gkspg*0.7+m.kppg*0.5);                          // Ines (saves+KP)
+  award('Brick Wall',       m => m.blkpg*1.8+m.gkspg*0.3);                         // Lachlan
+  // Unique per-player GK formulas targeting James/Alberto/Ines/Xavier distinctly
+  award('Match Winner',     m => m.gkspg*0.4+m.gpg*1.2+m.apg*0.8);               // James: only player with high saves AND goals
+  award('Last Defender',    m => m.gkspg*1.0+m.apg*1.8+m.blkpg*0.5);             // Alberto: saves+assists (not goals)
+  award('Silent Keeper',    m => m.gkspg*0.8+m.kppg*0.7+m.apg*0.4);              // Ines: saves+KP+assists
+  award('Brick Hands',      m => m.gkspg*2.5+m.blkpg*0.2);                        // Xavier: pure save dominance
 
   // ── HYBRID ──────────────────────────────────────────────────────────────
-  award('Engine',           m => m.actpg);
-  award('Box to Box',       m => m.spg*0.6+m.tklpg*2);
-  award('Two-Way Engine',   m => Math.min(m.gpg,m.tklpg)*5);
-  award('Complete Player',  m => m.gpg*0.7+m.apg*0.7+m.kppg*0.3+m.intpg*0.2);
+  award('Engine',           m => m.actpg);                                          // Jake #1 (52.3)
+  award('Box to Box',       m => m.spg*0.6+m.tklpg*2);                            // Jake (shots+tackles)
+  award('Two-Way Engine',   m => Math.min(m.gpg,m.tklpg)*5);                      // Jake/Andres
+  award('High Voltage',     m => m.gpg*0.5+m.tklpg*0.5+m.actpg*0.1);             // Andres (goals+tackles+activity)
+  award('Complete Player',  m => m.gpg*0.7+m.apg*0.7+m.kppg*0.3+m.intpg*0.2);   // Gio (balanced)
   award('Mr Reliable',      m => m.reliabilityScore);
-  award('Workhorse',        m => m.actpg*0.4+m.tklpg*0.6);
-  award('All Action',       m => m.actpg*0.3+m.defpg*0.3+m.kppg*0.4);
+  award('Workhorse',        m => m.actpg*0.4+m.tklpg*0.6);                        // Austin (activity+tackles)
+  award('All Action',       m => m.actpg*0.3+m.defpg*0.3+m.kppg*0.4);            // James2 (activity+def+KP)
   award('Swiss Army Knife', m => m.stdDev<0.4?10-m.stdDev*20:0);
   award('Lone Wolf',        m => m.asScorer.length===0&&m.gpg>0?m.gpg*3:0);
   award('Double Shift',     m => m.gkspg>=4&&(m.gpg+m.apg)>=1.5?m.gkspg*0.5+(m.gpg+m.apg)*2:0);
+  // Formulas for players with 0 auction tags
+  award('Precision',        m => m.apg*2.5+m.conv*5+m.gpg*0.3);                   // David: assists+conversion
+  award('Engine Room',      m => m.tklpg*0.9+m.kppg*0.9+m.intpg*0.4);            // James2: defensive creator
+  award('Shadow Defender',  m => m.intpg*0.8+m.gkspg*0.6+m.tklpg*0.2);           // Dexter: int+saves+tackles
 
   // ── TIMESTAMP TAGS ──────────────────────────────────────────────────────
   // Each uses a distinct goal-event criterion — all go to different players
