@@ -3790,13 +3790,14 @@ function getPlayerComboStats(playerName) {
   });
 
   // Calculate shared games from combo data only — games where both players
-  // appeared in the same match AND that match has goal combo data recorded
+  // appeared on the SAME team AND that match has goal combo data recorded
   const getSharedGames = (otherPlayer) => {
-    return Object.entries(goalCombos).filter(([mid, data]) => {
+    return Object.entries(goalCombos).filter(([mid]) => {
       const m = matchList.find(x => x.id === mid);
       if (!m) return false;
-      const players = [...m.teamA,...m.teamB].map(r => r.player);
-      return players.includes(playerName) && players.includes(otherPlayer);
+      // Check if both players are on the same team in this match
+      const inA = (team) => team.some(r => r.player === playerName) && team.some(r => r.player === otherPlayer);
+      return inA(m.teamA) || inA(m.teamB);
     }).length;
   };
 
@@ -3960,8 +3961,8 @@ function getAttackComboPrediction(teamPlayers) {
     const sharedRecorded = Object.entries(goalCombos).filter(([mid]) => {
       const m = matchList.find(x => x.id === mid);
       if (!m) return false;
-      const players = [...m.teamA,...m.teamB].map(r => r.player);
-      return players.includes(c.scorer) && players.includes(c.assister);
+      const inA = (team) => team.some(r => r.player === c.scorer) && team.some(r => r.player === c.assister);
+      return inA(m.teamA) || inA(m.teamB);
     }).length;
     return {
       ...c,
