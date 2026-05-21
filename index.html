@@ -4006,9 +4006,14 @@ function hmapDrawCourt(ctx, W, H) {
 
 function hmapRender(canvas, shots, opts={}) {
   // shots: array of {sx, sy} (0-1 fractions)
-  // opts: { interactive, hoverHex, selectedHex, pin }
+  // opts: { interactive, hoverHex, selectedHex, pin, width }
   const dpr = window.devicePixelRatio || 1;
-  const W = Math.max(200, canvas.getBoundingClientRect().width || canvas.offsetWidth || 260);
+  const W = opts.width
+    || (canvas.style.width ? parseInt(canvas.style.width) : 0)
+    || canvas.getBoundingClientRect().width
+    || canvas.offsetWidth
+    || canvas.parentElement?.clientWidth
+    || 300;
   const H = Math.round(W * 0.52);
   canvas.width = W*dpr; canvas.height = H*dpr;
   canvas.style.width = W+'px'; canvas.style.height = H+'px';
@@ -6692,6 +6697,12 @@ function saveCustomStat(player, key, val) {
   setTimeout(() => {
     const heatCanvas = document.getElementById('profile-heatmap');
     if (!heatCanvas) return;
+    // Force width from parent since getBoundingClientRect may be 0 right after innerHTML
+    const parentWidth = heatCanvas.closest('[style*="border-radius:12px"]')?.clientWidth
+                     || heatCanvas.parentElement?.clientWidth
+                     || document.getElementById('profile-content')?.clientWidth
+                     || 600;
+    heatCanvas.style.width = (parentWidth - 4) + 'px';
     const shots = [];
     Object.values(goalCombos).forEach(data => {
       [...(data.h1||[]), ...(data.h2||[])].forEach(g => {
@@ -6701,7 +6712,7 @@ function saveCustomStat(player, key, val) {
       });
     });
     hmapRender(heatCanvas, shots);
-  }, 100);
+  }, 150);
 }
 
 // =====================================================================
