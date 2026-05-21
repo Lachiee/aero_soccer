@@ -3967,7 +3967,9 @@ function hmapLayout(W,H) {
 function hmapDrawCourt(ctx, W, H) {
   // Green base
   ctx.fillStyle = '#1a7a32';
-  ctx.beginPath(); ctx.roundRect(0,0,W,H,6); ctx.fill();
+  ctx.beginPath();
+  if (ctx.roundRect) ctx.roundRect(0,0,W,H,6); else ctx.rect(0,0,W,H);
+  ctx.fill();
   // Subtle stripes
   for (let i=0;i<12;i++) {
     ctx.fillStyle = i%2 ? 'rgba(0,0,0,0.04)' : 'rgba(255,255,255,0.015)';
@@ -5917,7 +5919,12 @@ function renderProfileHeatmap(name) {
   // section.clientWidth is 0 at render time — derive from window instead
   const W = Math.max(200, window.innerWidth - 120);
   heatCanvas.style.width = W + 'px';
-  hmapRender(heatCanvas, shots, { width: W });
+  try {
+    hmapRender(heatCanvas, shots, { width: W });
+  } catch(e) {
+    if (debugEl) debugEl.textContent = 'Render error: ' + e.message;
+    console.error('hmapRender error:', e);
+  }
 }
 
 function renderProfile(name) {
