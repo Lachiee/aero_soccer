@@ -3930,6 +3930,254 @@ function drawWormCanvas(canvasId, matchId) {
 }
 
 // =====================================================================
+// =====================================================================
+// SHOT HEATMAP — court drawing + hex grid rendering
+// =====================================================================
+const HMAP_COLS = 14, HMAP_ROWS = 8;
+
+function hmapHeatRGB(t) {
+  const stops = [[59,130,246],[34,197,94],[234,179,8],[249,115,22],[220,38,38]];
+  const s = t*4, i = Math.min(3,Math.floor(s)), u = s-i;
+  const a = stops[i], b = stops[i+1];
+  return [Math.round(a[0]+(b[0]-a[0])*u), Math.round(a[1]+(b[1]-a[1])*u), Math.round(a[2]+(b[2]-a[2])*u)];
+}
+
+function hmapHexCtr(c,r,hr,ox,oy) {
+  return { x: ox + c*hr*1.732 + (r%2 ? hr*0.866 : 0), y: oy + r*hr*1.5 };
+}
+
+function hmapHexPath(ctx,cx,cy,r) {
+  ctx.beginPath();
+  for (let i=0;i<6;i++) {
+    const a = Math.PI/3*i - Math.PI/6;
+    i ? ctx.lineTo(cx+r*Math.cos(a), cy+r*Math.sin(a)) : ctx.moveTo(cx+r*Math.cos(a), cy+r*Math.sin(a));
+  }
+  ctx.closePath();
+}
+
+function hmapLayout(W,H) {
+  const pad = 6;
+  const hr = Math.min((W-pad*2)/((HMAP_COLS-0.5)*1.732), (H-pad*2)/((HMAP_ROWS-0.5)*1.5));
+  const gW = (HMAP_COLS-1)*hr*1.732 + hr;
+  const gH = (HMAP_ROWS-1)*hr*1.5 + hr*2;
+  return { hr, ox: (W-gW)/2+hr, oy: (H-gH)/2+hr };
+}
+
+function hmapDrawCourt(ctx, W, H) {
+  // Green base
+  ctx.fillStyle = '#1a7a32';
+  ctx.beginPath(); ctx.roundRect(0,0,W,H,6); ctx.fill();
+  // Subtle stripes
+  for (let i=0;i<12;i++) {
+    ctx.fillStyle = i%2 ? 'rgba(0,0,0,0.04)' : 'rgba(255,255,255,0.015)';
+    ctx.fillRect(i*(W/12), 0, W/12, H);
+  }
+  // Black horizontal strip
+  const sh = H*0.18;
+  ctx.fillStyle = '#080e1a';
+  ctx.fillRect(0, H/2-sh/2, W, sh);
+  // White centre line
+  ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(W/2,0); ctx.lineTo(W/2,H); ctx.stroke();
+  // Yellow markings
+  const Y = 'rgba(255,215,0,0.92)';
+  ctx.strokeStyle = Y; ctx.lineWidth = 2;
+  ctx.strokeRect(3,3,W-6,H-6);
+  // One yellow vertical line each side at ~34%
+  const zx = W*0.34;
+  ctx.beginPath(); ctx.moveTo(zx,3); ctx.lineTo(zx,H-3); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(W-zx,3); ctx.lineTo(W-zx,H-3); ctx.stroke();
+  // Semicircle goal areas
+  const arcR = H*0.28;
+  ctx.lineWidth = 2.5;
+  ctx.beginPath(); ctx.arc(3,H/2,arcR,-Math.PI*0.5,Math.PI*0.5); ctx.stroke();
+  ctx.beginPath(); ctx.arc(W-3,H/2,arcR,Math.PI*0.5,Math.PI*1.5); ctx.stroke();
+  // Centre circle
+  ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.arc(W/2,H/2,H*0.09,0,Math.PI*2); ctx.stroke();
+  ctx.fillStyle = 'rgba(255,255,255,0.9)';
+  ctx.beginPath(); ctx.arc(W/2,H/2,3,0,Math.PI*2); ctx.fill();
+  // Goals
+  const goalH = H*0.22, goalD = W*0.02;
+  ctx.strokeStyle = 'rgba(255,255,255,0.95)'; ctx.lineWidth = 2.5;
+  ctx.strokeRect(3, H/2-goalH/2, goalD, goalH);
+  ctx.strokeRect(W-3-goalD, H/2-goalH/2, goalD, goalH);
+}
+
+function hmapRender(canvas, shots, opts={}) {
+  // shots: array of {sx, sy} (0-1 fractions)
+  // opts: { interactive, hoverHex, selectedHex, pin }
+  const dpr = window.devicePixelRatio || 1;
+  const W = Math.max(200, canvas.getBoundingClientRect().width || canvas.offsetWidth || 260);
+  const H = Math.round(W * 0.52);
+  canvas.width = W*dpr; canvas.height = H*dpr;
+  canvas.style.width = W+'px'; canvas.style.height = H+'px';
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+
+  hmapDrawCourt(ctx, W, H);
+  const { hr, ox, oy } = hmapLayout(W, H);
+
+  // Build hex counts from shot positions
+  const counts = {};
+  shots.forEach(({ sx, sy }) => {
+    if (sx == null || sy == null) return;
+    // Find nearest hex
+    let best = null, bd = Infinity;
+    for (let c=0;c<HMAP_COLS;c++) for (let r=0;r<HMAP_ROWS;r++) {
+      const h = hmapHexCtr(c,r,hr,ox,oy);
+      const d = Math.hypot(sx*W - h.x, sy*H - h.y);
+      if (d < bd) { bd = d; best = `${c},${r}`; }
+    }
+    if (best) counts[best] = (counts[best]||0) + 1;
+  });
+  const maxN = Math.max(1, ...Object.values(counts));
+
+  for (let c=0;c<HMAP_COLS;c++) for (let r=0;r<HMAP_ROWS;r++) {
+    const { x, y } = hmapHexCtr(c,r,hr,ox,oy);
+    const n = counts[`${c},${r}`] || 0;
+    const isHov = opts.hoverHex && opts.hoverHex.c===c && opts.hoverHex.r===r;
+    const isSel = opts.selectedHex && opts.selectedHex.c===c && opts.selectedHex.r===r;
+    hmapHexPath(ctx, x, y, hr-1);
+    if (isSel) {
+      ctx.fillStyle = '#fbbf24'; ctx.globalAlpha = 0.9; ctx.fill();
+      ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5; ctx.globalAlpha = 1; ctx.stroke();
+    } else if (isHov) {
+      ctx.fillStyle = 'rgba(255,255,255,0.25)'; ctx.globalAlpha = 1; ctx.fill();
+      ctx.strokeStyle = 'rgba(255,255,255,0.6)'; ctx.lineWidth = 1; ctx.stroke();
+    } else if (n > 0) {
+      const t = Math.pow(n/maxN, 0.6);
+      const [rv,g,b] = hmapHeatRGB(t);
+      ctx.fillStyle = `rgba(${rv},${g},${b},${0.6+t*0.35})`; ctx.globalAlpha = 1; ctx.fill();
+      ctx.strokeStyle = 'rgba(0,0,0,0.1)'; ctx.lineWidth = 0.4; ctx.stroke();
+      ctx.fillStyle = 'rgba(255,255,255,0.92)';
+      ctx.font = `bold ${Math.max(8,Math.round(hr*0.46))}px sans-serif`;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(n, x, y);
+    } else {
+      ctx.fillStyle = 'rgba(255,255,255,0.03)'; ctx.globalAlpha = 1; ctx.fill();
+      ctx.strokeStyle = 'rgba(255,255,255,0.06)'; ctx.lineWidth = 0.4; ctx.stroke();
+    }
+  }
+
+  // Free pin
+  if (opts.pin && opts.pin.sx != null) {
+    const px = opts.pin.sx * W, py = opts.pin.sy * H;
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    ctx.beginPath(); ctx.ellipse(px,py+10,7,3.5,0,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#fbbf24';
+    ctx.beginPath(); ctx.arc(px,py,9,0,Math.PI*2); ctx.fill();
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke();
+    ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.arc(px,py,3.5,0,Math.PI*2); ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.5)'; ctx.lineWidth = 1;
+    [[px-16,py,px-11,py],[px+11,py,px+16,py],[px,py-16,px,py-11],[px,py+11,px,py+16]].forEach(([x1,y1,x2,y2])=>{
+      ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
+    });
+  }
+  return { W, H, hr, ox, oy };
+}
+
+function hmapNearestHex(x, y, info) {
+  const { hr, ox, oy } = info;
+  let best = null, bd = Infinity;
+  for (let c=0;c<HMAP_COLS;c++) for (let r=0;r<HMAP_ROWS;r++) {
+    const h = hmapHexCtr(c,r,hr,ox,oy);
+    const d = Math.hypot(x-h.x, y-h.y);
+    if (d < bd) { bd = d; best = {c,r}; }
+  }
+  return bd < hr*1.1 ? best : null;
+}
+
+// Shot location modal — shown after saving combos or when clicking a goal to retroactively add location
+function openShotLocationModal(mid) {
+  const data = goalCombos[mid];
+  if (!data) return;
+  const match = matchList.find(m => m.id === mid);
+  const allGoals = [
+    ...(data.h1||[]).map((g,i) => ({...g, half:'1H', halfKey:'h1', idx:i})),
+    ...(data.h2||[]).map((g,i) => ({...g, half:'2H', halfKey:'h2', idx:i})),
+  ].filter(g => !g.isOG && g.scorer);
+
+  if (!allGoals.length) return;
+
+  let current = 0;
+  let pins = allGoals.map(g => ({ sx: g.sx ?? null, sy: g.sy ?? null }));
+  let pinInfo = null;
+
+  const existing = document.getElementById('shot-location-modal');
+  if (existing) existing.remove();
+
+  const modal = document.createElement('div');
+  modal.id = 'shot-location-modal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
+
+  function buildHTML() {
+    const g = allGoals[current];
+    const pin = pins[current];
+    const hasPin = pin.sx != null;
+    return `
+      <div style="background:var(--card);border-radius:14px;padding:20px;max-width:420px;width:100%;border:1px solid var(--border)">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+          <div style="font-family:'Bebas Neue',sans-serif;font-size:1.2rem;letter-spacing:1px;color:var(--text)">Shot Locations</div>
+          <button onclick="document.getElementById('shot-location-modal').remove()" style="background:none;border:none;color:var(--muted);font-size:1.3rem;cursor:pointer;line-height:1">×</button>
+        </div>
+        <div style="font-size:.75rem;color:var(--muted);margin-bottom:12px">${match ? match.date : mid} · Goal ${current+1} of ${allGoals.length}</div>
+        <div style="background:var(--card2);border-radius:8px;padding:8px 12px;margin-bottom:10px;font-size:.82rem">
+          <span style="color:var(--lime);font-weight:600">${g.scorer}</span>
+          ${g.assister ? `<span style="color:var(--muted)"> ← </span><span style="color:var(--text2)">${g.assister}</span>` : ''}
+          <span style="color:var(--muted);margin-left:6px">${g.half}${g.time ? ' · '+g.time : ''}</span>
+        </div>
+        <canvas id="shot-modal-canvas" style="display:block;width:100%;border-radius:8px;cursor:crosshair;margin-bottom:4px"></canvas>
+        <div style="font-size:.72rem;color:var(--muted);margin-bottom:12px;text-align:center">
+          ${hasPin ? '📍 Location set — click to move' : 'Click anywhere to place shot location'}
+        </div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <button onclick="shotModalPrev()" ${current===0?'disabled':''} style="background:var(--card2);border:1px solid var(--border);color:var(--text);border-radius:7px;padding:7px 14px;font-family:'Barlow Condensed',sans-serif;font-size:.85rem;cursor:pointer;opacity:${current===0?0.4:1}">← Prev</button>
+          <button onclick="shotModalSkip()" style="background:var(--card2);border:1px solid var(--border);color:var(--muted);border-radius:7px;padding:7px 14px;font-family:'Barlow Condensed',sans-serif;font-size:.85rem;cursor:pointer;flex:1">Skip</button>
+          <button onclick="shotModalNext()" style="background:var(--green);border:none;color:#071009;border-radius:7px;padding:7px 14px;font-family:'Barlow Condensed',sans-serif;font-size:.85rem;cursor:pointer;flex:1;font-weight:600">${current===allGoals.length-1?'Done ✓':'Next →'}</button>
+        </div>
+        <div style="margin-top:8px;text-align:center;font-size:.7rem;color:var(--muted)">${pins.filter(p=>p.sx!=null).length} of ${allGoals.length} goals have locations</div>
+      </div>`;
+  }
+
+  function refresh() {
+    modal.innerHTML = buildHTML();
+    const canvas = document.getElementById('shot-modal-canvas');
+    if (!canvas) return;
+    setTimeout(() => {
+      pinInfo = hmapRender(canvas, [], { pin: pins[current] });
+      canvas.addEventListener('click', e => {
+        const r = canvas.getBoundingClientRect();
+        pins[current] = { sx: (e.clientX-r.left)/pinInfo.W, sy: (e.clientY-r.top)/pinInfo.H };
+        savePin();
+        pinInfo = hmapRender(canvas, [], { pin: pins[current] });
+        modal.querySelector('[style*="Click anywhere"]') && (modal.querySelector('[style*="click to move"], [style*="Click anywhere"]').textContent = '📍 Location set — click to move');
+      });
+    }, 50);
+  }
+
+  function savePin() {
+    const g = allGoals[current];
+    const pin = pins[current];
+    if (goalCombos[mid] && goalCombos[mid][g.halfKey] && goalCombos[mid][g.halfKey][g.idx] !== undefined) {
+      goalCombos[mid][g.halfKey][g.idx].sx = pin.sx;
+      goalCombos[mid][g.halfKey][g.idx].sy = pin.sy;
+      saveGoalCombos();
+    }
+  }
+
+  window.shotModalPrev = () => { if (current > 0) { current--; refresh(); } };
+  window.shotModalNext = () => {
+    if (current < allGoals.length-1) { current++; refresh(); }
+    else { document.getElementById('shot-location-modal').remove(); }
+  };
+  window.shotModalSkip = () => { shotModalNext(); };
+
+  document.body.appendChild(modal);
+  refresh();
+}
+
 const LS_COMBOS = 'aeroSoccer_goalCombos';
 let goalCombos = {};
 
@@ -4224,15 +4472,22 @@ function renderAllCombos() {
   if (!entries.length) return '<div style="color:var(--muted);font-size:.8rem">No data saved yet.</div>';
   return entries.map(({ mid, data, match }) => {
     const all = [...(data.h1||[]).map(p=>({...p,half:'1H'})), ...(data.h2||[]).map(p=>({...p,half:'2H'}))];
+    const withLoc = all.filter(p => !p.isOG && p.sx != null).length;
+    const shootable = all.filter(p => !p.isOG && p.scorer).length;
     return `<div style="margin-bottom:16px;padding-bottom:16px;border-bottom:1px solid var(--border)">
-      <div style="font-family:\'Barlow Condensed\',sans-serif;font-size:.8rem;letter-spacing:1px;color:var(--muted);margin-bottom:8px">
-        ${match.date} · ${match.goalsA}–${match.goalsB} · <span style="color:var(--text)">${all.length} goals logged</span>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <div style="font-family:'Barlow Condensed',sans-serif;font-size:.8rem;letter-spacing:1px;color:var(--muted)">
+          ${match.date} · ${match.goalsA}–${match.goalsB} · <span style="color:var(--text)">${all.length} goals logged</span>
+          ${shootable > 0 ? `<span style="color:${withLoc===shootable?'var(--green)':'var(--amber)'};margin-left:6px">📍 ${withLoc}/${shootable}</span>` : ''}
+        </div>
+        ${shootable > 0 ? `<button onclick="openShotLocationModal('${mid}')" style="background:var(--card2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:3px 10px;font-family:'Barlow Condensed',sans-serif;font-size:.75rem;cursor:pointer">📍 ${withLoc < shootable ? 'Add' : 'Edit'} Locations</button>` : ''}
       </div>
       <div style="display:flex;flex-wrap:wrap;gap:4px">
         ${all.map(p => `<span style="background:${p.assister?'rgba(57,211,83,.08)':'var(--card2)'};border:1px solid ${p.assister?'rgba(57,211,83,.2)':'var(--border)'};border-radius:5px;padding:3px 8px;font-size:.72rem">
           <span style="color:var(--lime);font-size:.6rem">${p.half}${p.time?' '+p.time:''}</span>
           <span style="color:var(--text);font-weight:600;margin-left:3px">${p.scorer}</span>
           ${p.assister ? `<span style="color:var(--muted)"> ← </span><span style="color:var(--text2)">${p.assister}</span>` : ''}
+          ${p.sx != null ? '<span style="color:var(--green);font-size:.55rem;margin-left:2px">📍</span>' : ''}
         </span>`).join('')}
       </div>
     </div>`;
@@ -4372,6 +4627,8 @@ function saveCombos() {
     status.style.color='var(--green)';
   }
   renderCombosPage();
+  // Open shot location picker after saving
+  setTimeout(() => openShotLocationModal(mid), 300);
 }
 
 function clearCombosForMatch() {
@@ -6237,6 +6494,28 @@ function renderProfile(name) {
       <div id="synergy-pairs-${name.replace(/\s/g,'_')}"></div>
     </div>` : ''}
 
+    <!-- Shot Heatmap -->
+    ${(() => {
+      const shots = [];
+      Object.values(goalCombos).forEach(data => {
+        [...(data.h1||[]), ...(data.h2||[])].forEach(g => {
+          if (g.scorer === name && !g.isOG && g.sx != null && g.sy != null) {
+            shots.push({ sx: g.sx, sy: g.sy });
+          }
+        });
+      });
+      if (!shots.length) return '';
+      return `<div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:18px;margin-bottom:14px">
+        <div style="font-family:'Barlow Condensed',sans-serif;font-size:.7rem;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-bottom:12px">📍 Shot Locations (${shots.length} goals mapped)</div>
+        <canvas id="profile-heatmap" style="display:block;width:100%;border-radius:8px"></canvas>
+        <div style="display:flex;align-items:center;gap:8px;margin-top:8px">
+          <span style="font-size:.7rem;color:var(--muted)">Low</span>
+          <div style="width:80px;height:6px;border-radius:3px;background:linear-gradient(to right,#3b82f6,#22c55e,#eab308,#f97316,#dc2626)"></div>
+          <span style="font-size:.7rem;color:var(--muted)">High</span>
+        </div>
+      </div>`;
+    })()}
+
     <!-- Match History -->
     <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:18px;margin-bottom:14px">
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
@@ -6400,6 +6679,21 @@ function saveCustomStat(player, key, val) {
     document.body.appendChild(tip);
     setTimeout(() => tip.remove(), 8000);
   }
+
+  // Render shot heatmap if canvas exists
+  setTimeout(() => {
+    const heatCanvas = document.getElementById('profile-heatmap');
+    if (!heatCanvas) return;
+    const shots = [];
+    Object.values(goalCombos).forEach(data => {
+      [...(data.h1||[]), ...(data.h2||[])].forEach(g => {
+        if (g.scorer === name && !g.isOG && g.sx != null && g.sy != null) {
+          shots.push({ sx: g.sx, sy: g.sy });
+        }
+      });
+    });
+    hmapRender(heatCanvas, shots);
+  }, 100);
 }
 
 // =====================================================================
