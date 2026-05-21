@@ -6508,26 +6508,15 @@ function renderProfile(name) {
     </div>` : ''}
 
     <!-- Shot Heatmap -->
-    ${(() => {
-      const shots = [];
-      Object.values(goalCombos).forEach(data => {
-        [...(data.h1||[]), ...(data.h2||[])].forEach(g => {
-          if (g.scorer === name && !g.isOG && g.sx != null && g.sy != null) {
-            shots.push({ sx: g.sx, sy: g.sy });
-          }
-        });
-      });
-      if (!shots.length) return '';
-      return `<div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:18px;margin-bottom:14px">
-        <div style="font-family:'Barlow Condensed',sans-serif;font-size:.7rem;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-bottom:12px">📍 Shot Locations (${shots.length} goals mapped)</div>
-        <canvas id="profile-heatmap" style="display:block;width:100%;border-radius:8px"></canvas>
-        <div style="display:flex;align-items:center;gap:8px;margin-top:8px">
-          <span style="font-size:.7rem;color:var(--muted)">Low</span>
-          <div style="width:80px;height:6px;border-radius:3px;background:linear-gradient(to right,#3b82f6,#22c55e,#eab308,#f97316,#dc2626)"></div>
-          <span style="font-size:.7rem;color:var(--muted)">High</span>
-        </div>
-      </div>`;
-    })()}
+    <div id="profile-heatmap-section" style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:18px;margin-bottom:14px;display:none">
+      <div style="font-family:'Barlow Condensed',sans-serif;font-size:.7rem;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-bottom:12px" id="profile-heatmap-title">📍 Shot Locations</div>
+      <canvas id="profile-heatmap" style="display:block;width:100%;border-radius:8px"></canvas>
+      <div style="display:flex;align-items:center;gap:8px;margin-top:8px">
+        <span style="font-size:.7rem;color:var(--muted)">Low</span>
+        <div style="width:80px;height:6px;border-radius:3px;background:linear-gradient(to right,#3b82f6,#22c55e,#eab308,#f97316,#dc2626)"></div>
+        <span style="font-size:.7rem;color:var(--muted)">High</span>
+      </div>
+    </div>
 
     <!-- Match History -->
     <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:18px;margin-bottom:14px">
@@ -6693,14 +6682,11 @@ function saveCustomStat(player, key, val) {
     setTimeout(() => tip.remove(), 8000);
   }
 
-  // Render shot heatmap if canvas exists
+  // Render shot heatmap
   setTimeout(() => {
+    const section = document.getElementById('profile-heatmap-section');
     const heatCanvas = document.getElementById('profile-heatmap');
-    if (!heatCanvas) { console.log('heatmap: no canvas'); return; }
-    const profileContent = document.getElementById('profile-content');
-    const parentWidth = profileContent?.clientWidth || 600;
-    console.log('heatmap: parentWidth=', parentWidth, 'offsetWidth=', heatCanvas.offsetWidth);
-    heatCanvas.style.width = (parentWidth - 36) + 'px';
+    if (!section || !heatCanvas) return;
     const shots = [];
     Object.values(goalCombos).forEach(data => {
       [...(data.h1||[]), ...(data.h2||[])].forEach(g => {
@@ -6709,14 +6695,14 @@ function saveCustomStat(player, key, val) {
         }
       });
     });
-    console.log('heatmap: shots=', shots.length, 'name=', name);
-    // Log a sample of goal data to check sx/sy presence
-    Object.entries(goalCombos).slice(0,3).forEach(([mid, data]) => {
-      [...(data.h1||[]),...(data.h2||[])].forEach(g => {
-        if (g.scorer === name) console.log('heatmap goal:', g.scorer, 'sx=', g.sx, 'sy=', g.sy);
-      });
-    });
-    hmapRender(heatCanvas, shots);
+    if (!shots.length) { section.style.display = 'none'; return; }
+    section.style.display = 'block';
+    const title = document.getElementById('profile-heatmap-title');
+    if (title) title.textContent = `📍 Shot Locations (${shots.length} goal${shots.length===1?'':'s'} mapped)`;
+    // Use section's actual rendered width
+    const W = section.offsetWidth - 36;
+    heatCanvas.style.width = W + 'px';
+    hmapRender(heatCanvas, shots, { width: W });
   }, 200);
 }
 
