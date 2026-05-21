@@ -6696,13 +6696,11 @@ function saveCustomStat(player, key, val) {
   // Render shot heatmap if canvas exists
   setTimeout(() => {
     const heatCanvas = document.getElementById('profile-heatmap');
-    if (!heatCanvas) return;
-    // Force width from parent since getBoundingClientRect may be 0 right after innerHTML
-    const parentWidth = heatCanvas.closest('[style*="border-radius:12px"]')?.clientWidth
-                     || heatCanvas.parentElement?.clientWidth
-                     || document.getElementById('profile-content')?.clientWidth
-                     || 600;
-    heatCanvas.style.width = (parentWidth - 4) + 'px';
+    if (!heatCanvas) { console.log('heatmap: no canvas'); return; }
+    const profileContent = document.getElementById('profile-content');
+    const parentWidth = profileContent?.clientWidth || 600;
+    console.log('heatmap: parentWidth=', parentWidth, 'offsetWidth=', heatCanvas.offsetWidth);
+    heatCanvas.style.width = (parentWidth - 36) + 'px';
     const shots = [];
     Object.values(goalCombos).forEach(data => {
       [...(data.h1||[]), ...(data.h2||[])].forEach(g => {
@@ -6711,8 +6709,15 @@ function saveCustomStat(player, key, val) {
         }
       });
     });
+    console.log('heatmap: shots=', shots.length, 'name=', name);
+    // Log a sample of goal data to check sx/sy presence
+    Object.entries(goalCombos).slice(0,3).forEach(([mid, data]) => {
+      [...(data.h1||[]),...(data.h2||[])].forEach(g => {
+        if (g.scorer === name) console.log('heatmap goal:', g.scorer, 'sx=', g.sx, 'sy=', g.sy);
+      });
+    });
     hmapRender(heatCanvas, shots);
-  }, 150);
+  }, 200);
 }
 
 // =====================================================================
