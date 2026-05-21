@@ -546,23 +546,14 @@ canvas.spider{display:block;margin:0 auto}
       </select>
     </div>
     <button class="btn-import" id="btn-backup" onclick="downloadBackup()" style="display:none">⬇ Backup</button>
-    <button class="btn-import" id="btn-import" onclick="openImport()" style="display:none">⬆ Import CSV</button>
-    <button class="btn-import" id="btn-clear" onclick="clearSavedData()" style="display:none;color:var(--red);border-color:rgba(240,96,96,.3)" title="Remove imported matches from browser storage">🗑 Clear Saved</button>
     <button class="btn-import" id="admin-btn" onclick="toggleAdmin()" title="Toggle admin mode to show/hide player ratings">🔒 Admin</button>
-    <button class="btn-import" id="bake-btn" onclick="bakeToHTML()" title="Download HTML with all imported matches and custom stats baked in" style="display:none;color:var(--lime);border-color:rgba(168,224,80,.3)">💾 Bake to HTML</button>
     <button class="btn-import" id="mvp-tuner-btn" onclick="openMvpTuner()" title="Adjust MVP scoring weights" style="display:none;color:var(--amber);border-color:rgba(240,160,48,.3)">⚙ MVP Formula</button>
     <button class="btn-import" id="settings-btn" onclick="saveSettings()" title="Download settings.json for GitHub" style="display:none;color:var(--lime);border-color:rgba(168,224,80,.3)">⬇ settings.json</button>
     <button class="btn-import" id="yt-sync-btn" onclick="openYtSyncModal()" title="Link YouTube videos to matches" style="display:none;color:#60a5fa;border-color:rgba(96,165,250,.3)">📺 Sync Videos</button>
   </div>
 </nav>
 
-<!-- Draft banner — shown when localStorage has unpublished matches -->
-<div id="draft-banner" style="display:none;background:rgba(240,160,48,.12);border-bottom:1px solid rgba(240,160,48,.3);padding:8px 20px;display:none;align-items:center;gap:10px;font-family:'Barlow Condensed',sans-serif;font-size:.82rem;letter-spacing:.3px">
-  <span style="font-size:1rem">⚠️</span>
-  <span id="draft-banner-text" style="color:var(--amber);flex:1"></span>
-  <button onclick="bakeToHTML()" style="background:var(--amber);color:#1a1000;border:none;border-radius:6px;padding:4px 14px;font-family:'Bebas Neue',sans-serif;font-size:.9rem;letter-spacing:1px;cursor:pointer">💾 Bake Now</button>
-  <button onclick="document.getElementById('draft-banner').style.display='none'" style="background:none;border:none;color:var(--muted);font-size:1rem;cursor:pointer;padding:0 4px">✕</button>
-</div>
+
 
 <!-- ===== PAGE: MATCHES ===== -->
 <div class="page active" id="page-matches">
@@ -1956,7 +1947,7 @@ const _IS_BAKED = false; // set to true in baked files — skips localStorage ex
 const _SCRIPT1_SRC = document.currentScript.textContent;
 
 let globalFilter = 'last10'; // 'all' | 'last10'
-let seasonFilter = 'all'; // 'all' | '2025' | '2026' etc
+let seasonFilter = new Date().getFullYear().toString(); // default to current season
 let spiderMaxima = {};
 let matchVideos = {}; // { matchId: youtubeVideoId }
 let adminMode = false; // ratings hidden by default; toggle with password
@@ -2164,16 +2155,14 @@ function updateAdminUI() {
     btn.style.color = adminMode ? 'var(--lime)' : '';
     btn.style.borderColor = adminMode ? 'var(--lime)' : '';
   }
-  const bakeBtn = document.getElementById('bake-btn');
-  if (bakeBtn) bakeBtn.style.display = adminMode ? 'inline-flex' : 'none';
   const tunerBtn = document.getElementById('mvp-tuner-btn');
   if (tunerBtn) tunerBtn.style.display = adminMode ? 'inline-flex' : 'none';
   const settingsBtn = document.getElementById('settings-btn');
   if (settingsBtn) settingsBtn.style.display = adminMode ? 'inline-flex' : 'none';
   const ytSyncBtn = document.getElementById('yt-sync-btn');
   if (ytSyncBtn) ytSyncBtn.style.display = adminMode ? 'inline-flex' : 'none';
-  // Admin-only nav and action buttons
-  ['btn-backup','btn-import','btn-clear','nav-weekly','nav-combos'].forEach(id => {
+  // Admin-only nav buttons
+  ['btn-backup','nav-weekly','nav-combos'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.style.display = adminMode ? (id === 'nav-weekly' ? '' : 'inline-flex') : 'none';
   });
@@ -2583,7 +2572,7 @@ const TAG_DEFS = {
   'The Organiser':     { cls:'tag-playmaker', tip:'Generates elite key passes while also contributing defensively — the midfield brain who sets the tempo without being the top assister' },
   'The Architect':     { cls:'tag-playmaker', tip:'One of the top key pass creators in the group who also wins interceptions — builds attacks from deep and wins the ball back' },
   'Pathfinder':        { cls:'tag-playmaker', tip:'Has directly assisted more different teammates than anyone — spreads creativity across the squad rather than relying on one connection' },
-  'Water Carrier':     { cls:'tag-workhorse', tip:'Wins the ball back through tackles then immediately creates for teammates — does the unglamorous work that unlocks attacks' },
+  'Janitor':     { cls:'tag-workhorse', tip:'Wins tackles and interceptions then immediately releases the ball through key passes and assists — relentless at winning possession and using it' },
 
   // ── Defending ─────────────────────────────────────────────────────────────
   'The Interceptor':   { cls:'tag-guardian',  tip:'Wins more interceptions per game than anyone by a clear gap — reads the game at a completely different level to everyone else' },
@@ -2981,7 +2970,7 @@ function buildTagAuction() {
   award('Pathfinder',       m => m.uniqueAssisted*2+m.apg*0.2);
   award('Play Driver',      m => m.gkspg*0.3+m.kppg*0.7+m.apg*0.5);
   award('Space Creator',    m => m.kppg*0.6+m.apg*0.8+m.blkpg*0.3);
-  award('Water Carrier',    m => m.tklpg*0.4+m.kppg*0.5+m.apg*0.6);
+  award('Janitor',    m => m.tklpg*0.4+m.kppg*0.5+m.apg*0.6);
   // Rank-based: top 5 assists AND top 5 key passes AND top 5 interceptions
   awardRank('The Architect',   [m=>m.apg, m=>m.kppg, m=>m.intpg], 5);
   // Rank-based: top 5 key passes AND top 5 tackles — creates and wins it back
@@ -3360,7 +3349,7 @@ function getFifaTags(s, cs) {
       { score: kppg*0.6+intpg*1.0,                tag:'Traffic Controller'},
       { score: gkspg*0.3+kppg*0.7+apg*0.5,       tag:'Play Driver'      },
       { score: Math.min(apg,kppg)*3,               tag:'Puppet Master'    },
-      { score: tklpg*0.4+kppg*0.5+apg*0.7,       tag:'Water Carrier'    },
+      { score: tklpg*0.4+kppg*0.5+apg*0.7,       tag:'Janitor'    },
       // Defending
       { score: intpg*4,                             tag:'Ball Hawk'        },
       { score: tklpg*4,                             tag:'Enforcer'         },
@@ -3594,7 +3583,98 @@ function renderSeasonSummary() {
       <div style="font-size:.75rem;color:var(--muted);margin-top:2px">${m.date}</div>
     </div>` : '';
 
+  // ── AWARD RACES: top 5 per category ──────────────────────────────────
+  const top5 = (fn, min = 3) => {
+    return sPool
+      .filter(p => p.games >= min)
+      .map(p => ({ player: p.player, val: fn(p), games: p.games }))
+      .sort((a,b) => b.val - a.val)
+      .slice(0, 5);
+  };
+
+  const mvpScore  = p => (p.goals/gf(p))*4 + (p.assists/gf(p))*3 + (p.key_passes/gf(p))*0.5 + (p.wins/(p.wins+p.losses+(p.draws||0)||1))*3;
+  const dpoyScore = p => ((p.interceptions+p.tackles+p.blocks)/gf(p)) + (p.goalkeeper_saves/gf(p))*0.5;
+  const mipScore  = p => { // most improved: late vs early half of season matches
+    const allM = matchList.filter(m => inSeason(m.date) && [...m.teamA,...m.teamB].some(r=>r.player===p.player)).sort((a,b)=>a.date.localeCompare(b.date));
+    if (allM.length < 6) return -Infinity;
+    const h = Math.floor(allM.length/2);
+    const score = m => { const r=[...m.teamA,...m.teamB].find(x=>x.player===p.player); return r?n(r.goals)*4+n(r.assists)*3+n(r.key_passes)*0.4+n(r.tackles)*0.3:0; };
+    const early = allM.slice(0,h).reduce((s,m)=>s+score(m),0)/h;
+    const late  = allM.slice(-h).reduce((s,m)=>s+score(m),0)/h;
+    return late - early;
+  };
+  const gpgScore     = p => p.goals/gf(p);
+  const appgScore    = p => p.assists/gf(p);
+  const gkScore      = p => p.goalkeeper_saves/gf(p);
+  const creatorScore = p => (p.assists + p.key_passes)/gf(p);
+  const winRateScore = p => (p.wins/(p.wins+p.losses+(p.draws||0)||1))*100;
+
+  // Clutch Player: uses combos timestamps — late goals (40+ min), winning goals weighted 2.5×
+  const clutchPlayerScore = p => {
+    let score = 0;
+    Object.entries(goalCombos).forEach(([mid, events]) => {
+      const match = matchList.find(m => m.id === mid);
+      if (!match || !inSeason(match.date)) return;
+      events.forEach((ev, idx) => {
+        if (ev.scorer !== p.player) return;
+        const mins = Number(ev.time) || 0;
+        if (mins < 47) return; // only last few mins (47+)
+        // Determine score state at time of this goal
+        const scorerTeam = match.teamA.some(r => r.player === p.player) ? 'A' : 'B';
+        const goalsBeforeA = events.slice(0, idx).filter(e => !e.is_og && match.teamA.some(r => r.player === e.scorer)).length
+                           + events.slice(0, idx).filter(e => e.is_og && match.teamB.some(r => r.player === e.scorer)).length;
+        const goalsBeforeB = events.slice(0, idx).filter(e => !e.is_og && match.teamB.some(r => r.player === e.scorer)).length
+                           + events.slice(0, idx).filter(e => e.is_og && match.teamA.some(r => r.player === e.scorer)).length;
+        const myScoreBefore  = scorerTeam === 'A' ? goalsBeforeA : goalsBeforeB;
+        const oppScoreBefore = scorerTeam === 'A' ? goalsBeforeB : goalsBeforeA;
+        const isWinner = myScoreBefore === oppScoreBefore; // equaliser that could become winner, or already ahead
+        const isDecisive = myScoreBefore >= oppScoreBefore; // at least level before scoring
+        score += isWinner ? 2.5 : (isDecisive ? 1.5 : 1); // winner goal 2.5×, decisive 1.5×, other late goal 1×
+      });
+    });
+    return score;
+  };
+
+  const awardRaces = [
+    { label:'🏆 MVP Race',               desc:'Goals × 4, assists × 3, key passes × 0.5, win rate × 3', fn: mvpScore,          fmt: v => v.toFixed(1)+' pts' },
+    { label:'🛡 Defensive Player (DPOY)', desc:'Tackles + ints + blocks per game, saves × 0.5',          fn: dpoyScore,         fmt: v => v.toFixed(1)+'/g' },
+    { label:'📈 Most Improved (MIP)',     desc:'Performance score: early season vs late season',           fn: mipScore,          fmt: v => (v>0?'+':'')+v.toFixed(1)+' pts/g', min: 8 },
+    { label:'⚽ Golden Boot Race',        desc:'Goals per game',                                           fn: gpgScore,          fmt: v => v.toFixed(2)+' gpg' },
+    { label:'🎯 Playmaker Race',          desc:'Assists + key passes per game',                            fn: creatorScore,      fmt: v => v.toFixed(2)+'/g' },
+    { label:'🧤 Best Goalkeeper Race',    desc:'Saves per game',                                           fn: gkScore,           fmt: v => v.toFixed(2)+'/g' },
+    { label:'🤝 Team Player Race',        desc:'Win rate %',                                               fn: winRateScore,      fmt: v => Math.round(v)+'%' },
+    { label:'⏱ Clutch Player Race',       desc:'Late goals (47+ min) — winning/decisive goals weighted more', fn: clutchPlayerScore, fmt: v => v.toFixed(1)+' pts' },
+  ];
+
   const filtered = awards.filter(a => a.player && a.player !== '–');
+
+
+  const medalColours = ['var(--gold)','#c0c0c0','#cd7f32','var(--muted)','var(--muted)'];
+  const medalLabels  = ['1st','2nd','3rd','4th','5th'];
+
+  const raceCard = (race) => {
+    const entries = top5(race.fn, race.min || 3).filter(e => e.val > -Infinity && isFinite(e.val));
+    if (!entries.length) return '';
+    const rows = entries.map((e,i) => `
+      <div style="display:flex;align-items:center;gap:8px;padding:5px 0;${i<entries.length-1?'border-bottom:1px solid var(--border)':''};cursor:pointer" onclick="nav('profile','${e.player}')">
+        <span style="font-family:'Bebas Neue',sans-serif;font-size:.85rem;color:${medalColours[i]};min-width:28px">${medalLabels[i]}</span>
+        <span style="font-family:'Barlow Condensed',sans-serif;font-size:.95rem;color:var(--text);flex:1">${e.player}</span>
+        <span style="font-family:'Bebas Neue',sans-serif;font-size:.95rem;color:var(--lime)">${race.fmt(e.val)}</span>
+      </div>`).join('');
+    return `
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px">
+        <div style="font-family:'Bebas Neue',sans-serif;font-size:1rem;letter-spacing:1px;color:var(--text);margin-bottom:2px">${race.label}</div>
+        <div style="font-size:.7rem;color:var(--muted);font-family:'Barlow Condensed',sans-serif;margin-bottom:10px">${race.desc}</div>
+        ${rows}
+      </div>`;
+  };
+
+  const racesHtml = `
+    <div style="font-family:'Bebas Neue',sans-serif;font-size:1.1rem;letter-spacing:2px;color:var(--muted);margin:18px 0 10px">AWARD RACES — TOP 5</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px;margin-bottom:14px">
+      ${awardRaces.map(raceCard).join('')}
+    </div>`;
+
   const [a1, a2, a3, ...rest] = filtered;
 
   // Combo highlights
@@ -3643,6 +3723,8 @@ function renderSeasonSummary() {
       ${a2 ? heroCard(a2, '#4ade80') : ''}
       ${a3 ? heroCard(a3, '#60a5fa') : ''}
     </div>
+    <!-- Award races: top 5 per category -->
+    ${racesHtml}
     <!-- Remaining awards -->
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px;margin-bottom:10px">
       ${rest.map(statCard).join('')}
@@ -4582,12 +4664,13 @@ function setSeasonFilter(val) {
 function populateSeasonDropdown() {
   const sel = document.getElementById('season-select');
   if (!sel) return;
-  // Derive seasons from match dates (year = season)
   const years = [...new Set(matchList.map(m => m.date.slice(0,4)))].sort();
-  const current = sel.value;
+  // Default to the most recent season if current filter isn't a known year
+  if (!years.includes(seasonFilter)) {
+    seasonFilter = years.length ? years[years.length - 1] : 'all';
+  }
   sel.innerHTML = '<option value="all">All Seasons</option>' +
-    years.map(y => `<option value="${y}" ${y===current?'selected':''}>${y}</option>`).join('');
-  if (!years.includes(seasonFilter)) seasonFilter = 'all';
+    years.map(y => `<option value="${y}" ${y===seasonFilter?'selected':''}>${y}</option>`).join('');
 }
 
 function setGlobalFilter(f) {
@@ -5445,21 +5528,22 @@ function renderPlayers() {
     const trend = p.formTrend;
     const mom = p.momentum;
 
-    // Trend row — form over last 5 vs previous 5 (win rate)
+    // Form row — win rate over last 5 vs previous 5
     const trendHtml = trend ? (() => {
       const up = trend === 'up', down = trend === 'down';
       const col = up ? 'var(--green)' : down ? 'var(--red)' : 'var(--muted)';
       const icon = up ? '▲' : down ? '▼' : '●';
-      const lbl = up ? 'Form up' : down ? 'Form down' : 'Form steady';
-      return `<span style="font-size:.72rem;color:${col}">${icon} ${lbl}</span>`;
+      const lbl = up ? 'Win rate up' : down ? 'Win rate down' : 'Win rate steady';
+      return `<span data-tip="Win rate: last 5 games vs previous 5 games" style="font-size:.72rem;color:${col};cursor:help">${icon} ${lbl}</span>`;
     })() : '';
 
-    // Momentum row — stat change vs 5 games ago
+    // Momentum row — per-game stat change vs 5 games ago
     const momHtml = mom !== null && mom !== undefined ? (() => {
       const col = mom >= 15 ? 'var(--green)' : mom >= 0 ? 'var(--lime)' : mom >= -15 ? 'var(--amber)' : 'var(--red)';
       const icon = mom >= 15 ? '▲▲' : mom >= 0 ? '▲' : mom >= -15 ? '▼' : '▼▼';
       const sign = mom > 0 ? '+' : '';
-      return `<span data-tip="Stats vs 5 games ago across goals, assists, shots, tackles, interceptions and key passes" style="font-size:.72rem;color:${col};cursor:help">${icon} Momentum ${sign}${mom}%</span>`;
+      const lbl = mom >= 15 ? 'Stats trending up' : mom >= 0 ? 'Stats slightly up' : mom >= -15 ? 'Stats slightly down' : 'Stats trending down';
+      return `<span data-tip="Stats vs 5 games ago: goals, assists, shots, tackles, interceptions, key passes" style="font-size:.72rem;color:${col};cursor:help">${icon} ${lbl} ${sign}${mom}%</span>`;
     })() : '';
 
     const trendMomHtml = (trendHtml || momHtml) ? `
