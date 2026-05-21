@@ -5895,36 +5895,34 @@ function renderProfileHeatmap(name) {
   const heatCanvas = document.getElementById('profile-heatmap');
   if (!section || !heatCanvas) return;
 
+  const W = window.innerWidth - 100;
+  const H = Math.round(W * 0.52);
+  const dpr = window.devicePixelRatio || 1;
+  heatCanvas.width = W * dpr;
+  heatCanvas.height = H * dpr;
+  heatCanvas.style.width = W + 'px';
+  heatCanvas.style.height = H + 'px';
+
+  const ctx = heatCanvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+
+  // Just draw a green rectangle — simplest possible test
+  ctx.fillStyle = '#1a7a32';
+  ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = 'white';
+  ctx.font = '20px sans-serif';
+  ctx.fillText('Court renders here', 20, 40);
+
+  // Count shots
   const shots = [];
-  Object.entries(goalCombos).forEach(([mid, data]) => {
+  Object.values(goalCombos).forEach(data => {
     [...(data.h1||[]), ...(data.h2||[])].forEach(g => {
-      if (g.scorer === name && !g.isOG && g.sx != null && g.sy != null) {
-        shots.push({ sx: g.sx, sy: g.sy });
-      }
+      if (g.scorer === name && !g.isOG && g.sx != null) shots.push(g);
     });
   });
 
-  const title = document.getElementById('profile-heatmap-title');
-  const debugEl = document.getElementById('profile-heatmap-debug');
-
-  if (title) title.textContent = shots.length
-    ? `📍 Shot Locations (${shots.length} goal${shots.length===1?'':'s'} mapped)`
-    : `📍 Shot Locations`;
-
-  if (debugEl) debugEl.textContent = shots.length
-    ? ''
-    : 'No shot locations recorded yet — add them via Goal Combos';
-
-  // Always render court (empty court if no shots)
-  // section.clientWidth is 0 at render time — derive from window instead
-  const W = Math.max(200, window.innerWidth - 120);
-  heatCanvas.style.width = W + 'px';
-  try {
-    hmapRender(heatCanvas, shots, { width: W });
-  } catch(e) {
-    if (debugEl) debugEl.textContent = 'Render error: ' + e.message;
-    console.error('hmapRender error:', e);
-  }
+  const dbg = document.getElementById('profile-heatmap-debug');
+  if (dbg) dbg.textContent = `${shots.length} shots found for ${name}`;
 }
 
 function renderProfile(name) {
