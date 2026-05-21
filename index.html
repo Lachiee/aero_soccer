@@ -1939,6 +1939,7 @@ let playerGifs = {};
 let selectedForTeams = new Set();
 let teamA = [], teamB = [];
 let currentPage = 'matches';
+let currentProfileName = null; // track which profile is open for heatmap re-render
 // Capture both script sources at parse time (before DOMContentLoaded)
 // document.scripts[0] = first script block (has RAW_CSV)
 // document.currentScript = this script block
@@ -5887,6 +5888,27 @@ function renderPlayers() {
 // =====================================================================
 // RENDER PLAYER PROFILE
 // =====================================================================
+function renderProfileHeatmap(name) {
+  const section = document.getElementById('profile-heatmap-section');
+  const heatCanvas = document.getElementById('profile-heatmap');
+  if (!section || !heatCanvas) return;
+  const shots = [];
+  Object.values(goalCombos).forEach(data => {
+    [...(data.h1||[]), ...(data.h2||[])].forEach(g => {
+      if (g.scorer === name && !g.isOG && g.sx != null && g.sy != null) {
+        shots.push({ sx: g.sx, sy: g.sy });
+      }
+    });
+  });
+  if (!shots.length) { section.style.display = 'none'; return; }
+  section.style.display = 'block';
+  const title = document.getElementById('profile-heatmap-title');
+  if (title) title.textContent = `📍 Shot Locations (${shots.length} goal${shots.length===1?'':'s'} mapped)`;
+  const W = Math.max(200, section.offsetWidth - 36);
+  heatCanvas.style.width = W + 'px';
+  hmapRender(heatCanvas, shots, { width: W });
+}
+
 function renderProfile(name) {
   const ds = getDisplayStats();
   const s = ds[name] || playerStats[name];
@@ -6682,28 +6704,10 @@ function saveCustomStat(player, key, val) {
     setTimeout(() => tip.remove(), 8000);
   }
 
+  currentProfileName = name;
+
   // Render shot heatmap
-  setTimeout(() => {
-    const section = document.getElementById('profile-heatmap-section');
-    const heatCanvas = document.getElementById('profile-heatmap');
-    if (!section || !heatCanvas) return;
-    const shots = [];
-    Object.values(goalCombos).forEach(data => {
-      [...(data.h1||[]), ...(data.h2||[])].forEach(g => {
-        if (g.scorer === name && !g.isOG && g.sx != null && g.sy != null) {
-          shots.push({ sx: g.sx, sy: g.sy });
-        }
-      });
-    });
-    if (!shots.length) { section.style.display = 'none'; return; }
-    section.style.display = 'block';
-    const title = document.getElementById('profile-heatmap-title');
-    if (title) title.textContent = `📍 Shot Locations (${shots.length} goal${shots.length===1?'':'s'} mapped)`;
-    // Use section's actual rendered width
-    const W = section.offsetWidth - 36;
-    heatCanvas.style.width = W + 'px';
-    hmapRender(heatCanvas, shots, { width: W });
-  }, 200);
+  setTimeout(() => renderProfileHeatmap(name), 200);
 }
 
 // =====================================================================
@@ -10839,7 +10843,10 @@ document.addEventListener('DOMContentLoaded', () => {
       goalCombos = loaded;
       _tagCache = null; // force tag rebuild with fresh combo data
       // Rerender profile if open so highlights appear
-      if (currentPage === 'profile') renderAll();
+      if (currentPage === 'profile' && currentProfileName) {
+        renderAll();
+        setTimeout(() => renderProfileHeatmap(currentProfileName), 300);
+      }
       console.log(`✅ Loaded combos.csv — ${Object.keys(loaded).length} matches with combo data`);
     })
     .catch(err => {
