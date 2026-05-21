@@ -6676,6 +6676,7 @@ function renderProfile(name) {
 
   // Draw charts after DOM paint
   setTimeout(() => {
+    renderProfileHeatmap(name);
     // Form chart — build performance index per match
     const formMatches = [...s.matches]
       .sort((a, b) => (a.match_date||'').localeCompare(b.match_date||''))
@@ -6726,7 +6727,6 @@ function saveCustomStat(player, key, val) {
   }
 
   currentProfileName = name;
-  renderProfileHeatmap(name);
 }
 
 // =====================================================================
