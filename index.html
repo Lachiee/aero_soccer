@@ -5900,23 +5900,6 @@ function renderProfileHeatmap(name) {
       }
     });
   });
-  // Also check localStorage directly in case GitHub CSV overwrote goalCombos without sx/sy
-  try {
-    const lsRaw = localStorage.getItem('aeroSoccer_goalCombos');
-    if (lsRaw) {
-      const lsData = JSON.parse(lsRaw);
-      Object.values(lsData).forEach(data => {
-        [...(data.h1||[]), ...(data.h2||[])].forEach(g => {
-          if (g.scorer === name && !g.isOG && g.sx != null && g.sy != null) {
-            // Only add if not already present
-            if (!shots.some(s => Math.abs(s.sx-g.sx)<0.001 && Math.abs(s.sy-g.sy)<0.001)) {
-              shots.push({ sx: g.sx, sy: g.sy });
-            }
-          }
-        });
-      });
-    }
-  } catch(e) {}
   if (!shots.length) { section.style.display = 'none'; return; }
   section.style.display = 'block';
   const title = document.getElementById('profile-heatmap-title');
