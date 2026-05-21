@@ -4934,6 +4934,10 @@ function loadData(csv) {
   computeFilteredStats(); // populate _displayStats with correct half data
   populateSeasonDropdown();
   renderAll();
+  // Re-render heatmap if profile is open (loadData wipes canvas via renderAll→renderPlayers)
+  if (currentPage === 'profile' && currentProfileName) {
+    setTimeout(() => renderProfileHeatmap(currentProfileName), 100);
+  }
 }
 
 function computeSpiderMaxima() {
@@ -6549,7 +6553,7 @@ function renderProfile(name) {
     <div id="profile-heatmap-section" style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:18px;margin-bottom:14px">
       <div style="font-family:'Barlow Condensed',sans-serif;font-size:.7rem;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-bottom:12px" id="profile-heatmap-title">📍 Shot Locations</div>
       <div id="profile-heatmap-debug" style="font-size:.65rem;color:var(--amber);font-family:monospace;margin-bottom:8px"></div>
-      <canvas id="profile-heatmap" style="display:block;width:100%;border-radius:8px"></canvas>
+      <canvas id="profile-heatmap" width="400" height="208" style="display:block;width:100%;border-radius:8px;background:#1a7a32"></canvas>
       <div style="display:flex;align-items:center;gap:8px;margin-top:8px">
         <span style="font-size:.7rem;color:var(--muted)">Low</span>
         <div style="width:80px;height:6px;border-radius:3px;background:linear-gradient(to right,#3b82f6,#22c55e,#eab308,#f97316,#dc2626)"></div>
