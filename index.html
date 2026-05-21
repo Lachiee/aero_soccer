@@ -5892,6 +5892,23 @@ function renderProfileHeatmap(name) {
   const section = document.getElementById('profile-heatmap-section');
   const heatCanvas = document.getElementById('profile-heatmap');
   if (!section || !heatCanvas) return;
+
+  // DEBUG — show what's in goalCombos for this player
+  let debugLines = [`Looking for: ${name}`];
+  let totalGoals = 0, withShots = 0;
+  Object.entries(goalCombos).forEach(([mid, data]) => {
+    [...(data.h1||[]), ...(data.h2||[])].forEach(g => {
+      if (g.scorer === name) {
+        totalGoals++;
+        if (g.sx != null) withShots++;
+        debugLines.push(`${mid}: sx=${g.sx} sy=${g.sy}`);
+      }
+    });
+  });
+  debugLines.push(`Total goals: ${totalGoals}, with shots: ${withShots}`);
+  const debugEl = document.getElementById('profile-heatmap-debug');
+  if (debugEl) debugEl.innerHTML = debugLines.map(l=>`<div>${l}</div>`).join('');
+
   const shots = [];
   Object.values(goalCombos).forEach(data => {
     [...(data.h1||[]), ...(data.h2||[])].forEach(g => {
@@ -5900,7 +5917,7 @@ function renderProfileHeatmap(name) {
       }
     });
   });
-  if (!shots.length) { section.style.display = 'none'; return; }
+  if (!shots.length) { section.style.display = 'block'; return; } // keep visible for debug
   section.style.display = 'block';
   const title = document.getElementById('profile-heatmap-title');
   if (title) title.textContent = `📍 Shot Locations (${shots.length} goal${shots.length===1?'':'s'} mapped)`;
@@ -6532,6 +6549,7 @@ function renderProfile(name) {
     <!-- Shot Heatmap -->
     <div id="profile-heatmap-section" style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:18px;margin-bottom:14px;display:none">
       <div style="font-family:'Barlow Condensed',sans-serif;font-size:.7rem;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-bottom:12px" id="profile-heatmap-title">📍 Shot Locations</div>
+      <div id="profile-heatmap-debug" style="font-size:.65rem;color:var(--amber);font-family:monospace;margin-bottom:8px;max-height:120px;overflow:auto"></div>
       <canvas id="profile-heatmap" style="display:block;width:100%;border-radius:8px"></canvas>
       <div style="display:flex;align-items:center;gap:8px;margin-top:8px">
         <span style="font-size:.7rem;color:var(--muted)">Low</span>
