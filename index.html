@@ -4572,8 +4572,7 @@ function previewCombos() {
 }
 
 function exportCombosCsv() {
-  const lines = ['match_id,half,time,scorer,assister,is_og,is_goal_highlight,is_assist_highlight'];
-  // Sort by match date
+  const lines = ['match_id,half,time,scorer,assister,is_og,is_goal_highlight,is_assist_highlight,shot_x,shot_y'];
   const sorted = Object.entries(goalCombos)
     .map(([mid, data]) => ({ mid, data, match: matchList.find(m => m.id === mid) }))
     .filter(e => e.match)
@@ -4581,12 +4580,22 @@ function exportCombosCsv() {
   sorted.forEach(({ mid, data }) => {
     ['h1','h2'].forEach(half => {
       (data[half]||[]).forEach(p => {
-        lines.push([mid, half==='h1'?'1H':'2H', p.time||'', p.scorer, p.assister||'', p.isOG?'1':'', p.isGoalHighlight?'!':'', p.isAssistHighlight?'*':''].join(','));
+        lines.push([
+          mid,
+          half==='h1'?'1H':'2H',
+          p.time||'',
+          p.scorer,
+          p.assister||'',
+          p.isOG?'1':'',
+          p.isGoalHighlight?'!':'',
+          p.isAssistHighlight?'*':'',
+          p.sx != null ? p.sx.toFixed(4) : '',
+          p.sy != null ? p.sy.toFixed(4) : '',
+        ].join(','));
       });
     });
   });
   const csv = lines.join('\n');
-  // Try download
   try {
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
@@ -4594,7 +4603,6 @@ function exportCombosCsv() {
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
     URL.revokeObjectURL(url);
   } catch(e) {
-    // Fallback: show in modal
     const w = window.open('','_blank');
     if (w) { w.document.write('<pre>'+csv+'</pre>'); w.document.close(); }
   }
@@ -10817,10 +10825,13 @@ document.addEventListener('DOMContentLoaded', () => {
         const rawAssistHL = cols[idx.is_assist_highlight]?.trim() || '';
         const isGoalHL   = rawGoalHL.includes('!') || rawGoalHL === '1' || cols.join(',').includes('!');
         const isAssistHL = rawAssistHL.includes('*') || rawAssistHL === '1';
+        const sx = cols[idx.shot_x] != null && cols[idx.shot_x].trim() !== '' ? parseFloat(cols[idx.shot_x]) : null;
+        const sy = cols[idx.shot_y] != null && cols[idx.shot_y].trim() !== '' ? parseFloat(cols[idx.shot_y]) : null;
         if (!mid || !scorer) return;
         if (!loaded[mid]) loaded[mid] = { h1: [], h2: [] };
         const key = half === '2H' ? 'h2' : 'h1';
-        loaded[mid][key].push({ scorer, assister, time, isOG, isGoalHighlight: isGoalHL, isAssistHighlight: isAssistHL });
+        loaded[mid][key].push({ scorer, assister, time, isOG, isGoalHighlight: isGoalHL, isAssistHighlight: isAssistHL,
+          ...(sx != null && sy != null ? { sx, sy } : {}) });
       });
       // Merge with localStorage — GitHub file takes precedence
       goalCombos = loaded;
