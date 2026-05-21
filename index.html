@@ -5891,13 +5891,7 @@ function renderPlayers() {
 function renderProfileHeatmap(name) {
   const section = document.getElementById('profile-heatmap-section');
   const heatCanvas = document.getElementById('profile-heatmap');
-  if (!section || !heatCanvas) {
-    console.warn('renderProfileHeatmap: elements not found for', name);
-    return;
-  }
-
-  // Always show section so debug panel is visible
-  section.style.display = 'block';
+  if (!section || !heatCanvas) return;
 
   const shots = [];
   Object.entries(goalCombos).forEach(([mid, data]) => {
@@ -5908,21 +5902,19 @@ function renderProfileHeatmap(name) {
     });
   });
 
-  // Debug output
-  const debugEl = document.getElementById('profile-heatmap-debug');
-  if (debugEl) {
-    const matchCount = Object.keys(goalCombos).length;
-    const allGoals = Object.values(goalCombos).flatMap(d => [...(d.h1||[]),...(d.h2||[])]).filter(g=>g.scorer===name);
-    debugEl.innerHTML = `goalCombos: ${matchCount} matches | ${name} goals: ${allGoals.length} | with location: ${shots.length}`;
-  }
-
   const title = document.getElementById('profile-heatmap-title');
-  if (!shots.length) {
-    if (title) title.textContent = `📍 Shot Locations (none mapped yet)`;
-    return;
-  }
-  if (title) title.textContent = `📍 Shot Locations (${shots.length} goal${shots.length===1?'':'s'} mapped)`;
-  const W = Math.max(200, section.offsetWidth - 36);
+  const debugEl = document.getElementById('profile-heatmap-debug');
+
+  if (title) title.textContent = shots.length
+    ? `📍 Shot Locations (${shots.length} goal${shots.length===1?'':'s'} mapped)`
+    : `📍 Shot Locations`;
+
+  if (debugEl) debugEl.textContent = shots.length
+    ? ''
+    : 'No shot locations recorded yet — add them via Goal Combos';
+
+  // Always render court (empty court if no shots)
+  const W = Math.max(200, section.clientWidth - 36);
   heatCanvas.style.width = W + 'px';
   hmapRender(heatCanvas, shots, { width: W });
 }
@@ -6548,9 +6540,9 @@ function renderProfile(name) {
     </div>` : ''}
 
     <!-- Shot Heatmap -->
-    <div id="profile-heatmap-section" style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:18px;margin-bottom:14px;display:none">
+    <div id="profile-heatmap-section" style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:18px;margin-bottom:14px">
       <div style="font-family:'Barlow Condensed',sans-serif;font-size:.7rem;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-bottom:12px" id="profile-heatmap-title">📍 Shot Locations</div>
-      <div id="profile-heatmap-debug" style="font-size:.65rem;color:var(--amber);font-family:monospace;margin-bottom:8px;max-height:120px;overflow:auto"></div>
+      <div id="profile-heatmap-debug" style="font-size:.65rem;color:var(--amber);font-family:monospace;margin-bottom:8px"></div>
       <canvas id="profile-heatmap" style="display:block;width:100%;border-radius:8px"></canvas>
       <div style="display:flex;align-items:center;gap:8px;margin-top:8px">
         <span style="font-size:.7rem;color:var(--muted)">Low</span>
@@ -6724,17 +6716,7 @@ function saveCustomStat(player, key, val) {
   }
 
   currentProfileName = name;
-
-  // Show heatmap section directly — no async, no function call
-  {
-    const _sec = document.getElementById('profile-heatmap-section');
-    const _dbg = document.getElementById('profile-heatmap-debug');
-    if (_sec) {
-      _sec.style.display = 'block';
-      if (_dbg) _dbg.textContent = `goalCombos keys: ${Object.keys(goalCombos).length} | player: ${name}`;
-    }
-    requestAnimationFrame(() => renderProfileHeatmap(name));
-  }
+  renderProfileHeatmap(name);
 }
 
 // =====================================================================
