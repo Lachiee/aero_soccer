@@ -6725,9 +6725,16 @@ function saveCustomStat(player, key, val) {
 
   currentProfileName = name;
 
-  // Render shot heatmap immediately after innerHTML is set
-  // Use requestAnimationFrame to ensure DOM is painted first
-  requestAnimationFrame(() => renderProfileHeatmap(name));
+  // Show heatmap section directly — no async, no function call
+  {
+    const _sec = document.getElementById('profile-heatmap-section');
+    const _dbg = document.getElementById('profile-heatmap-debug');
+    if (_sec) {
+      _sec.style.display = 'block';
+      if (_dbg) _dbg.textContent = `goalCombos keys: ${Object.keys(goalCombos).length} | player: ${name}`;
+    }
+    requestAnimationFrame(() => renderProfileHeatmap(name));
+  }
 }
 
 // =====================================================================
