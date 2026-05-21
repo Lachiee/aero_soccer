@@ -3465,7 +3465,7 @@ function renderSeasonSummary() {
 
   // Use _displayStats but with a lower threshold (3+ games in season)
   const ds = getDisplayStats();
-  const allP = Object.values(playerStats).filter(p => (seasonGames[p.player]?.size || 0) >= 3);
+  const allP = Object.values(playerStats).filter(p => (seasonGames[p.player]?.size || 0) >= 1);
   if (!allP.length) { content.innerHTML = '<p style="color:var(--muted)">Not enough data yet.</p>'; return; }
 
   const seasonLabel = seasonFilter !== 'all' ? seasonFilter : 'All Time';
@@ -3609,29 +3609,29 @@ function renderSeasonSummary() {
   const creatorScore = p => (p.assists + p.key_passes)/gf(p);
   const winRateScore = p => (p.wins/(p.wins+p.losses+(p.draws||0)||1))*100;
 
-  // Clutch Player: uses combos timestamps — late goals (40+ min), winning goals weighted 2.5×
+  // Clutch Player: uses combos timestamps — late goals (47+ min), winning goals weighted 2.5×
   const clutchPlayerScore = p => {
     let score = 0;
-    Object.entries(goalCombos).forEach(([mid, events]) => {
-      const match = matchList.find(m => m.id === mid);
-      if (!match || !inSeason(match.date)) return;
-      events.forEach((ev, idx) => {
-        if (ev.scorer !== p.player) return;
-        const mins = Number(ev.time) || 0;
-        if (mins < 47) return; // only last few mins (47+)
-        // Determine score state at time of this goal
-        const scorerTeam = match.teamA.some(r => r.player === p.player) ? 'A' : 'B';
-        const goalsBeforeA = events.slice(0, idx).filter(e => !e.is_og && match.teamA.some(r => r.player === e.scorer)).length
-                           + events.slice(0, idx).filter(e => e.is_og && match.teamB.some(r => r.player === e.scorer)).length;
-        const goalsBeforeB = events.slice(0, idx).filter(e => !e.is_og && match.teamB.some(r => r.player === e.scorer)).length
-                           + events.slice(0, idx).filter(e => e.is_og && match.teamA.some(r => r.player === e.scorer)).length;
-        const myScoreBefore  = scorerTeam === 'A' ? goalsBeforeA : goalsBeforeB;
-        const oppScoreBefore = scorerTeam === 'A' ? goalsBeforeB : goalsBeforeA;
-        const isWinner = myScoreBefore === oppScoreBefore; // equaliser that could become winner, or already ahead
-        const isDecisive = myScoreBefore >= oppScoreBefore; // at least level before scoring
-        score += isWinner ? 2.5 : (isDecisive ? 1.5 : 1); // winner goal 2.5×, decisive 1.5×, other late goal 1×
+    try {
+      Object.entries(goalCombos || {}).forEach(([mid, events]) => {
+        if (!Array.isArray(events)) return;
+        const match = matchList.find(m => m.id === mid);
+        if (!match || !inSeason(match.date)) return;
+        events.forEach((ev, idx) => {
+          if (!ev || ev.scorer !== p.player) return;
+          const mins = Number(ev.time) || 0;
+          if (mins < 47) return;
+          const scorerTeam = match.teamA.some(r => r.player === p.player) ? 'A' : 'B';
+          const goalsBeforeA = events.slice(0,idx).filter(e=>e&&!e.is_og&&match.teamA.some(r=>r.player===e.scorer)).length
+                             + events.slice(0,idx).filter(e=>e&&e.is_og&&match.teamB.some(r=>r.player===e.scorer)).length;
+          const goalsBeforeB = events.slice(0,idx).filter(e=>e&&!e.is_og&&match.teamB.some(r=>r.player===e.scorer)).length
+                             + events.slice(0,idx).filter(e=>e&&e.is_og&&match.teamA.some(r=>r.player===e.scorer)).length;
+          const myBefore  = scorerTeam==='A' ? goalsBeforeA : goalsBeforeB;
+          const oppBefore = scorerTeam==='A' ? goalsBeforeB : goalsBeforeA;
+          score += myBefore===oppBefore ? 2.5 : myBefore>=oppBefore ? 1.5 : 1;
+        });
       });
-    });
+    } catch(e) {}
     return score;
   };
 
@@ -3716,7 +3716,8 @@ function renderSeasonSummary() {
     return parts.length ? `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px;margin-top:10px;margin-bottom:10px">${parts.join('')}</div>` : '';
   })();
 
-  content.innerHTML = `
+  try {
+    content.innerHTML = `
     <!-- Hero row: top 3 awards -->
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;margin-bottom:10px">
       ${a1 ? heroCard(a1, '#f0c040') : ''}
@@ -3734,6 +3735,10 @@ function renderSeasonSummary() {
     ${comboSection}
     <div style="font-size:.72rem;color:var(--muted);text-align:center">Click any card to open that player's profile · Respects the season filter above</div>
   `;
+  } catch(err) {
+    content.innerHTML = `<p style="color:var(--red);font-family:'Barlow Condensed',sans-serif;padding:20px">Error rendering season summary: ${err.message}</p>`;
+    console.error('renderSeasonSummary error:', err);
+  }
 }
 
 // =====================================================================
