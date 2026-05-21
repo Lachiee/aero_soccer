@@ -5899,34 +5899,25 @@ function renderProfileHeatmap(name) {
   const heatCanvas = document.getElementById('profile-heatmap');
   if (!section || !heatCanvas) return;
 
-  const W = window.innerWidth - 100;
-  const H = Math.round(W * 0.52);
-  const dpr = window.devicePixelRatio || 1;
-  heatCanvas.width = W * dpr;
-  heatCanvas.height = H * dpr;
-  heatCanvas.style.width = W + 'px';
-  heatCanvas.style.height = H + 'px';
-
-  const ctx = heatCanvas.getContext('2d');
-  ctx.scale(dpr, dpr);
-
-  // Just draw a green rectangle — simplest possible test
-  ctx.fillStyle = '#1a7a32';
-  ctx.fillRect(0, 0, W, H);
-  ctx.fillStyle = 'white';
-  ctx.font = '20px sans-serif';
-  ctx.fillText('Court renders here', 20, 40);
-
-  // Count shots
+  // Collect shots for this player
   const shots = [];
   Object.values(goalCombos).forEach(data => {
     [...(data.h1||[]), ...(data.h2||[])].forEach(g => {
-      if (g.scorer === name && !g.isOG && g.sx != null) shots.push(g);
+      if (g.scorer === name && !g.isOG && g.sx != null && g.sy != null) shots.push(g);
     });
   });
 
+  // Hide section if no shot data exists for this player
+  section.style.display = shots.length === 0 ? 'none' : '';
+
   const dbg = document.getElementById('profile-heatmap-debug');
-  if (dbg) dbg.textContent = `${shots.length} shots found for ${name}`;
+  if (dbg) dbg.textContent = shots.length > 0 ? `${shots.length} shot${shots.length !== 1 ? 's' : ''} mapped` : '';
+
+  if (shots.length === 0) return;
+
+  // Determine width from the canvas container (it's 100% wide)
+  const W = heatCanvas.parentElement?.clientWidth || heatCanvas.offsetWidth || (window.innerWidth - 100);
+  hmapRender(heatCanvas, shots, { width: W });
 }
 
 function renderProfile(name) {
