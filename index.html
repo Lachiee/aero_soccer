@@ -3611,33 +3611,50 @@ function renderSeasonSummary() {
   const creatorScore = p => (p.assists + p.key_passes)/gf(p);
   const winRateScore = p => (p.wins/(p.wins+p.losses+(p.draws||0)||1))*100;
 
-  // Clutch Player: uses combos timestamps — late goals (47+ min), winning goals weighted 2.5×
+  // Clutch Player: uses combos timestamps — late goals (47+ min total match time)
+  // goalCombos structure: { matchId: { h1: [...events], h2: [...events] } }
+  // 1H times are raw (0-27ish), 2H times continue from ~27min offset
   const clutchPlayerScore = p => {
     let score = 0;
     try {
-      Object.entries(goalCombos || {}).forEach(([mid, events]) => {
-        if (!Array.isArray(events)) return;
+      const parseTime = t => {
+        const s = String(t || '0').trim();
+        if (s.includes(':')) { const [m,sec] = s.split(':'); return parseInt(m) + parseInt(sec)/60; }
+        return parseFloat(s) || 0;
+      };
+      Object.entries(goalCombos || {}).forEach(([mid, data]) => {
+        if (!data || typeof data !== 'object') return;
         const match = matchList.find(m => m.id === mid);
         if (!match || !inSeason(match.date)) return;
-        events.forEach((ev, idx) => {
-          if (!ev || ev.scorer !== p.player) return;
-          const mins = (() => { 
-            const t = String(ev.time || '0');
-            const parts = t.split(':');
-            return parts.length === 2 ? parseInt(parts[0]) + parseInt(parts[1])/60 : parseFloat(t);
-          })();
-          if (mins < 47) return;
-          const scorerTeam = match.teamA.some(r => r.player === p.player) ? 'A' : 'B';
-          const goalsBeforeA = events.slice(0,idx).filter(e=>e&&!e.is_og&&match.teamA.some(r=>r.player===e.scorer)).length
-                             + events.slice(0,idx).filter(e=>e&&e.is_og&&match.teamB.some(r=>r.player===e.scorer)).length;
-          const goalsBeforeB = events.slice(0,idx).filter(e=>e&&!e.is_og&&match.teamB.some(r=>r.player===e.scorer)).length
-                             + events.slice(0,idx).filter(e=>e&&e.is_og&&match.teamA.some(r=>r.player===e.scorer)).length;
-          const myBefore  = scorerTeam==='A' ? goalsBeforeA : goalsBeforeB;
-          const oppBefore = scorerTeam==='A' ? goalsBeforeB : goalsBeforeA;
-          score += myBefore===oppBefore ? 2.5 : myBefore>=oppBefore ? 1.5 : 1;
+
+        // Flatten h1 + h2, adding ~27min offset to h2 times to get full-match minutes
+        const h2Offset = window._ytHalfOffset != null ? window._ytHalfOffset / 60 : 27;
+        const allEvents = [
+          ...(data.h1 || []).map(ev => ({ ...ev, totalMins: parseTime(ev.time) })),
+          ...(data.h2 || []).map(ev => ({ ...ev, totalMins: parseTime(ev.time) + h2Offset })),
+        ].filter(ev => ev && ev.scorer);
+
+        allEvents.forEach((ev, idx) => {
+          if (ev.scorer !== p.player) return;
+          if (ev.totalMins < 47) return;
+
+          // Determine score state before this goal
+          const scorerInA = match.teamA.some(r => r.player === p.player);
+          const eventsBeforeA = allEvents.slice(0, idx).filter(e =>
+            !e.is_og ? match.teamA.some(r => r.player === e.scorer) : match.teamB.some(r => r.player === e.scorer)
+          ).length;
+          const eventsBeforeB = allEvents.slice(0, idx).filter(e =>
+            !e.is_og ? match.teamB.some(r => r.player === e.scorer) : match.teamA.some(r => r.player === e.scorer)
+          ).length;
+          const myBefore  = scorerInA ? eventsBeforeA : eventsBeforeB;
+          const oppBefore = scorerInA ? eventsBeforeB : eventsBeforeA;
+
+          // Winner goal (equalising or putting ahead from level/behind) = 2.5×
+          // Decisive (already ahead) = 1.5×, consolation = 1×
+          score += myBefore <= oppBefore ? 2.5 : myBefore > oppBefore ? 1.5 : 1;
         });
       });
-    } catch(e) {}
+    } catch(e) { console.warn('clutchPlayerScore error:', e); }
     return score;
   };
 
