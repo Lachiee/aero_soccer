@@ -3465,7 +3465,7 @@ function renderSeasonSummary() {
 
   // Use _displayStats but with a lower threshold (3+ games in season)
   const ds = getDisplayStats();
-  const allP = Object.values(playerStats).filter(p => (seasonGames[p.player]?.size || 0) >= 1);
+  const allP = Object.values(playerStats).filter(p => (seasonGames[p.player]?.size || 0) >= 4);
   if (!allP.length) { content.innerHTML = '<p style="color:var(--muted)">Not enough data yet.</p>'; return; }
 
   const seasonLabel = seasonFilter !== 'all' ? seasonFilter : 'All Time';
@@ -3504,19 +3504,20 @@ function renderSeasonSummary() {
 
   const gf = p => Math.max(p.games, 1);
   const round2 = v => parseFloat(v.toFixed(2));
-  const best = (fn, label, fmt) => {
+  const best = (fn, label, fmt, subFn, subFmt) => {
     const winner = sPool.reduce((b, p) => fn(p) > fn(b) ? p : b, sPool[0]);
     const rawVal = fn(winner);
-    return { player: winner.player, val: fmt ? fmt(rawVal) : round2(rawVal), label };
+    const sub = subFn ? (subFmt ? subFmt(subFn(winner)) : subFn(winner)) : null;
+    return { player: winner.player, val: fmt ? fmt(rawVal) : round2(rawVal), label, sub };
   };
 
   const fmt1 = v => Number.isInteger(v) ? v : parseFloat(v.toFixed(1));
   const fmt2 = v => Number.isInteger(v) ? v : parseFloat(v.toFixed(2));
 
   const awards = [
-    best(p => p.goals/gf(p),         '⚽ Top Scorer',         v => fmt2(v)),
-    best(p => p.assists/gf(p),        '🎯 Most Assists',        v => fmt2(v)),
-    best(p => p.goals,                 '📊 Most Goals (Total)',  v => Math.round(v)),
+    best(p => p.goals/gf(p),         '⚽ Top Scorer',         v => fmt2(v)+' gpg',    p => p.goals, v => Math.round(v)+' total'),
+    best(p => p.assists,              '🎯 Most Assists',        v => Math.round(v)+' assists'),
+    best(p => p.goals,                '📊 Most Goals (Total)',  v => Math.round(v)+' goals'),
     best(p => p.total_shots/gf(p),    '💥 Most Shots/G',        v => fmt1(v)),
     best(p => p.goalkeeper_saves/gf(p),'🧤 Best GK',            v => fmt2(v)),
     best(p => (p.interceptions+p.tackles)/gf(p), '🛡 Best Defender', v => fmt1(v)),
@@ -3564,6 +3565,7 @@ function renderSeasonSummary() {
       <div style="font-size:.7rem;color:var(--muted);font-family:'Barlow Condensed',sans-serif;letter-spacing:1px;text-transform:uppercase;margin-bottom:8px">${award.label}</div>
       <div style="font-family:'Bebas Neue',sans-serif;font-size:2.2rem;color:${accent};line-height:1;margin-bottom:4px">${award.player}</div>
       <div style="font-family:'Bebas Neue',sans-serif;font-size:1.5rem;color:var(--text);opacity:.7">${award.val}</div>
+      ${award.sub ? `<div style="font-family:'Barlow Condensed',sans-serif;font-size:.8rem;color:var(--muted);margin-top:2px">${award.sub}</div>` : ''}
     </div>`;
 
   const statCard = (award) => `
@@ -3619,7 +3621,11 @@ function renderSeasonSummary() {
         if (!match || !inSeason(match.date)) return;
         events.forEach((ev, idx) => {
           if (!ev || ev.scorer !== p.player) return;
-          const mins = Number(ev.time) || 0;
+          const mins = (() => { 
+            const t = String(ev.time || '0');
+            const parts = t.split(':');
+            return parts.length === 2 ? parseInt(parts[0]) + parseInt(parts[1])/60 : parseFloat(t);
+          })();
           if (mins < 47) return;
           const scorerTeam = match.teamA.some(r => r.player === p.player) ? 'A' : 'B';
           const goalsBeforeA = events.slice(0,idx).filter(e=>e&&!e.is_og&&match.teamA.some(r=>r.player===e.scorer)).length
