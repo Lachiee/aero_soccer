@@ -5900,6 +5900,23 @@ function renderProfileHeatmap(name) {
       }
     });
   });
+  // Also check localStorage directly in case GitHub CSV overwrote goalCombos without sx/sy
+  try {
+    const lsRaw = localStorage.getItem('aeroSoccer_goalCombos');
+    if (lsRaw) {
+      const lsData = JSON.parse(lsRaw);
+      Object.values(lsData).forEach(data => {
+        [...(data.h1||[]), ...(data.h2||[])].forEach(g => {
+          if (g.scorer === name && !g.isOG && g.sx != null && g.sy != null) {
+            // Only add if not already present
+            if (!shots.some(s => Math.abs(s.sx-g.sx)<0.001 && Math.abs(s.sy-g.sy)<0.001)) {
+              shots.push({ sx: g.sx, sy: g.sy });
+            }
+          }
+        });
+      });
+    }
+  } catch(e) {}
   if (!shots.length) { section.style.display = 'none'; return; }
   section.style.display = 'block';
   const title = document.getElementById('profile-heatmap-title');
@@ -10839,7 +10856,26 @@ document.addEventListener('DOMContentLoaded', () => {
         loaded[mid][key].push({ scorer, assister, time, isOG, isGoalHighlight: isGoalHL, isAssistHighlight: isAssistHL,
           ...(sx != null && sy != null ? { sx, sy } : {}) });
       });
-      // Merge with localStorage — GitHub file takes precedence
+      // Merge with localStorage — preserve sx/sy shot positions from localStorage
+      // since the GitHub CSV may not have them yet
+      try {
+        const lsRaw = localStorage.getItem('aeroSoccer_goalCombos');
+        if (lsRaw) {
+          const lsData = JSON.parse(lsRaw);
+          Object.entries(loaded).forEach(([mid, data]) => {
+            const ls = lsData[mid];
+            if (!ls) return;
+            ['h1','h2'].forEach(half => {
+              (data[half]||[]).forEach((g, i) => {
+                const lsG = (ls[half]||[])[i];
+                if (lsG && lsG.sx != null && lsG.sy != null) {
+                  g.sx = lsG.sx; g.sy = lsG.sy;
+                }
+              });
+            });
+          });
+        }
+      } catch(e) {}
       goalCombos = loaded;
       _tagCache = null; // force tag rebuild with fresh combo data
       // Rerender profile if open so highlights appear
