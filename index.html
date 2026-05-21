@@ -5891,35 +5891,36 @@ function renderPlayers() {
 function renderProfileHeatmap(name) {
   const section = document.getElementById('profile-heatmap-section');
   const heatCanvas = document.getElementById('profile-heatmap');
-  if (!section || !heatCanvas) return;
+  if (!section || !heatCanvas) {
+    console.warn('renderProfileHeatmap: elements not found for', name);
+    return;
+  }
 
-  // DEBUG — show what's in goalCombos for this player
-  let debugLines = [`Looking for: ${name}`];
-  let totalGoals = 0, withShots = 0;
-  Object.entries(goalCombos).forEach(([mid, data]) => {
-    [...(data.h1||[]), ...(data.h2||[])].forEach(g => {
-      if (g.scorer === name) {
-        totalGoals++;
-        if (g.sx != null) withShots++;
-        debugLines.push(`${mid}: sx=${g.sx} sy=${g.sy}`);
-      }
-    });
-  });
-  debugLines.push(`Total goals: ${totalGoals}, with shots: ${withShots}`);
-  const debugEl = document.getElementById('profile-heatmap-debug');
-  if (debugEl) debugEl.innerHTML = debugLines.map(l=>`<div>${l}</div>`).join('');
+  // Always show section so debug panel is visible
+  section.style.display = 'block';
 
   const shots = [];
-  Object.values(goalCombos).forEach(data => {
+  Object.entries(goalCombos).forEach(([mid, data]) => {
     [...(data.h1||[]), ...(data.h2||[])].forEach(g => {
       if (g.scorer === name && !g.isOG && g.sx != null && g.sy != null) {
         shots.push({ sx: g.sx, sy: g.sy });
       }
     });
   });
-  if (!shots.length) { section.style.display = 'block'; return; } // keep visible for debug
-  section.style.display = 'block';
+
+  // Debug output
+  const debugEl = document.getElementById('profile-heatmap-debug');
+  if (debugEl) {
+    const matchCount = Object.keys(goalCombos).length;
+    const allGoals = Object.values(goalCombos).flatMap(d => [...(d.h1||[]),...(d.h2||[])]).filter(g=>g.scorer===name);
+    debugEl.innerHTML = `goalCombos: ${matchCount} matches | ${name} goals: ${allGoals.length} | with location: ${shots.length}`;
+  }
+
   const title = document.getElementById('profile-heatmap-title');
+  if (!shots.length) {
+    if (title) title.textContent = `📍 Shot Locations (none mapped yet)`;
+    return;
+  }
   if (title) title.textContent = `📍 Shot Locations (${shots.length} goal${shots.length===1?'':'s'} mapped)`;
   const W = Math.max(200, section.offsetWidth - 36);
   heatCanvas.style.width = W + 'px';
@@ -6724,8 +6725,9 @@ function saveCustomStat(player, key, val) {
 
   currentProfileName = name;
 
-  // Render shot heatmap
-  setTimeout(() => renderProfileHeatmap(name), 200);
+  // Render shot heatmap immediately after innerHTML is set
+  // Use requestAnimationFrame to ensure DOM is painted first
+  requestAnimationFrame(() => renderProfileHeatmap(name));
 }
 
 // =====================================================================
