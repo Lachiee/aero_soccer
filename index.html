@@ -2646,6 +2646,11 @@ const TAG_DEFS = {
   'Postman':           { cls:'tag-striker',   tip:'Hits the post more per game than anyone by a wide margin — relentlessly close to spectacular goals on a regular basis' },
   'The Magician':      { cls:'tag-wizard',    tip:'One of the top nutmeg artists while also being a top-3 interceptor — beats people with skill then wins the ball back immediately' },
 
+  // ── Shot geometry ─────────────────────────────────────────────────────────
+  'Long Ranger':       { cls:'tag-enforcer',  tip:'Scores from further out than anyone — maps show shots taken from deep, yet they still find the net with regularity' },
+  'Sharp Angle':       { cls:'tag-striker',   tip:'Scored from the sharpest angles of anyone in the group — finds the net from positions where others don\'t even attempt a shot' },
+  'Dead Eye':          { cls:'tag-striker',   tip:'Converts from long range at a higher rate than anyone — combines distance with clinical finishing for low-percentage goals' },
+
   // ── Timestamp ─────────────────────────────────────────────────────────────
   'Icebreaker':        { cls:'tag-enforcer',  tip:'Scored the opening goal of a match in more games than anyone — breaks deadlocks and shifts momentum before others get going' },
   'Blitz':             { cls:'tag-enforcer',  tip:'Scored twice within a 5-minute window in more matches than anyone — the most explosively dangerous scorer in the group' },
@@ -2809,6 +2814,28 @@ function buildTagAuction() {
     const variance=vals.reduce((s,v)=>s+(v-vmean)**2,0)/vals.length;
     const stdDev=Math.sqrt(variance);
 
+    // Shot geometry stats (right side = scoring goal at sx=1, sy=0.5)
+    // Use a representative canvas size for distance normalisation
+    const _gW = 600, _gH = Math.round(600 * 0.52);
+    const myShots = [];
+    playerCombos.forEach(([,data]) => {
+      [...(data.h1||[]),...(data.h2||[])].forEach(g => {
+        if (g.scorer === ps.player && !g.isOG && g.sx != null && g.sy != null) {
+          myShots.push(hmapShotGeometry(g.sx, g.sy, _gW, _gH));
+        }
+      });
+    });
+    const shotCount = myShots.length;
+    const avgShotDist = shotCount > 0 ? myShots.reduce((s,v) => s + v.distNorm, 0) / shotCount : 0;
+    const maxShotDist = shotCount > 0 ? Math.max(...myShots.map(v => v.distNorm)) : 0;
+    // Sharpest angle = highest angleDeg (most acute from the side)
+    const maxShotAngle = shotCount > 0 ? Math.max(...myShots.map(v => v.angleDeg)) : 0;
+    const avgShotAngle = shotCount > 0 ? myShots.reduce((s,v) => s + v.angleDeg, 0) / shotCount : 0;
+    // "Long ranger" score: avg distance from goal, weighted by shot count
+    const longRangerScore = shotCount >= 2 ? avgShotDist * shotCount : 0;
+    // "Angle merchant" score: avg angle, weighted by shot count
+    const angleMerchantScore = shotCount >= 2 ? avgShotAngle * shotCount : 0;
+
     metrics[ps.player] = {
       ps, gpg, apg, spg, sotpg, offpg, kppg, intpg, tklpg, blkpg, gkspg, nmpg, postpg,
       conv, acc, actpg, totalAct: totalAct/gm,
@@ -2816,6 +2843,8 @@ function buildTagAuction() {
       dualGames, multiGoalGames, uniqueAssisted,
       topProvider, topReceiver, unassistedGoals,
       myGoalEvents, avgMin,
+      shotCount, avgShotDist, maxShotDist, maxShotAngle, avgShotAngle,
+      longRangerScore, angleMerchantScore,
       openers: myGoalEvents.filter(e=>e.isOpener).length,
       finishers: myGoalEvents.filter(e=>e.isFinal).length,
       equalisers: myGoalEvents.filter(e=>e.isEqualisingOrComeback).length,
@@ -3045,6 +3074,14 @@ function buildTagAuction() {
   award('Precision',        m => m.apg*2.5+m.conv*5+m.gpg*0.3);                   // David: assists+conversion
   award('Engine Room',      m => m.tklpg*0.9+m.kppg*0.9+m.intpg*0.4);            // James2: defensive creator
   award('Shadow Defender',  m => m.intpg*0.8+m.gkspg*0.6+m.tklpg*0.2);           // Dexter: int+saves+tackles
+
+  // ── SHOT GEOMETRY TAGS (require shot location data) ─────────────────────
+  // Long Ranger: highest avg shot distance from goal (min 2 mapped shots)
+  award('Long Ranger',      m => m.longRangerScore, 0.01);
+  // Sharp Angle: highest max shot angle from goal centreline
+  award('Sharp Angle',      m => m.angleMerchantScore, 0.01);
+  // Dead Eye: goals from long distance with low shot count (clinical from range)
+  award('Dead Eye',         m => m.shotCount >= 2 ? m.avgShotDist * m.conv : 0);
 
   // ── TIMESTAMP TAGS ──────────────────────────────────────────────────────
   // Each uses a distinct goal-event criterion — all go to different players
@@ -3936,6 +3973,21 @@ function drawWormCanvas(canvasId, matchId) {
 // =====================================================================
 const HMAP_COLS = 14, HMAP_ROWS = 8;
 
+// ── Shot geometry helpers (right side = scoring goal at sx=1, sy=0.5) ──────────
+// Returns { distNorm, distPx, angleDeg }
+//   distNorm  — 0-1 (1 = far corner of court)
+//   angleDeg  — degrees from goal centreline (0=straight on, 90=parallel)
+function hmapShotGeometry(sx, sy, W, H) {
+  const gx = W, gy = H * 0.5;
+  const px = sx * W, py = sy * H;
+  const dx = gx - px, dy = gy - py;
+  const distPx = Math.hypot(dx, dy);
+  const maxDist = Math.hypot(W, H * 0.5);
+  const distNorm = Math.min(distPx / maxDist, 1);
+  const angleDeg = Math.abs(Math.atan2(Math.abs(dy), Math.max(dx, 1)) * 180 / Math.PI);
+  return { distNorm, distPx, angleDeg };
+}
+
 function hmapHeatRGB(t) {
   const stops = [[59,130,246],[34,197,94],[234,179,8],[249,115,22],[220,38,38]];
   const s = t*4, i = Math.min(3,Math.floor(s)), u = s-i;
@@ -3943,10 +3995,34 @@ function hmapHeatRGB(t) {
   return [Math.round(a[0]+(b[0]-a[0])*u), Math.round(a[1]+(b[1]-a[1])*u), Math.round(a[2]+(b[2]-a[2])*u)];
 }
 
+// Gaussian KDE: splats each shot into a Float32 density grid, then colour-maps it
+function hmapKDE(shots, W, H, bandwidth) {
+  const RES = 3;
+  const cols = Math.ceil(W/RES), rows = Math.ceil(H/RES);
+  const grid = new Float32Array(cols * rows);
+  const bw2 = bandwidth * bandwidth;
+  shots.forEach(({ sx, sy }) => {
+    if (sx == null || sy == null) return;
+    const px = sx * W, py = sy * H;
+    const r3 = bandwidth * 3;
+    const c0 = Math.max(0, Math.floor((px-r3)/RES));
+    const c1 = Math.min(cols-1, Math.ceil((px+r3)/RES));
+    const r0 = Math.max(0, Math.floor((py-r3)/RES));
+    const r1 = Math.min(rows-1, Math.ceil((py+r3)/RES));
+    for (let r=r0; r<=r1; r++) for (let c=c0; c<=c1; c++) {
+      const dx2 = c*RES - px, dy2 = r*RES - py;
+      grid[r*cols+c] += Math.exp(-(dx2*dx2 + dy2*dy2) / (2*bw2));
+    }
+  });
+  let maxV = 0;
+  for (let i=0; i<grid.length; i++) if (grid[i] > maxV) maxV = grid[i];
+  return { grid, cols, rows, maxV, RES };
+}
+
+// Hex helpers kept for interactive modal pin placement
 function hmapHexCtr(c,r,hr,ox,oy) {
   return { x: ox + c*hr*1.732 + (r%2 ? hr*0.866 : 0), y: oy + r*hr*1.5 };
 }
-
 function hmapHexPath(ctx,cx,cy,r) {
   ctx.beginPath();
   for (let i=0;i<6;i++) {
@@ -3955,7 +4031,6 @@ function hmapHexPath(ctx,cx,cy,r) {
   }
   ctx.closePath();
 }
-
 function hmapLayout(W,H) {
   const pad = 6;
   const hr = Math.min((W-pad*2)/((HMAP_COLS-0.5)*1.732), (H-pad*2)/((HMAP_ROWS-0.5)*1.5));
@@ -3970,30 +4045,31 @@ function hmapDrawCourt(ctx, W, H) {
   ctx.beginPath();
   if (ctx.roundRect) ctx.roundRect(0,0,W,H,6); else ctx.rect(0,0,W,H);
   ctx.fill();
-  // Subtle stripes
+  // Subtle vertical stripes
   for (let i=0;i<12;i++) {
     ctx.fillStyle = i%2 ? 'rgba(0,0,0,0.04)' : 'rgba(255,255,255,0.015)';
     ctx.fillRect(i*(W/12), 0, W/12, H);
   }
-  // Black horizontal strip
+  // Black horizontal strip (the dividing band)
   const sh = H*0.18;
   ctx.fillStyle = '#080e1a';
   ctx.fillRect(0, H/2-sh/2, W, sh);
   // White centre line
   ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.lineWidth = 2;
   ctx.beginPath(); ctx.moveTo(W/2,0); ctx.lineTo(W/2,H); ctx.stroke();
-  // Yellow markings
+  // Yellow border + zone lines
   const Y = 'rgba(255,215,0,0.92)';
   ctx.strokeStyle = Y; ctx.lineWidth = 2;
   ctx.strokeRect(3,3,W-6,H-6);
-  // One yellow vertical line each side at ~34%
   const zx = W*0.34;
   ctx.beginPath(); ctx.moveTo(zx,3); ctx.lineTo(zx,H-3); ctx.stroke();
   ctx.beginPath(); ctx.moveTo(W-zx,3); ctx.lineTo(W-zx,H-3); ctx.stroke();
-  // Semicircle goal areas
+  // Semicircle goal areas — right side opens left (scoring end), left side opens right
   const arcR = H*0.28;
   ctx.lineWidth = 2.5;
+  // Left goal arc — opens right (defending end)
   ctx.beginPath(); ctx.arc(3,H/2,arcR,-Math.PI*0.5,Math.PI*0.5); ctx.stroke();
+  // Right goal arc — opens left (scoring end) — ←
   ctx.beginPath(); ctx.arc(W-3,H/2,arcR,Math.PI*0.5,Math.PI*1.5); ctx.stroke();
   // Centre circle
   ctx.lineWidth = 2;
@@ -4005,10 +4081,17 @@ function hmapDrawCourt(ctx, W, H) {
   ctx.strokeStyle = 'rgba(255,255,255,0.95)'; ctx.lineWidth = 2.5;
   ctx.strokeRect(3, H/2-goalH/2, goalD, goalH);
   ctx.strokeRect(W-3-goalD, H/2-goalH/2, goalD, goalH);
+  // Scoring direction arrow on right side
+  const arrowX = W - 6, arrowY = H * 0.08;
+  ctx.fillStyle = 'rgba(255,215,0,0.75)';
+  ctx.font = `bold ${Math.max(7, Math.round(H*0.075))}px 'Barlow Condensed',sans-serif`;
+  ctx.textAlign = 'right'; ctx.textBaseline = 'top';
+  ctx.fillText('GOAL ▶', arrowX, arrowY);
+  ctx.textAlign = 'left';
 }
 
 function hmapRender(canvas, shots, opts={}) {
-  // shots: array of {sx, sy} (0-1 fractions)
+  // shots: array of {sx, sy} (0-1 fractions, right side = scoring goal)
   // opts: { interactive, hoverHex, selectedHex, pin, width }
   const dpr = window.devicePixelRatio || 1;
   const W = opts.width
@@ -4024,51 +4107,71 @@ function hmapRender(canvas, shots, opts={}) {
   ctx.scale(dpr, dpr);
 
   hmapDrawCourt(ctx, W, H);
-  const { hr, ox, oy } = hmapLayout(W, H);
 
-  // Build hex counts from shot positions
-  const counts = {};
-  shots.forEach(({ sx, sy }) => {
-    if (sx == null || sy == null) return;
-    // Find nearest hex
-    let best = null, bd = Infinity;
-    for (let c=0;c<HMAP_COLS;c++) for (let r=0;r<HMAP_ROWS;r++) {
-      const h = hmapHexCtr(c,r,hr,ox,oy);
-      const d = Math.hypot(sx*W - h.x, sy*H - h.y);
-      if (d < bd) { bd = d; best = `${c},${r}`; }
-    }
-    if (best) counts[best] = (counts[best]||0) + 1;
-  });
-  const maxN = Math.max(1, ...Object.values(counts));
+  // ── Smooth KDE gradient overlay ─────────────────────────────────────────
+  const validShots = shots.filter(s => s.sx != null && s.sy != null);
+  if (validShots.length > 0) {
+    const bandwidth = Math.max(W * 0.10, 28); // ~10% of width
+    const { grid, cols, rows, maxV, RES } = hmapKDE(validShots, W, H, bandwidth);
 
-  for (let c=0;c<HMAP_COLS;c++) for (let r=0;r<HMAP_ROWS;r++) {
-    const { x, y } = hmapHexCtr(c,r,hr,ox,oy);
-    const n = counts[`${c},${r}`] || 0;
-    const isHov = opts.hoverHex && opts.hoverHex.c===c && opts.hoverHex.r===r;
-    const isSel = opts.selectedHex && opts.selectedHex.c===c && opts.selectedHex.r===r;
-    hmapHexPath(ctx, x, y, hr-1);
-    if (isSel) {
-      ctx.fillStyle = '#fbbf24'; ctx.globalAlpha = 0.9; ctx.fill();
-      ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5; ctx.globalAlpha = 1; ctx.stroke();
-    } else if (isHov) {
-      ctx.fillStyle = 'rgba(255,255,255,0.25)'; ctx.globalAlpha = 1; ctx.fill();
-      ctx.strokeStyle = 'rgba(255,255,255,0.6)'; ctx.lineWidth = 1; ctx.stroke();
-    } else if (n > 0) {
-      const t = Math.pow(n/maxN, 0.6);
+    // Render KDE to an offscreen canvas at reduced resolution, then scale up (smooth)
+    const offW = cols, offH = rows;
+    const off = document.createElement('canvas');
+    off.width = offW; off.height = offH;
+    const offCtx = off.getContext('2d');
+    const imgData = offCtx.createImageData(offW, offH);
+    const d = imgData.data;
+    for (let r=0; r<rows; r++) for (let c=0; c<cols; c++) {
+      const v = grid[r*cols+c];
+      if (v < 0.0001) { d[(r*cols+c)*4+3] = 0; continue; }
+      const t = Math.pow(v / maxV, 0.55); // gamma — boost low-density areas
       const [rv,g,b] = hmapHeatRGB(t);
-      ctx.fillStyle = `rgba(${rv},${g},${b},${0.6+t*0.35})`; ctx.globalAlpha = 1; ctx.fill();
-      ctx.strokeStyle = 'rgba(0,0,0,0.1)'; ctx.lineWidth = 0.4; ctx.stroke();
-      ctx.fillStyle = 'rgba(255,255,255,0.92)';
-      ctx.font = `bold ${Math.max(8,Math.round(hr*0.46))}px sans-serif`;
-      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.fillText(n, x, y);
-    } else {
-      ctx.fillStyle = 'rgba(255,255,255,0.03)'; ctx.globalAlpha = 1; ctx.fill();
-      ctx.strokeStyle = 'rgba(255,255,255,0.06)'; ctx.lineWidth = 0.4; ctx.stroke();
+      const alpha = Math.round((0.45 + t * 0.45) * 255);
+      const idx = (r*cols+c)*4;
+      d[idx]=rv; d[idx+1]=g; d[idx+2]=b; d[idx+3]=alpha;
     }
+    offCtx.putImageData(imgData, 0, 0);
+
+    // Scale up smoothly onto main canvas
+    ctx.save();
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(off, 0, 0, W, H);
+    ctx.restore();
   }
 
-  // Free pin
+  // ── Shot markers — numbered circles at exact shot positions ─────────────
+  // Group overlapping shots into clusters first
+  const clusterR = Math.max(12, W * 0.035);
+  const clusters = [];
+  validShots.forEach(shot => {
+    const px = shot.sx * W, py = shot.sy * H;
+    const existing = clusters.find(cl => Math.hypot(cl.px - px, cl.py - py) < clusterR);
+    if (existing) { existing.count++; existing.px = (existing.px*(existing.count-1)+px)/existing.count; existing.py = (existing.py*(existing.count-1)+py)/existing.count; }
+    else clusters.push({ px, py, count: 1 });
+  });
+
+  const markerR = Math.max(9, W * 0.025);
+  const fontSize = Math.max(8, Math.round(markerR * 1.1));
+  clusters.forEach(({ px, py, count }) => {
+    // Glow
+    ctx.save();
+    ctx.shadowColor = count > 1 ? 'rgba(249,115,22,0.8)' : 'rgba(255,255,255,0.5)';
+    ctx.shadowBlur = 8;
+    ctx.fillStyle = count > 1 ? '#f97316' : 'rgba(255,255,255,0.92)';
+    ctx.beginPath(); ctx.arc(px, py, markerR, 0, Math.PI*2); ctx.fill();
+    ctx.restore();
+    // Border
+    ctx.strokeStyle = 'rgba(0,0,0,0.55)'; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(px, py, markerR, 0, Math.PI*2); ctx.stroke();
+    // Number
+    ctx.fillStyle = count > 1 ? '#fff' : '#0d1a0f';
+    ctx.font = `bold ${fontSize}px 'Barlow Condensed',sans-serif`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(count, px, py + 0.5);
+  });
+
+  // ── Free pin (shot location modal) ──────────────────────────────────────
   if (opts.pin && opts.pin.sx != null) {
     const px = opts.pin.sx * W, py = opts.pin.sy * H;
     ctx.fillStyle = 'rgba(0,0,0,0.3)';
@@ -4083,6 +4186,8 @@ function hmapRender(canvas, shots, opts={}) {
       ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
     });
   }
+
+  const { hr, ox, oy } = hmapLayout(W, H);
   return { W, H, hr, ox, oy };
 }
 
@@ -5907,17 +6012,39 @@ function renderProfileHeatmap(name) {
     });
   });
 
-  // Hide section if no shot data exists for this player
+  // Hide section if no shot data
   section.style.display = shots.length === 0 ? 'none' : '';
-
   const dbg = document.getElementById('profile-heatmap-debug');
   if (dbg) dbg.textContent = shots.length > 0 ? `${shots.length} shot${shots.length !== 1 ? 's' : ''} mapped` : '';
-
   if (shots.length === 0) return;
 
-  // Determine width from the canvas container (it's 100% wide)
+  // Render the gradient heatmap
   const W = heatCanvas.parentElement?.clientWidth || heatCanvas.offsetWidth || (window.innerWidth - 100);
   hmapRender(heatCanvas, shots, { width: W });
+
+  // Compute shot geometry stats (right side = goal at sx=1, sy=0.5)
+  const H = Math.round(W * 0.52);
+  const geos = shots.map(g => hmapShotGeometry(g.sx, g.sy, W, H));
+  const avgDist = geos.reduce((s,v) => s + v.distNorm, 0) / geos.length;
+  const maxDist = Math.max(...geos.map(v => v.distNorm));
+  const maxAngle = Math.max(...geos.map(v => v.angleDeg));
+  const avgAngle = geos.reduce((s,v) => s + v.angleDeg, 0) / geos.length;
+
+  // Render stat pills beneath the canvas
+  const statsEl = document.getElementById('profile-heatmap-stats');
+  if (statsEl) {
+    statsEl.style.display = 'grid';
+    const pill = (label, val, sub) => `
+      <div style="background:var(--card2);border:1px solid var(--border);border-radius:8px;padding:8px 10px;text-align:center">
+        <div style="font-size:.6rem;letter-spacing:1.2px;text-transform:uppercase;color:var(--muted);margin-bottom:3px">${label}</div>
+        <div style="font-family:'Bebas Neue',sans-serif;font-size:1.35rem;color:var(--lime);line-height:1">${val}</div>
+        ${sub ? `<div style="font-size:.6rem;color:var(--muted);margin-top:2px">${sub}</div>` : ''}
+      </div>`;
+    statsEl.innerHTML =
+      pill('Avg Distance', Math.round(avgDist * 100) + '%', 'of pitch from goal') +
+      pill('Max Distance', Math.round(maxDist * 100) + '%', 'single shot') +
+      pill('Sharpest Angle', Math.round(maxAngle) + '°', `avg ${Math.round(avgAngle)}°`);
+  }
 }
 
 function renderProfile(name) {
@@ -6550,6 +6677,7 @@ function renderProfile(name) {
         <div style="width:80px;height:6px;border-radius:3px;background:linear-gradient(to right,#3b82f6,#22c55e,#eab308,#f97316,#dc2626)"></div>
         <span style="font-size:.7rem;color:var(--muted)">High</span>
       </div>
+      <div id="profile-heatmap-stats" style="display:none;margin-top:12px;display:grid;grid-template-columns:repeat(3,1fr);gap:8px"></div>
     </div>
 
     <!-- Match History -->
