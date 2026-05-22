@@ -4172,9 +4172,15 @@ function hmapRender(canvas, shots, opts={}) {
     ctx.restore();
   }
 
-  // ── Shot markers — numbered circles at exact shot positions ─────────────
-  // Group overlapping shots into clusters first
-  const clusterR = Math.max(12, W * 0.035);
+  // ── Shot markers — frosted-glass pill badges at exact shot positions ──────
+  // pillSize: 0.5=small … 1.5=large (default 1.0)
+  // showNumbers: true/false (default true)
+  // markerType: 'shot' (white) | 'assist' (amber)
+  const pillSize    = opts.pillSize    ?? 1.0;
+  const showNumbers = opts.showNumbers ?? true;
+  const markerType  = opts.markerType  ?? 'shot';
+
+  const clusterR = Math.max(10, W * 0.030) * pillSize;
   const clusters = [];
   validShots.forEach(shot => {
     const px = shot.sx * W, py = shot.sy * H;
@@ -4183,40 +4189,50 @@ function hmapRender(canvas, shots, opts={}) {
     else clusters.push({ px, py, count: 1 });
   });
 
-  const markerR = Math.max(9, W * 0.025);
-  const fontSize = Math.max(8, Math.round(markerR * 1.1));
+  const baseFS = Math.max(8, Math.round(W * 0.026)) * pillSize;
+  const accentColor = markerType === 'assist' ? 'rgba(251,191,36,' : 'rgba(255,255,255,';
+
   clusters.forEach(({ px, py, count }) => {
-    // Glow
-    ctx.save();
-    ctx.shadowColor = count > 1 ? 'rgba(249,115,22,0.8)' : 'rgba(255,255,255,0.5)';
-    ctx.shadowBlur = 8;
-    ctx.fillStyle = count > 1 ? '#f97316' : 'rgba(255,255,255,0.92)';
-    ctx.beginPath(); ctx.arc(px, py, markerR, 0, Math.PI*2); ctx.fill();
-    ctx.restore();
+    ctx.font = `500 ${baseFS}px 'Barlow Condensed',sans-serif`;
+    const label = showNumbers ? String(count) : '•';
+    const tw = ctx.measureText(label).width;
+    const pw = tw + baseFS * 0.9, ph = baseFS + baseFS * 0.55, rx = ph / 2;
+    const bx = px - pw / 2, by = py - ph / 2;
+    // Frosted fill
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(bx, by, pw, ph, rx); else ctx.rect(bx, by, pw, ph);
+    ctx.fillStyle = 'rgba(255,255,255,0.11)'; ctx.fill();
     // Border
-    ctx.strokeStyle = 'rgba(0,0,0,0.55)'; ctx.lineWidth = 1.5;
-    ctx.beginPath(); ctx.arc(px, py, markerR, 0, Math.PI*2); ctx.stroke();
-    // Number
-    ctx.fillStyle = count > 1 ? '#fff' : '#0d1a0f';
-    ctx.font = `bold ${fontSize}px 'Barlow Condensed',sans-serif`;
+    ctx.strokeStyle = accentColor + '0.28)'; ctx.lineWidth = 0.8; ctx.stroke();
+    // Text
+    ctx.fillStyle = accentColor + '0.82)';
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText(count, px, py + 0.5);
+    ctx.fillText(label, px, py + 0.5);
   });
 
-  // ── Free pin (shot location modal) ──────────────────────────────────────
+  // ── Active pin (shot location modal) ───────────────────────────────────
+  const activePinColor = opts.markerType === 'assist' ? '#fbbf24' : '#fbbf24';
   if (opts.pin && opts.pin.sx != null) {
     const px = opts.pin.sx * W, py = opts.pin.sy * H;
-    ctx.fillStyle = 'rgba(0,0,0,0.3)';
-    ctx.beginPath(); ctx.ellipse(px,py+10,7,3.5,0,0,Math.PI*2); ctx.fill();
-    ctx.fillStyle = '#fbbf24';
-    ctx.beginPath(); ctx.arc(px,py,9,0,Math.PI*2); ctx.fill();
+    const pinCol = opts.markerType === 'assist' ? '#fbbf24' : '#4ade80';
+    ctx.fillStyle = 'rgba(0,0,0,0.25)';
+    ctx.beginPath(); ctx.ellipse(px, py+9, 6, 3, 0, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = pinCol;
+    ctx.beginPath(); ctx.arc(px, py, 9, 0, Math.PI*2); ctx.fill();
     ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke();
     ctx.fillStyle = '#fff';
-    ctx.beginPath(); ctx.arc(px,py,3.5,0,Math.PI*2); ctx.fill();
-    ctx.strokeStyle = 'rgba(255,255,255,0.5)'; ctx.lineWidth = 1;
-    [[px-16,py,px-11,py],[px+11,py,px+16,py],[px,py-16,px,py-11],[px,py+11,px,py+16]].forEach(([x1,y1,x2,y2])=>{
+    ctx.beginPath(); ctx.arc(px, py, 3.5, 0, Math.PI*2); ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.4)'; ctx.lineWidth = 1;
+    [[px-15,py,px-10,py],[px+10,py,px+15,py],[px,py-15,px,py-10],[px,py+10,px,py+15]].forEach(([x1,y1,x2,y2])=>{
       ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
     });
+  }
+  // Reference assist pin shown while placing a shot (and vice versa)
+  if (opts.assistPin && opts.assistPin.sx != null) {
+    const px = opts.assistPin.sx * W, py = opts.assistPin.sy * H;
+    ctx.fillStyle = 'rgba(251,191,36,0.5)';
+    ctx.beginPath(); ctx.arc(px, py, 6, 0, Math.PI*2); ctx.fill();
+    ctx.strokeStyle = 'rgba(251,191,36,0.8)'; ctx.lineWidth = 1; ctx.stroke();
   }
 
   const { hr, ox, oy } = hmapLayout(W, H);
@@ -4247,7 +4263,10 @@ function openShotLocationModal(mid) {
   if (!allGoals.length) return;
 
   let current = 0;
-  let pins = allGoals.map(g => ({ sx: g.sx ?? null, sy: g.sy ?? null }));
+  // mode: 'shot' or 'assist' — which pin we're placing for this goal
+  let pinMode = 'shot';
+  let shotPins   = allGoals.map(g => ({ sx: g.sx ?? null, sy: g.sy ?? null }));
+  let assistPins = allGoals.map(g => ({ ax: g.ax ?? null, ay: g.ay ?? null }));
   let pinInfo = null;
 
   const existing = document.getElementById('shot-location-modal');
@@ -4259,62 +4278,104 @@ function openShotLocationModal(mid) {
 
   function buildHTML() {
     const g = allGoals[current];
-    const pin = pins[current];
-    const hasPin = pin.sx != null;
+    const sp = shotPins[current], ap = assistPins[current];
+    const hasShot   = sp.sx != null;
+    const hasAssist = ap.ax != null;
+    const hasAssister = !!g.assister;
+    const isAssistMode = pinMode === 'assist';
+    const hint = isAssistMode
+      ? (hasAssist ? '📍 Assist location set — click to move' : 'Click anywhere to place assist location')
+      : (hasShot   ? '📍 Shot location set — click to move'   : 'Click anywhere to place shot location');
+    const totalPinned = shotPins.filter(p=>p.sx!=null).length + assistPins.filter(p=>p.ax!=null).length;
+    const totalPossible = allGoals.length + allGoals.filter(g=>g.assister).length;
     return `
       <div style="background:var(--card);border-radius:14px;padding:20px;max-width:420px;width:100%;border:1px solid var(--border)">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
-          <div style="font-family:'Bebas Neue',sans-serif;font-size:1.2rem;letter-spacing:1px;color:var(--text)">Shot Locations</div>
+          <div style="font-family:'Bebas Neue',sans-serif;font-size:1.2rem;letter-spacing:1px;color:var(--text)">Pin Locations</div>
           <button onclick="document.getElementById('shot-location-modal').remove()" style="background:none;border:none;color:var(--muted);font-size:1.3rem;cursor:pointer;line-height:1">×</button>
         </div>
         <div style="font-size:.75rem;color:var(--muted);margin-bottom:12px">${match ? match.date : mid} · Goal ${current+1} of ${allGoals.length}</div>
         <div style="background:var(--card2);border-radius:8px;padding:8px 12px;margin-bottom:10px;font-size:.82rem">
           <span style="color:var(--lime);font-weight:600">${g.scorer}</span>
-          ${g.assister ? `<span style="color:var(--muted)"> ← </span><span style="color:var(--text2)">${g.assister}</span>` : ''}
+          ${hasAssister ? `<span style="color:var(--muted)"> ← </span><span style="color:var(--text2)">${g.assister}</span>` : ''}
           <span style="color:var(--muted);margin-left:6px">${g.half}${g.time ? ' · '+g.time : ''}</span>
+          <span style="margin-left:8px;font-size:.7rem">${hasShot ? '⚽📍' : '⚽—'} ${hasAssister ? (hasAssist ? '🅰️📍' : '🅰️—') : ''}</span>
+        </div>
+        <div style="display:flex;gap:6px;margin-bottom:10px">
+          <button onclick="setShotPinMode('shot')" style="flex:1;padding:6px;border-radius:7px;font-size:.8rem;cursor:pointer;font-family:'Barlow Condensed',sans-serif;border:1px solid var(--border);background:${!isAssistMode?'var(--green)':'var(--card2)'};color:${!isAssistMode?'#071009':'var(--muted)'};font-weight:600">⚽ Shot location</button>
+          <button onclick="setShotPinMode('assist')" ${!hasAssister?'disabled':''} style="flex:1;padding:6px;border-radius:7px;font-size:.8rem;cursor:pointer;font-family:'Barlow Condensed',sans-serif;border:1px solid var(--border);background:${isAssistMode?'var(--amber,#f59e0b)':'var(--card2)'};color:${isAssistMode?'#1a0a00':'var(--muted)'};font-weight:600;opacity:${hasAssister?1:.35}">🅰️ Assist location</button>
         </div>
         <canvas id="shot-modal-canvas" style="display:block;width:100%;border-radius:8px;cursor:crosshair;margin-bottom:4px"></canvas>
-        <div style="font-size:.72rem;color:var(--muted);margin-bottom:12px;text-align:center">
-          ${hasPin ? '📍 Location set — click to move' : 'Click anywhere to place shot location'}
-        </div>
+        <div style="font-size:.72rem;color:var(--muted);margin-bottom:12px;text-align:center">${hint}</div>
         <div style="display:flex;gap:8px;align-items:center">
           <button onclick="shotModalPrev()" ${current===0?'disabled':''} style="background:var(--card2);border:1px solid var(--border);color:var(--text);border-radius:7px;padding:7px 14px;font-family:'Barlow Condensed',sans-serif;font-size:.85rem;cursor:pointer;opacity:${current===0?0.4:1}">← Prev</button>
           <button onclick="shotModalSkip()" style="background:var(--card2);border:1px solid var(--border);color:var(--muted);border-radius:7px;padding:7px 14px;font-family:'Barlow Condensed',sans-serif;font-size:.85rem;cursor:pointer;flex:1">Skip</button>
           <button onclick="shotModalNext()" style="background:var(--green);border:none;color:#071009;border-radius:7px;padding:7px 14px;font-family:'Barlow Condensed',sans-serif;font-size:.85rem;cursor:pointer;flex:1;font-weight:600">${current===allGoals.length-1?'Done ✓':'Next →'}</button>
         </div>
-        <div style="margin-top:8px;text-align:center;font-size:.7rem;color:var(--muted)">${pins.filter(p=>p.sx!=null).length} of ${allGoals.length} goals have locations</div>
+        <div style="margin-top:8px;text-align:center;font-size:.7rem;color:var(--muted)">${totalPinned} of ${totalPossible} locations pinned</div>
       </div>`;
+  }
+
+  function renderCanvas() {
+    const canvas = document.getElementById('shot-modal-canvas');
+    if (!canvas) return;
+    const sp = shotPins[current], ap = assistPins[current];
+    const isAssistMode = pinMode === 'assist';
+    // Show existing pins as reference, highlight active one
+    const refShots = sp.sx != null ? [{ sx: sp.sx, sy: sp.sy }] : [];
+    const refAssists = ap.ax != null ? [{ sx: ap.ax, sy: ap.ay }] : [];
+    pinInfo = hmapRender(canvas, [], {
+      pin: isAssistMode
+        ? (ap.ax != null ? { sx: ap.ax, sy: ap.ay } : { sx: null })
+        : sp,
+      assistPin: isAssistMode ? null : (ap.ax != null ? { sx: ap.ax, sy: ap.ay } : null),
+    });
+    canvas.addEventListener('click', e => {
+      const r = canvas.getBoundingClientRect();
+      const nx = (e.clientX - r.left) / pinInfo.W;
+      const ny = (e.clientY - r.top) / pinInfo.H;
+      if (pinMode === 'assist') {
+        assistPins[current] = { ax: nx, ay: ny };
+        saveAssistPin();
+      } else {
+        shotPins[current] = { sx: nx, sy: ny };
+        saveShotPin();
+      }
+      renderCanvas();
+      // Update hint text
+      const hintEl = modal.querySelector('[style*="Click anywhere"], [style*="Location set"]');
+      if (hintEl) hintEl.textContent = pinMode === 'assist' ? '📍 Assist location set — click to move' : '📍 Shot location set — click to move';
+    }, { once: false });
   }
 
   function refresh() {
     modal.innerHTML = buildHTML();
-    const canvas = document.getElementById('shot-modal-canvas');
-    if (!canvas) return;
-    setTimeout(() => {
-      pinInfo = hmapRender(canvas, [], { pin: pins[current] });
-      canvas.addEventListener('click', e => {
-        const r = canvas.getBoundingClientRect();
-        pins[current] = { sx: (e.clientX-r.left)/pinInfo.W, sy: (e.clientY-r.top)/pinInfo.H };
-        savePin();
-        pinInfo = hmapRender(canvas, [], { pin: pins[current] });
-        modal.querySelector('[style*="Click anywhere"]') && (modal.querySelector('[style*="click to move"], [style*="Click anywhere"]').textContent = '📍 Location set — click to move');
-      });
-    }, 50);
+    setTimeout(renderCanvas, 50);
   }
 
-  function savePin() {
+  function saveShotPin() {
     const g = allGoals[current];
-    const pin = pins[current];
-    if (goalCombos[mid] && goalCombos[mid][g.halfKey] && goalCombos[mid][g.halfKey][g.idx] !== undefined) {
+    const pin = shotPins[current];
+    if (goalCombos[mid]?.[g.halfKey]?.[g.idx] !== undefined) {
       goalCombos[mid][g.halfKey][g.idx].sx = pin.sx;
       goalCombos[mid][g.halfKey][g.idx].sy = pin.sy;
       saveGoalCombos();
     }
   }
+  function saveAssistPin() {
+    const g = allGoals[current];
+    const pin = assistPins[current];
+    if (goalCombos[mid]?.[g.halfKey]?.[g.idx] !== undefined) {
+      goalCombos[mid][g.halfKey][g.idx].ax = pin.ax;
+      goalCombos[mid][g.halfKey][g.idx].ay = pin.ay;
+      saveGoalCombos();
+    }
+  }
 
-  window.shotModalPrev = () => { if (current > 0) { current--; refresh(); } };
+  window.setShotPinMode = (m) => { pinMode = m; refresh(); };
+  window.shotModalPrev = () => { if (current > 0) { current--; pinMode = 'shot'; refresh(); } };
   window.shotModalNext = () => {
-    if (current < allGoals.length-1) { current++; refresh(); }
+    if (current < allGoals.length-1) { current++; pinMode = 'shot'; refresh(); }
     else { document.getElementById('shot-location-modal').remove(); }
   };
   window.shotModalSkip = () => { shotModalNext(); };
@@ -4717,7 +4778,7 @@ function previewCombos() {
 }
 
 function exportCombosCsv() {
-  const lines = ['match_id,half,time,scorer,assister,is_og,is_goal_highlight,is_assist_highlight,shot_x,shot_y'];
+  const lines = ['match_id,half,time,scorer,assister,is_og,is_goal_highlight,is_assist_highlight,shot_x,shot_y,assist_x,assist_y'];
   const sorted = Object.entries(goalCombos)
     .map(([mid, data]) => ({ mid, data, match: matchList.find(m => m.id === mid) }))
     .filter(e => e.match)
@@ -4736,6 +4797,8 @@ function exportCombosCsv() {
           p.isAssistHighlight?'*':'',
           p.sx != null ? p.sx.toFixed(4) : '',
           p.sy != null ? p.sy.toFixed(4) : '',
+          p.ax != null ? p.ax.toFixed(4) : '',
+          p.ay != null ? p.ay.toFixed(4) : '',
         ].join(','));
       });
     });
@@ -6031,50 +6094,78 @@ function renderPlayers() {
 // =====================================================================
 // RENDER PLAYER PROFILE
 // =====================================================================
-function renderProfileHeatmap(name) {
+function renderProfileHeatmap(name, hmapType) {
+  hmapType = hmapType || 'shot';
   const section = document.getElementById('profile-heatmap-section');
   const heatCanvas = document.getElementById('profile-heatmap');
   if (!section || !heatCanvas) return;
 
-  // Collect shots for this player
-  const shots = [];
+  // Collect shots and assists separately
+  const shotShots = [], assistShots = [];
   Object.values(goalCombos).forEach(data => {
     [...(data.h1||[]), ...(data.h2||[])].forEach(g => {
-      if (g.scorer === name && !g.isOG && g.sx != null && g.sy != null) shots.push(g);
+      if (!g.isOG) {
+        if (g.scorer === name && g.sx != null && g.sy != null) shotShots.push({ sx: g.sx, sy: g.sy });
+        if (g.assister === name && g.ax != null && g.ay != null) assistShots.push({ sx: g.ax, sy: g.ay });
+      }
     });
   });
 
-  // Hide section if no shot data
-  section.style.display = shots.length === 0 ? 'none' : '';
+  const hasShots   = shotShots.length > 0;
+  const hasAssists = assistShots.length > 0;
+  const hasAny = hasShots || hasAssists;
+
+  section.style.display = hasAny ? '' : 'none';
+  if (!hasAny) return;
+
+  // Update toggle button states
+  const shotBtn   = document.getElementById('hmap-tab-shot');
+  const assistBtn = document.getElementById('hmap-tab-assist');
+  if (shotBtn)   { shotBtn.style.opacity = hasShots ? '1' : '0.35'; shotBtn.disabled = !hasShots; }
+  if (assistBtn) { assistBtn.style.opacity = hasAssists ? '1' : '0.35'; assistBtn.disabled = !hasAssists; }
+
+  const shots = hmapType === 'assist' ? assistShots : shotShots;
   const dbg = document.getElementById('profile-heatmap-debug');
-  if (dbg) dbg.textContent = shots.length > 0 ? `${shots.length} shot${shots.length !== 1 ? 's' : ''} mapped` : '';
-  if (shots.length === 0) return;
+  if (dbg) dbg.textContent = shots.length > 0 ? `${shots.length} ${hmapType === 'assist' ? 'assist' : 'shot'} location${shots.length !== 1 ? 's' : ''} mapped` : `No ${hmapType} locations mapped yet`;
 
-  // Render the gradient heatmap
+  if (shots.length === 0) {
+    // Still draw the blank court so the section doesn't collapse weirdly
+    const W = heatCanvas.parentElement?.clientWidth || heatCanvas.offsetWidth || (window.innerWidth - 100);
+    hmapRender(heatCanvas, [], { width: W });
+    const statsEl = document.getElementById('profile-heatmap-stats');
+    if (statsEl) statsEl.style.display = 'none';
+    return;
+  }
+
   const W = heatCanvas.parentElement?.clientWidth || heatCanvas.offsetWidth || (window.innerWidth - 100);
-  hmapRender(heatCanvas, shots, { width: W });
+  hmapRender(heatCanvas, shots, {
+    width: W,
+    markerType: hmapType === 'assist' ? 'assist' : 'shot',
+    pillSize: 0.85,
+    showNumbers: true,
+  });
 
-  // Compute shot geometry stats (right side = goal at sx=1, sy=0.5)
+  // Geometry stats
   const H = Math.round(W * 0.52);
   const geos = shots.map(g => hmapShotGeometry(g.sx, g.sy, W, H));
-  const avgDist = geos.reduce((s,v) => s + v.distNorm, 0) / geos.length;
-  const maxDist = Math.max(...geos.map(v => v.distNorm));
+  const avgDist  = geos.reduce((s,v) => s + v.distNorm, 0) / geos.length;
+  const maxDist  = Math.max(...geos.map(v => v.distNorm));
   const maxAngle = Math.max(...geos.map(v => v.angleDeg));
   const avgAngle = geos.reduce((s,v) => s + v.angleDeg, 0) / geos.length;
 
-  // Render stat pills beneath the canvas
   const statsEl = document.getElementById('profile-heatmap-stats');
   if (statsEl) {
     statsEl.style.display = 'grid';
+    const accentCol = hmapType === 'assist' ? 'var(--amber,#f59e0b)' : 'var(--lime)';
     const pill = (label, val, sub) => `
       <div style="background:var(--card2);border:1px solid var(--border);border-radius:8px;padding:8px 10px;text-align:center">
         <div style="font-size:.6rem;letter-spacing:1.2px;text-transform:uppercase;color:var(--muted);margin-bottom:3px">${label}</div>
-        <div style="font-family:'Bebas Neue',sans-serif;font-size:1.35rem;color:var(--lime);line-height:1">${val}</div>
+        <div style="font-family:'Bebas Neue',sans-serif;font-size:1.35rem;color:${accentCol};line-height:1">${val}</div>
         ${sub ? `<div style="font-size:.6rem;color:var(--muted);margin-top:2px">${sub}</div>` : ''}
       </div>`;
     statsEl.innerHTML =
       pill('Avg Distance', Math.round(avgDist * 100) + '%', 'of pitch from goal') +
-      pill('Max Distance', Math.round(maxDist * 100) + '%', 'single shot') +
+      pill('Max Distance', Math.round(maxDist * 100) + '%', 'single ' + hmapType) +
       pill('Sharpest Angle', Math.round(maxAngle) + '°', `avg ${Math.round(avgAngle)}°`);
   }
 }
@@ -6701,7 +6792,13 @@ function renderProfile(name) {
 
     <!-- Shot Heatmap -->
     <div id="profile-heatmap-section" style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:18px;margin-bottom:14px">
-      <div style="font-family:'Barlow Condensed',sans-serif;font-size:.7rem;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-bottom:12px" id="profile-heatmap-title">📍 Shot Locations</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+        <div style="font-family:'Barlow Condensed',sans-serif;font-size:.7rem;letter-spacing:2px;text-transform:uppercase;color:var(--muted)" id="profile-heatmap-title">📍 Locations</div>
+        <div style="display:flex;gap:6px">
+          <button id="hmap-tab-shot" onclick="window._hmapType='shot';renderProfileHeatmap(currentProfileName,'shot')" style="font-family:'Barlow Condensed',sans-serif;font-size:.72rem;letter-spacing:.5px;padding:3px 10px;border-radius:5px;border:1px solid var(--border);background:var(--card2);color:var(--lime);cursor:pointer">⚽ Shots</button>
+          <button id="hmap-tab-assist" onclick="window._hmapType='assist';renderProfileHeatmap(currentProfileName,'assist')" style="font-family:'Barlow Condensed',sans-serif;font-size:.72rem;letter-spacing:.5px;padding:3px 10px;border-radius:5px;border:1px solid var(--border);background:var(--card2);color:var(--amber,#f59e0b);cursor:pointer">🅰️ Assists</button>
+        </div>
+      </div>
       <div id="profile-heatmap-debug" style="font-size:.65rem;color:var(--amber);font-family:monospace;margin-bottom:8px"></div>
       <canvas id="profile-heatmap" width="400" height="208" style="display:block;width:100%;border-radius:8px;background:#1a7a32"></canvas>
       <div style="display:flex;align-items:center;gap:8px;margin-top:8px">
@@ -6827,7 +6924,7 @@ function renderProfile(name) {
 
   // Draw charts after DOM paint
   setTimeout(() => {
-    renderProfileHeatmap(name);
+    renderProfileHeatmap(name, window._hmapType||'shot');
     // Form chart — build performance index per match
     const formMatches = [...s.matches]
       .sort((a, b) => (a.match_date||'').localeCompare(b.match_date||''))
@@ -6878,6 +6975,7 @@ function saveCustomStat(player, key, val) {
   }
 
   currentProfileName = name;
+  window._hmapType = 'shot';
 }
 
 // =====================================================================
@@ -11003,11 +11101,14 @@ document.addEventListener('DOMContentLoaded', () => {
         const isAssistHL = rawAssistHL.includes('*') || rawAssistHL === '1';
         const sx = cols[idx.shot_x] != null && cols[idx.shot_x].trim() !== '' ? parseFloat(cols[idx.shot_x]) : null;
         const sy = cols[idx.shot_y] != null && cols[idx.shot_y].trim() !== '' ? parseFloat(cols[idx.shot_y]) : null;
+        const ax = cols[idx.assist_x] != null && cols[idx.assist_x]?.trim() !== '' ? parseFloat(cols[idx.assist_x]) : null;
+        const ay = cols[idx.assist_y] != null && cols[idx.assist_y]?.trim() !== '' ? parseFloat(cols[idx.assist_y]) : null;
         if (!mid || !scorer) return;
         if (!loaded[mid]) loaded[mid] = { h1: [], h2: [] };
         const key = half === '2H' ? 'h2' : 'h1';
         loaded[mid][key].push({ scorer, assister, time, isOG, isGoalHighlight: isGoalHL, isAssistHighlight: isAssistHL,
-          ...(sx != null && sy != null ? { sx, sy } : {}) });
+          ...(sx != null && sy != null ? { sx, sy } : {}),
+          ...(ax != null && ay != null ? { ax, ay } : {}) });
       });
       // Merge with localStorage — preserve sx/sy shot positions from localStorage
       // since the GitHub CSV may not have them yet
@@ -11023,6 +11124,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 const lsG = (ls[half]||[])[i];
                 if (lsG && lsG.sx != null && lsG.sy != null) {
                   g.sx = lsG.sx; g.sy = lsG.sy;
+                }
+                if (lsG && lsG.ax != null && lsG.ay != null) {
+                  g.ax = lsG.ax; g.ay = lsG.ay;
                 }
               });
             });
