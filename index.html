@@ -6129,25 +6129,36 @@ function renderProfileHeatmap(name, hmapType) {
   if (shotBtn)   { shotBtn.style.opacity = hasShots ? '1' : '0.35'; shotBtn.disabled = !hasShots; }
   if (assistBtn) { assistBtn.style.opacity = hasAssists ? '1' : '0.35'; assistBtn.disabled = !hasAssists; }
 
+  // Sync controls to current prefs
+  const sizeSlider = section.querySelector('input[type=range]');
+  if (sizeSlider) sizeSlider.value = Math.round((window._hmapPillSize ?? 0.85) * 10);
+  const numsBtn = document.getElementById('hmap-nums-btn');
+  if (numsBtn) numsBtn.style.opacity = (window._hmapShowNumbers ?? true) ? '1' : '0.4';
+
   const shots = hmapType === 'assist' ? assistShots : shotShots;
   const dbg = document.getElementById('profile-heatmap-debug');
   if (dbg) dbg.textContent = shots.length > 0 ? `${shots.length} ${hmapType === 'assist' ? 'assist' : 'shot'} location${shots.length !== 1 ? 's' : ''} mapped` : `No ${hmapType} locations mapped yet`;
 
+  // Always read width from the section card — force section visible first so clientWidth resolves
+  section.style.display = '';
+  const W = section.clientWidth - 36 || heatCanvas.getBoundingClientRect().width || 400;
+
+  // Read persisted display prefs
+  const pillSize    = window._hmapPillSize    ?? 0.85;
+  const showNumbers = window._hmapShowNumbers ?? true;
+
   if (shots.length === 0) {
-    // Still draw the blank court so the section doesn't collapse weirdly
-    const W = heatCanvas.parentElement?.clientWidth || heatCanvas.offsetWidth || (window.innerWidth - 100);
     hmapRender(heatCanvas, [], { width: W });
     const statsEl = document.getElementById('profile-heatmap-stats');
     if (statsEl) statsEl.style.display = 'none';
     return;
   }
 
-  const W = heatCanvas.parentElement?.clientWidth || heatCanvas.offsetWidth || (window.innerWidth - 100);
   hmapRender(heatCanvas, shots, {
     width: W,
     markerType: hmapType === 'assist' ? 'assist' : 'shot',
-    pillSize: 0.85,
-    showNumbers: true,
+    pillSize,
+    showNumbers,
   });
 
   // Geometry stats
@@ -6797,9 +6808,21 @@ function renderProfile(name) {
 
     <!-- Shot Heatmap -->
     <div id="profile-heatmap-section" style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:18px;margin-bottom:14px">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px">
         <div style="font-family:'Barlow Condensed',sans-serif;font-size:.7rem;letter-spacing:2px;text-transform:uppercase;color:var(--muted)" id="profile-heatmap-title">📍 Locations</div>
-        <div style="display:flex;gap:6px">
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <!-- Pill size -->
+          <div style="display:flex;align-items:center;gap:5px">
+            <span style="font-size:.6rem;color:var(--muted);letter-spacing:.5px;text-transform:uppercase">Size</span>
+            <input type="range" min="3" max="18" step="1" value="9"
+              style="width:52px;accent-color:var(--lime);cursor:pointer;vertical-align:middle"
+              oninput="window._hmapPillSize=this.value/10;renderProfileHeatmap(currentProfileName,window._hmapType||'shot')">
+          </div>
+          <!-- Numbers toggle -->
+          <button id="hmap-nums-btn" onclick="window._hmapShowNumbers=!(window._hmapShowNumbers??true);this.style.opacity=(window._hmapShowNumbers??true)?'1':'0.4';renderProfileHeatmap(currentProfileName,window._hmapType||'shot')"
+            style="font-family:'Barlow Condensed',sans-serif;font-size:.7rem;padding:3px 8px;border-radius:5px;border:1px solid var(--border);background:var(--card2);color:var(--muted);cursor:pointer;letter-spacing:.3px"
+            title="Toggle numbers">123</button>
+          <!-- Shot / Assist tabs -->
           <button id="hmap-tab-shot" onclick="window._hmapType='shot';renderProfileHeatmap(currentProfileName,'shot')" style="font-family:'Barlow Condensed',sans-serif;font-size:.72rem;letter-spacing:.5px;padding:3px 10px;border-radius:5px;border:1px solid var(--border);background:var(--card2);color:var(--lime);cursor:pointer">⚽ Shots</button>
           <button id="hmap-tab-assist" onclick="window._hmapType='assist';renderProfileHeatmap(currentProfileName,'assist')" style="font-family:'Barlow Condensed',sans-serif;font-size:.72rem;letter-spacing:.5px;padding:3px 10px;border-radius:5px;border:1px solid var(--border);background:var(--card2);color:var(--amber,#f59e0b);cursor:pointer">🅰️ Assists</button>
         </div>
