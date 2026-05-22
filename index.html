@@ -4772,7 +4772,7 @@ function renderAllCombos() {
               <span style="color:var(--text);font-weight:600;margin-left:3px">${p.scorer}</span>
               ${p.assister ? `<span style="color:var(--muted)"> ← </span><span style="color:var(--text2)">${p.assister}</span>` : ''}
             </span>
-            ${(hasShotPin || hasAssistPin) ? `<canvas id="${canvasId}" width="72" height="37" style="display:block;border-radius:4px;cursor:pointer" title="Shot/assist location" onclick="openShotLocationModal('${mid}')"></canvas>` : ''}
+            ${(hasShotPin || hasAssistPin) ? `<canvas id="${canvasId}" width="72" height="37" style="display:block;border-radius:4px;cursor:pointer" data-tip="${hasShotPin && hasAssistPin ? 'Shot location (heat) + assist origin (amber dot) — click to edit' : hasShotPin ? 'Shot location — click to edit' : 'Assist origin — click to edit'}" onclick="openShotLocationModal('${mid}')"></canvas>` : ''}
           </div>`;
         }).join('')}
       </div>
@@ -6250,8 +6250,8 @@ function renderProfileHeatmap(name, hmapType) {
   if (statsEl) {
     statsEl.style.display = 'grid';
     const accentCol = hmapType === 'assist' ? 'var(--amber,#f59e0b)' : 'var(--lime)';
-    const pill = (label, val, sub) => `
-      <div style="background:var(--card2);border:1px solid var(--border);border-radius:8px;padding:8px 10px;text-align:center">
+    const pill = (label, val, sub, tip) => `
+      <div style="background:var(--card2);border:1px solid var(--border);border-radius:8px;padding:8px 10px;text-align:center;cursor:default" ${tip ? `data-tip="${tip}"` : ''}>
         <div style="font-size:.6rem;letter-spacing:1.2px;text-transform:uppercase;color:var(--muted);margin-bottom:3px">${label}</div>
         <div style="font-family:'Bebas Neue',sans-serif;font-size:1.35rem;color:${accentCol};line-height:1">${val}</div>
         ${sub ? `<div style="font-size:.6rem;color:var(--muted);margin-top:2px">${sub}</div>` : ''}
@@ -6273,14 +6273,20 @@ function renderProfileHeatmap(name, hmapType) {
 
     if (hmapType === 'assist' && passLens.length > 0) {
       statsEl.innerHTML =
-        pill('Avg Distance', Math.round(avgDist * 100) + '%', 'from goal') +
-        pill('Sharpest Angle', Math.round(maxAngle) + '°', `avg ${Math.round(avgAngle)}°`) +
-        pill('Avg Pass Length', avgPL + '%', `max ${maxPL}%`);
+        pill('Avg Distance', Math.round(avgDist * 100) + '%', 'from goal',
+          'Average distance of this player\'s assist origins from the scoring goal — higher means they create from deeper') +
+        pill('Sharpest Angle', Math.round(maxAngle) + '°', `avg ${Math.round(avgAngle)}°`,
+          'The most extreme angle from the goal centreline this player has assisted from — 0° is straight on, 90° is side-on') +
+        pill('Avg Pass Length', avgPL + '%', `max ${maxPL}%`,
+          'Average distance between where assists originated and where the shot was taken — longer = more expansive creation');
     } else {
       statsEl.innerHTML =
-        pill('Avg Distance', Math.round(avgDist * 100) + '%', 'of pitch from goal') +
-        pill('Max Distance', Math.round(maxDist * 100) + '%', 'single shot') +
-        pill('Sharpest Angle', Math.round(maxAngle) + '°', `avg ${Math.round(avgAngle)}°`);
+        pill('Avg Distance', Math.round(avgDist * 100) + '%', 'of pitch from goal',
+          'Average distance of shots from the scoring goal — higher means this player shoots from further out') +
+        pill('Max Distance', Math.round(maxDist * 100) + '%', 'single shot',
+          'Furthest single shot from goal this player has scored from — their longest range goal') +
+        pill('Sharpest Angle', Math.round(maxAngle) + '°', `avg ${Math.round(avgAngle)}°`,
+          'Most acute angle from the goal centreline this player has scored from — 0° is straight on, 90° is parallel with the goal line');
     }
   }
 }
@@ -6660,15 +6666,15 @@ function renderProfile(name) {
             <div style="font-size:.82rem;font-weight:600">${relationship}</div>
             <div style="font-size:.63rem;color:var(--muted)">${label}</div>
             ${zoneLabel || avgPL ? `<div style="display:flex;gap:6px;margin-top:3px;flex-wrap:wrap">
-              ${zoneLabel ? `<span style="font-size:.6rem;background:rgba(251,191,36,.1);border:1px solid rgba(251,191,36,.25);border-radius:4px;padding:1px 5px;color:var(--amber,#f59e0b)">🅰️ ${zoneLabel}</span>` : ''}
-              ${avgPL ? `<span style="font-size:.6rem;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:4px;padding:1px 5px;color:var(--muted)">↗ ${avgPL}% pass</span>` : ''}
+              ${zoneLabel ? `<span style="font-size:.6rem;background:rgba(251,191,36,.1);border:1px solid rgba(251,191,36,.25);border-radius:4px;padding:1px 5px;color:var(--amber,#f59e0b)" data-tip="Where ${assister.split(' ')[0]} typically creates from when setting up ${scorer.split(' ')[0]} — based on mapped assist locations">🅰️ ${zoneLabel}</span>` : ''}
+              ${avgPL ? `<span style="font-size:.6rem;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:4px;padding:1px 5px;color:var(--muted)" data-tip="Average pass length for this combination — distance between assist origin and shot location as a % of the court diagonal">↗ ${avgPL}% pass</span>` : ''}
             </div>` : ''}
           </div>
           <div style="flex-shrink:0;text-align:right">
             ${pairGeos.length > 0 ? (() => {
               window._pendingCourts = window._pendingCourts || {};
               window._pendingCourts[canvasId] = { shots: pairGeos, assistDot: null };
-              return `<canvas id="${canvasId}" width="60" height="31" style="display:block;border-radius:4px;margin-bottom:2px"></canvas>`;
+              return `<canvas id="${canvasId}" width="60" height="31" style="display:block;border-radius:4px;margin-bottom:2px" data-tip="Assist origin locations for this specific pairing — where ${assister.split(' ')[0]} creates from when setting up ${scorer.split(' ')[0]}"></canvas>`;
             })() : ''}
             <div style="font-family:'Bebas Neue',sans-serif;font-size:1.4rem;color:${col};line-height:1">${p.goals}</div>
           </div>
@@ -6943,11 +6949,37 @@ function renderProfile(name) {
         style="width:100%;background:var(--card2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:'Barlow',sans-serif;font-size:.82rem;padding:10px 12px;resize:vertical;min-height:60px;outline:none;box-sizing:border-box;line-height:1.5">${(playerNotes[name]||'').replace(/</g,'&lt;')}</textarea>
     </div>
 
-    ${adminMode && s.synergyPairs >= 3 ? `
-    <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:18px;margin-bottom:14px">
-      <div style="font-family:'Barlow Condensed',sans-serif;font-size:.7rem;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-bottom:10px">🤝 Chemistry</div>
-      <div id="synergy-pairs-${name.replace(/\s/g,'_')}"></div>
-    </div>` : ''}
+    ${(() => {
+      const chem = (window._filteredChemistry || []).filter(c =>
+        (c.p1 === name || c.p2 === name) && c.games >= 2
+      ).sort((a,b) => b.games - a.games || Math.abs(b.delta) - Math.abs(a.delta));
+      if (!chem.length) return '';
+      const rows = chem.slice(0, 8).map(c => {
+        const partner = c.p1 === name ? c.p2 : c.p1;
+        const d = c.delta;
+        const col = d >= 8 ? 'var(--green)' : d >= 2 ? 'var(--lime)' : d <= -8 ? 'var(--red)' : d <= -2 ? 'var(--amber,#f59e0b)' : 'var(--muted)';
+        const bar = Math.min(Math.abs(d), 30) / 30 * 100;
+        const sign = d > 0 ? '+' : '';
+        return `<div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid rgba(255,255,255,.04);cursor:pointer" onclick="nav('profile','${partner}')" data-tip="${c.games} games together · ${c.winRate}% win rate · baseline ${c.baseline}%">
+          <div style="width:28px;height:28px;border-radius:6px;background:var(--card2);display:flex;align-items:center;justify-content:center;font-family:'Bebas Neue',sans-serif;font-size:.72rem;color:var(--muted);flex-shrink:0">${partner.slice(0,2).toUpperCase()}</div>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:.82rem;font-weight:600;color:var(--text)">${partner}</div>
+            <div style="margin-top:3px;height:3px;background:var(--card2);border-radius:2px;overflow:hidden">
+              <div style="height:100%;width:${bar}%;background:${col};border-radius:2px;${d < 0 ? 'margin-left:auto' : ''}"></div>
+            </div>
+          </div>
+          <div style="text-align:right;flex-shrink:0">
+            <div style="font-family:'Bebas Neue',sans-serif;font-size:1.1rem;color:${col};line-height:1">${sign}${d}%</div>
+            <div style="font-size:.6rem;color:var(--muted)">${c.games}g</div>
+          </div>
+        </div>`;
+      }).join('');
+      return `<div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:18px;margin-bottom:14px">
+        <div style="font-family:'Barlow Condensed',sans-serif;font-size:.7rem;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-bottom:4px">🤝 Chemistry</div>
+        <div style="font-size:.65rem;color:var(--muted);margin-bottom:12px">Win rate impact vs baseline when playing alongside each teammate</div>
+        ${rows}
+      </div>`;
+    })()}
 
     <!-- Shot Heatmap -->
     <div id="profile-heatmap-section" style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:18px;margin-bottom:14px">
@@ -6955,7 +6987,7 @@ function renderProfile(name) {
         <div style="font-family:'Barlow Condensed',sans-serif;font-size:.7rem;letter-spacing:2px;text-transform:uppercase;color:var(--muted)" id="profile-heatmap-title">📍 Locations</div>
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
           <!-- Pill size -->
-          <div style="display:flex;align-items:center;gap:5px">
+          <div style="display:flex;align-items:center;gap:5px" data-tip="Adjust the size of the number badges on the heatmap">
             <span style="font-size:.6rem;color:var(--muted);letter-spacing:.5px;text-transform:uppercase">Size</span>
             <input type="range" min="3" max="18" step="1" value="9"
               style="width:52px;accent-color:var(--lime);cursor:pointer;vertical-align:middle"
@@ -6964,10 +6996,10 @@ function renderProfile(name) {
           <!-- Numbers toggle -->
           <button id="hmap-nums-btn" onclick="window._hmapShowNumbers=!(window._hmapShowNumbers??true);this.style.opacity=(window._hmapShowNumbers??true)?'1':'0.4';renderProfileHeatmap(currentProfileName,window._hmapType||'shot')"
             style="font-family:'Barlow Condensed',sans-serif;font-size:.7rem;padding:3px 8px;border-radius:5px;border:1px solid var(--border);background:var(--card2);color:var(--muted);cursor:pointer;letter-spacing:.3px"
-            title="Toggle numbers">123</button>
+            data-tip="Toggle shot count numbers on the heatmap badges">123</button>
           <!-- Shot / Assist tabs -->
-          <button id="hmap-tab-shot" onclick="window._hmapType='shot';renderProfileHeatmap(currentProfileName,'shot')" style="font-family:'Barlow Condensed',sans-serif;font-size:.72rem;letter-spacing:.5px;padding:3px 10px;border-radius:5px;border:1px solid var(--border);background:var(--card2);color:var(--lime);cursor:pointer">⚽ Shots</button>
-          <button id="hmap-tab-assist" onclick="window._hmapType='assist';renderProfileHeatmap(currentProfileName,'assist')" style="font-family:'Barlow Condensed',sans-serif;font-size:.72rem;letter-spacing:.5px;padding:3px 10px;border-radius:5px;border:1px solid var(--border);background:var(--card2);color:var(--amber,#f59e0b);cursor:pointer">🅰️ Assists</button>
+          <button id="hmap-tab-shot" onclick="window._hmapType='shot';renderProfileHeatmap(currentProfileName,'shot')" style="font-family:'Barlow Condensed',sans-serif;font-size:.72rem;letter-spacing:.5px;padding:3px 10px;border-radius:5px;border:1px solid var(--border);background:var(--card2);color:var(--lime);cursor:pointer" data-tip="Show where this player scored from — heat intensity = how often shots came from that zone">⚽ Shots</button>
+          <button id="hmap-tab-assist" onclick="window._hmapType='assist';renderProfileHeatmap(currentProfileName,'assist')" style="font-family:'Barlow Condensed',sans-serif;font-size:.72rem;letter-spacing:.5px;padding:3px 10px;border-radius:5px;border:1px solid var(--border);background:var(--card2);color:var(--amber,#f59e0b);cursor:pointer" data-tip="Show where this player created from — heat intensity = how often assists came from that zone">🅰️ Assists</button>
         </div>
       </div>
       <div id="profile-heatmap-debug" style="font-size:.65rem;color:var(--amber);font-family:monospace;margin-bottom:8px"></div>
