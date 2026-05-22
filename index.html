@@ -2650,6 +2650,10 @@ const TAG_DEFS = {
   'Long Ranger':       { cls:'tag-enforcer',  tip:'Scores from further out than anyone — maps show shots taken from deep, yet they still find the net with regularity' },
   'Sharp Angle':       { cls:'tag-striker',   tip:'Scored from the sharpest angles of anyone in the group — finds the net from positions where others don\'t even attempt a shot' },
   'Dead Eye':          { cls:'tag-striker',   tip:'Converts from long range at a higher rate than anyone — combines distance with clinical finishing for low-percentage goals' },
+  'Wide Wizard':       { cls:'tag-wizard',    tip:'Creates from wider positions than any other assister — delivers from the flanks where others can\'t' },
+  'Deep Creator':      { cls:'tag-engine',    tip:'Assists from deeper than anyone — builds attacks from further out, covering more of the pitch when setting up goals' },
+  'Through Ball King': { cls:'tag-wizard',    tip:'Plays the longest average assist pass of anyone — the master of splitting defences with through balls and switches' },
+  'Box Architect':     { cls:'tag-striker',   tip:'Creates from closest to goal — cutbacks, layoffs and dangerous passes from inside the box to set up teammates' },
 
   // ── Timestamp ─────────────────────────────────────────────────────────────
   'Icebreaker':        { cls:'tag-enforcer',  tip:'Scored the opening goal of a match in more games than anyone — breaks deadlocks and shifts momentum before others get going' },
@@ -2815,26 +2819,53 @@ function buildTagAuction() {
     const stdDev=Math.sqrt(variance);
 
     // Shot geometry stats (right side = scoring goal at sx=1, sy=0.5)
-    // Use a representative canvas size for distance normalisation
     const _gW = 600, _gH = Math.round(600 * 0.52);
-    const myShots = [];
+    const myShots = [], myAssistGeos = [], myPassLengths = [];
     playerCombos.forEach(([,data]) => {
       [...(data.h1||[]),...(data.h2||[])].forEach(g => {
-        if (g.scorer === ps.player && !g.isOG && g.sx != null && g.sy != null) {
-          myShots.push(hmapShotGeometry(g.sx, g.sy, _gW, _gH));
+        if (g.isOG) return;
+        if (g.scorer === ps.player && g.sx != null && g.sy != null) {
+          const geo = hmapShotGeometry(g.sx, g.sy, _gW, _gH);
+          myShots.push(geo);
+          // Pass length: distance from assist origin to shot (only when both pins exist)
+          if (g.ax != null && g.ay != null) {
+            const dx = (g.sx - g.ax) * _gW, dy = (g.sy - g.ay) * _gH;
+            myPassLengths.push(Math.hypot(dx, dy) / Math.hypot(_gW, _gH));
+          }
+        }
+        if (g.assister === ps.player && g.ax != null && g.ay != null) {
+          myAssistGeos.push(hmapShotGeometry(g.ax, g.ay, _gW, _gH));
+          // Also add pass length from assister's side
+          if (g.sx != null && g.sy != null) {
+            const dx = (g.sx - g.ax) * _gW, dy = (g.sy - g.ay) * _gH;
+            const pl = Math.hypot(dx, dy) / Math.hypot(_gW, _gH);
+            if (!myPassLengths.find(v => Math.abs(v - pl) < 0.001)) myPassLengths.push(pl);
+          }
         }
       });
     });
     const shotCount = myShots.length;
     const avgShotDist = shotCount > 0 ? myShots.reduce((s,v) => s + v.distNorm, 0) / shotCount : 0;
     const maxShotDist = shotCount > 0 ? Math.max(...myShots.map(v => v.distNorm)) : 0;
-    // Sharpest angle = highest angleDeg (most acute from the side)
     const maxShotAngle = shotCount > 0 ? Math.max(...myShots.map(v => v.angleDeg)) : 0;
     const avgShotAngle = shotCount > 0 ? myShots.reduce((s,v) => s + v.angleDeg, 0) / shotCount : 0;
-    // "Long ranger" score: avg distance from goal, weighted by shot count
     const longRangerScore = shotCount >= 2 ? avgShotDist * shotCount : 0;
-    // "Angle merchant" score: avg angle, weighted by shot count
     const angleMerchantScore = shotCount >= 2 ? avgShotAngle * shotCount : 0;
+    // Assist geometry
+    const assistGeoCount = myAssistGeos.length;
+    const avgAssistDist = assistGeoCount > 0 ? myAssistGeos.reduce((s,v) => s + v.distNorm, 0) / assistGeoCount : 0;
+    const avgAssistAngle = assistGeoCount > 0 ? myAssistGeos.reduce((s,v) => s + v.angleDeg, 0) / assistGeoCount : 0;
+    const maxAssistAngle = assistGeoCount > 0 ? Math.max(...myAssistGeos.map(v => v.angleDeg)) : 0;
+    // Wide = high angle from goal centreline; Deep = high distance from goal
+    const wideWizardScore  = assistGeoCount >= 2 ? avgAssistAngle * assistGeoCount : 0;
+    const deepCreatorScore = assistGeoCount >= 2 ? avgAssistDist  * assistGeoCount : 0;
+    // Pass length
+    const passLenCount = myPassLengths.length;
+    const avgPassLength = passLenCount > 0 ? myPassLengths.reduce((s,v) => s + v, 0) / passLenCount : 0;
+    const maxPassLength = passLenCount > 0 ? Math.max(...myPassLengths) : 0;
+    const throughBallScore = passLenCount >= 2 ? avgPassLength * passLenCount : 0;
+    // Box Architect = assists close to goal (low avgAssistDist), weighted by count
+    const boxArchitectScore = assistGeoCount >= 2 ? (1 - avgAssistDist) * assistGeoCount : 0;
 
     metrics[ps.player] = {
       ps, gpg, apg, spg, sotpg, offpg, kppg, intpg, tklpg, blkpg, gkspg, nmpg, postpg,
@@ -2845,6 +2876,9 @@ function buildTagAuction() {
       myGoalEvents, avgMin,
       shotCount, avgShotDist, maxShotDist, maxShotAngle, avgShotAngle,
       longRangerScore, angleMerchantScore,
+      assistGeoCount, avgAssistDist, avgAssistAngle, maxAssistAngle,
+      wideWizardScore, deepCreatorScore, boxArchitectScore,
+      passLenCount, avgPassLength, maxPassLength, throughBallScore,
       openers: myGoalEvents.filter(e=>e.isOpener).length,
       finishers: myGoalEvents.filter(e=>e.isFinal).length,
       equalisers: myGoalEvents.filter(e=>e.isEqualisingOrComeback).length,
@@ -3313,9 +3347,13 @@ function buildTagAuction() {
   const shotTagWinners = {};  // tag → player
   const shotTagPlayers = {};  // player → tag (one per player max)
   const shotTagFns = {
-    'Long Ranger':  m => m.longRangerScore,
-    'Sharp Angle':  m => m.angleMerchantScore,
-    'Dead Eye':     m => m.shotCount >= 2 ? m.avgShotDist * m.conv : 0,
+    'Long Ranger':      m => m.longRangerScore,
+    'Sharp Angle':      m => m.angleMerchantScore,
+    'Dead Eye':         m => m.shotCount >= 2 ? m.avgShotDist * m.conv : 0,
+    'Wide Wizard':      m => m.wideWizardScore,
+    'Deep Creator':     m => m.deepCreatorScore,
+    'Through Ball King':m => m.throughBallScore,
+    'Box Architect':    m => m.boxArchitectScore,
   };
   Object.entries(shotTagFns).forEach(([label, fn]) => {
     let bestP = null, bestV = 0;
@@ -4009,6 +4047,28 @@ const HMAP_COLS = 14, HMAP_ROWS = 8;
 // Returns { distNorm, distPx, angleDeg }
 //   distNorm  — 0-1 (1 = far corner of court)
 //   angleDeg  — degrees from goal centreline (0=straight on, 90=parallel)
+// Draw any canvases registered via window._pendingCourts after innerHTML is set
+function drawPendingCourts() {
+  const pending = window._pendingCourts || {};
+  window._pendingCourts = {};
+  requestAnimationFrame(() => {
+    Object.entries(pending).forEach(([id, info]) => {
+      const cv = document.getElementById(id);
+      if (!cv) return;
+      hmapRender(cv, info.shots || [], { width: cv.offsetWidth || cv.width || 72, pillSize: 0.45, showNumbers: false });
+      if (info.assistDot) {
+        const dpr = window.devicePixelRatio || 1;
+        const W = cv.width / dpr, H = cv.height / dpr;
+        const ctx = cv.getContext('2d');
+        const px = info.assistDot.ax * W, py = info.assistDot.ay * H;
+        ctx.beginPath(); ctx.arc(px, py, 3.5, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(251,191,36,0.85)'; ctx.fill();
+        ctx.strokeStyle = 'rgba(0,0,0,0.4)'; ctx.lineWidth = 0.8; ctx.stroke();
+      }
+    });
+  });
+}
+
 function hmapShotGeometry(sx, sy, W, H) {
   const gx = W, gy = H * 0.5;
   const px = sx * W, py = sy * H;
@@ -4682,7 +4742,8 @@ function renderAllCombos() {
   if (!entries.length) return '<div style="color:var(--muted);font-size:.8rem">No data saved yet.</div>';
   return entries.map(({ mid, data, match }) => {
     const all = [...(data.h1||[]).map(p=>({...p,half:'1H'})), ...(data.h2||[]).map(p=>({...p,half:'2H'}))];
-    const withLoc = all.filter(p => !p.isOG && p.sx != null).length;
+    const withLoc = all.filter(p => !p.isOG && (p.sx != null || p.ax != null)).length;
+    const withBoth = all.filter(p => !p.isOG && p.sx != null && p.ax != null && p.assister).length;
     const shootable = all.filter(p => !p.isOG && p.scorer).length;
     return `<div style="margin-bottom:16px;padding-bottom:16px;border-bottom:1px solid var(--border)">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
@@ -4693,12 +4754,27 @@ function renderAllCombos() {
         ${shootable > 0 ? `<button onclick="openShotLocationModal('${mid}')" style="background:var(--card2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:3px 10px;font-family:'Barlow Condensed',sans-serif;font-size:.75rem;cursor:pointer">📍 ${withLoc < shootable ? 'Add' : 'Edit'} Locations</button>` : ''}
       </div>
       <div style="display:flex;flex-wrap:wrap;gap:4px">
-        ${all.map(p => `<span style="background:${p.assister?'rgba(57,211,83,.08)':'var(--card2)'};border:1px solid ${p.assister?'rgba(57,211,83,.2)':'var(--border)'};border-radius:5px;padding:3px 8px;font-size:.72rem">
-          <span style="color:var(--lime);font-size:.6rem">${p.half}${p.time?' '+p.time:''}</span>
-          <span style="color:var(--text);font-weight:600;margin-left:3px">${p.scorer}</span>
-          ${p.assister ? `<span style="color:var(--muted)"> ← </span><span style="color:var(--text2)">${p.assister}</span>` : ''}
-          ${p.sx != null ? '<span style="color:var(--green);font-size:.55rem;margin-left:2px">📍</span>' : ''}
-        </span>`).join('')}
+        ${all.map((p, gi) => {
+          const hasShotPin  = !p.isOG && p.sx != null && p.sy != null;
+          const hasAssistPin = !p.isOG && p.ax != null && p.ay != null;
+          const canvasId = `combo-court-${mid}-${gi}`;
+          if (hasShotPin || hasAssistPin) {
+            window._pendingCourts = window._pendingCourts || {};
+            window._pendingCourts[canvasId] = {
+              shots: hasShotPin ? [{ sx: p.sx, sy: p.sy }] : [],
+              assistDot: hasAssistPin ? { ax: p.ax, ay: p.ay } : null,
+              mid,
+            };
+          }
+          return `<div style="display:inline-flex;flex-direction:column;align-items:center;gap:3px;vertical-align:top">
+            <span style="background:${p.assister?'rgba(57,211,83,.08)':'var(--card2)'};border:1px solid ${p.assister?'rgba(57,211,83,.2)':'var(--border)'};border-radius:5px;padding:3px 8px;font-size:.72rem;white-space:nowrap">
+              <span style="color:var(--lime);font-size:.6rem">${p.half}${p.time?' '+p.time:''}</span>
+              <span style="color:var(--text);font-weight:600;margin-left:3px">${p.scorer}</span>
+              ${p.assister ? `<span style="color:var(--muted)"> ← </span><span style="color:var(--text2)">${p.assister}</span>` : ''}
+            </span>
+            ${(hasShotPin || hasAssistPin) ? `<canvas id="${canvasId}" width="72" height="37" style="display:block;border-radius:4px;cursor:pointer" title="Shot/assist location" onclick="openShotLocationModal('${mid}')"></canvas>` : ''}
+          </div>`;
+        }).join('')}
       </div>
     </div>`;
   }).join('');
@@ -4750,6 +4826,7 @@ function renderCombosPage() {
       <div style="font-family:\'Bebas Neue\',sans-serif;font-size:1.2rem;letter-spacing:2px;color:var(--text);margin-bottom:14px">📋 All Saved Match Data</div>
       ${renderAllCombos()}
     </div>`;
+  drawPendingCourts();
 }
 
 function loadComboForMatch() {
@@ -6179,10 +6256,32 @@ function renderProfileHeatmap(name, hmapType) {
         <div style="font-family:'Bebas Neue',sans-serif;font-size:1.35rem;color:${accentCol};line-height:1">${val}</div>
         ${sub ? `<div style="font-size:.6rem;color:var(--muted);margin-top:2px">${sub}</div>` : ''}
       </div>`;
-    statsEl.innerHTML =
-      pill('Avg Distance', Math.round(avgDist * 100) + '%', 'of pitch from goal') +
-      pill('Max Distance', Math.round(maxDist * 100) + '%', 'single ' + hmapType) +
-      pill('Sharpest Angle', Math.round(maxAngle) + '°', `avg ${Math.round(avgAngle)}°`);
+
+    // Compute pass length stats across all combos for this player as assister
+    const _gW2 = W, _gH2 = Math.round(W * 0.52);
+    const passLens = [];
+    Object.values(goalCombos).forEach(data => {
+      [...(data.h1||[]), ...(data.h2||[])].forEach(g => {
+        if (!g.isOG && g.assister === name && g.ax != null && g.ay != null && g.sx != null && g.sy != null) {
+          const dx = (g.sx - g.ax) * _gW2, dy = (g.sy - g.ay) * _gH2;
+          passLens.push(Math.hypot(dx, dy) / Math.hypot(_gW2, _gH2));
+        }
+      });
+    });
+    const avgPL = passLens.length > 0 ? Math.round(passLens.reduce((s,v)=>s+v,0)/passLens.length*100) : null;
+    const maxPL = passLens.length > 0 ? Math.round(Math.max(...passLens)*100) : null;
+
+    if (hmapType === 'assist' && passLens.length > 0) {
+      statsEl.innerHTML =
+        pill('Avg Distance', Math.round(avgDist * 100) + '%', 'from goal') +
+        pill('Sharpest Angle', Math.round(maxAngle) + '°', `avg ${Math.round(avgAngle)}°`) +
+        pill('Avg Pass Length', avgPL + '%', `max ${maxPL}%`);
+    } else {
+      statsEl.innerHTML =
+        pill('Avg Distance', Math.round(avgDist * 100) + '%', 'of pitch from goal') +
+        pill('Max Distance', Math.round(maxDist * 100) + '%', 'single shot') +
+        pill('Sharpest Angle', Math.round(maxAngle) + '°', `avg ${Math.round(avgAngle)}°`);
+    }
   }
 }
 
@@ -6517,20 +6616,62 @@ function renderProfile(name) {
       if (!scoredFrom.length && !assistedTo.length) return '';
       const partnerCard = (p, type) => {
         const col = type === 'scored' ? 'var(--green)' : 'var(--lime)';
-        // Arrow: Scorer ← Assister (assister feeds scorer)
         const relationship = type === 'scored'
           ? `<span style="color:var(--text)">${name}</span> <span style="color:var(--muted)">←</span> <span style="color:${col}">${p.name}</span>`
           : `<span style="color:${col}">${p.name}</span> <span style="color:var(--muted)">←</span> <span style="color:var(--text)">${name}</span>`;
         const label = type === 'scored'
           ? `${p.goals} goal${p.goals>1?'s':''} in ${p.comboMatches} of ${p.sharedGames} games together`
           : `${p.goals} goal${p.goals>1?'s':''} in ${p.comboMatches} of ${p.sharedGames} games together`;
+
+        // Gather assist→shot pairs for this partnership
+        const assister = type === 'scored' ? p.name : name;
+        const scorer   = type === 'scored' ? name   : p.name;
+        const pairGeos = [];
+        const pairPassLens = [];
+        Object.values(goalCombos).forEach(data => {
+          [...(data.h1||[]),...(data.h2||[])].forEach(g => {
+            if (!g.isOG && g.scorer === scorer && g.assister === assister) {
+              if (g.ax != null && g.ay != null) {
+                pairGeos.push({ sx: g.ax, sy: g.ay });
+                if (g.sx != null && g.sy != null) {
+                  const dx = (g.sx - g.ax) * 300, dy = (g.sy - g.ay) * 156;
+                  pairPassLens.push(Math.hypot(dx, dy) / Math.hypot(300, 156));
+                }
+              }
+            }
+          });
+        });
+        const avgPL = pairPassLens.length > 0
+          ? Math.round(pairPassLens.reduce((s,v)=>s+v,0)/pairPassLens.length * 100) : null;
+
+        // Tiny inline court canvas for assist zone (drawn after insert via requestAnimationFrame)
+        const canvasId = `pship-court-${assister.replace(/\s/g,'_')}-${scorer.replace(/\s/g,'_')}`;
+        const zoneLabel = pairGeos.length > 0 ? (() => {
+          const avgDist = pairGeos.reduce((s,g)=>s+g.sx,0)/pairGeos.length; // sx=0 is left, 1 is right (goal)
+          const avgY    = pairGeos.reduce((s,g)=>s+g.sy,0)/pairGeos.length;
+          const zone = avgDist > 0.65 ? 'Box' : avgDist > 0.4 ? 'Mid' : 'Deep';
+          const side = avgY < 0.38 ? ' Left' : avgY > 0.62 ? ' Right' : '';
+          return zone + side;
+        })() : null;
+
         return `<div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid rgba(255,255,255,.04);cursor:pointer" onclick="nav('profile','${p.name}')">
           <div style="width:30px;height:30px;border-radius:6px;background:var(--card2);display:flex;align-items:center;justify-content:center;font-family:'Bebas Neue',sans-serif;font-size:.75rem;color:var(--muted);flex-shrink:0">${p.name.slice(0,2).toUpperCase()}</div>
           <div style="flex:1;min-width:0">
             <div style="font-size:.82rem;font-weight:600">${relationship}</div>
             <div style="font-size:.63rem;color:var(--muted)">${label}</div>
+            ${zoneLabel || avgPL ? `<div style="display:flex;gap:6px;margin-top:3px;flex-wrap:wrap">
+              ${zoneLabel ? `<span style="font-size:.6rem;background:rgba(251,191,36,.1);border:1px solid rgba(251,191,36,.25);border-radius:4px;padding:1px 5px;color:var(--amber,#f59e0b)">🅰️ ${zoneLabel}</span>` : ''}
+              ${avgPL ? `<span style="font-size:.6rem;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:4px;padding:1px 5px;color:var(--muted)">↗ ${avgPL}% pass</span>` : ''}
+            </div>` : ''}
           </div>
-          <div style="font-family:'Bebas Neue',sans-serif;font-size:1.4rem;color:${col};line-height:1">${p.goals}</div>
+          <div style="flex-shrink:0;text-align:right">
+            ${pairGeos.length > 0 ? (() => {
+              window._pendingCourts = window._pendingCourts || {};
+              window._pendingCourts[canvasId] = { shots: pairGeos, assistDot: null };
+              return `<canvas id="${canvasId}" width="60" height="31" style="display:block;border-radius:4px;margin-bottom:2px"></canvas>`;
+            })() : ''}
+            <div style="font-family:'Bebas Neue',sans-serif;font-size:1.4rem;color:${col};line-height:1">${p.goals}</div>
+          </div>
         </div>`;
       };
       const allPartners = {};
@@ -6951,6 +7092,9 @@ function renderProfile(name) {
       ${s.matches.length > 20 ? `<div style="font-size:.72rem;color:var(--muted);text-align:center;padding:8px 0;border-top:1px solid var(--border);margin-top:8px">${s.matches.length - 20} more matches not shown</div>` : ''}
     </div>`;
 
+
+  // Draw mini courts registered during HTML generation, then charts
+  drawPendingCourts();
 
   // Draw charts after DOM paint
   setTimeout(() => {
