@@ -6187,6 +6187,8 @@ function renderProfileHeatmap(name, hmapType) {
 }
 
 function renderProfile(name) {
+  if (name !== currentProfileName) window._hmapType = 'shot'; // reset tab on new profile
+  currentProfileName = name;
   const ds = getDisplayStats();
   const s = ds[name] || playerStats[name];
   if (!s) { document.getElementById('profile-content').innerHTML = '<p style="color:var(--muted)">Player not found.</p>'; return; }
@@ -7002,8 +7004,8 @@ function saveCustomStat(player, key, val) {
     setTimeout(() => tip.remove(), 8000);
   }
 
-  currentProfileName = name;
-  window._hmapType = 'shot';
+  currentProfileName = player;
+  window._hmapType = window._hmapType || 'shot';
 }
 
 // =====================================================================
