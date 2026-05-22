@@ -4289,7 +4289,7 @@ function openShotLocationModal(mid) {
     const totalPinned = shotPins.filter(p=>p.sx!=null).length + assistPins.filter(p=>p.ax!=null).length;
     const totalPossible = allGoals.length + allGoals.filter(g=>g.assister).length;
     return `
-      <div style="background:var(--card);border-radius:14px;padding:20px;max-width:420px;width:100%;border:1px solid var(--border)">
+      <div id="pin-modal-card" style="background:var(--card);border-radius:14px;padding:20px;max-width:520px;width:100%;border:1px solid var(--border)">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
           <div style="font-family:'Bebas Neue',sans-serif;font-size:1.2rem;letter-spacing:1px;color:var(--text)">Pin Locations</div>
           <button onclick="document.getElementById('shot-location-modal').remove()" style="background:none;border:none;color:var(--muted);font-size:1.3rem;cursor:pointer;line-height:1">×</button>
@@ -4306,7 +4306,7 @@ function openShotLocationModal(mid) {
           <button onclick="setShotPinMode('assist')" ${!hasAssister?'disabled':''} style="flex:1;padding:6px;border-radius:7px;font-size:.8rem;cursor:pointer;font-family:'Barlow Condensed',sans-serif;border:1px solid var(--border);background:${isAssistMode?'var(--amber,#f59e0b)':'var(--card2)'};color:${isAssistMode?'#1a0a00':'var(--muted)'};font-weight:600;opacity:${hasAssister?1:.35}">🅰️ Assist location</button>
         </div>
         <canvas id="shot-modal-canvas" style="display:block;width:100%;border-radius:8px;cursor:crosshair;margin-bottom:4px"></canvas>
-        <div style="font-size:.72rem;color:var(--muted);margin-bottom:12px;text-align:center">${hint}</div>
+        <div class="pin-hint" style="font-size:.72rem;color:var(--muted);margin-bottom:12px;text-align:center">${hint}</div>
         <div style="display:flex;gap:8px;align-items:center">
           <button onclick="shotModalPrev()" ${current===0?'disabled':''} style="background:var(--card2);border:1px solid var(--border);color:var(--text);border-radius:7px;padding:7px 14px;font-family:'Barlow Condensed',sans-serif;font-size:.85rem;cursor:pointer;opacity:${current===0?0.4:1}">← Prev</button>
           <button onclick="shotModalSkip()" style="background:var(--card2);border:1px solid var(--border);color:var(--muted);border-radius:7px;padding:7px 14px;font-family:'Barlow Condensed',sans-serif;font-size:.85rem;cursor:pointer;flex:1">Skip</button>
@@ -4319,21 +4319,25 @@ function openShotLocationModal(mid) {
   function renderCanvas() {
     const canvas = document.getElementById('shot-modal-canvas');
     if (!canvas) return;
+    // Get width from the modal card container, not the canvas itself
+    const modalCard = document.getElementById('pin-modal-card') || canvas.closest('div[style*="max-width"]') || canvas.parentElement;
+    const W = modalCard ? Math.max(280, modalCard.clientWidth - 40) : 400; // 40 = card padding
     const sp = shotPins[current], ap = assistPins[current];
     const isAssistMode = pinMode === 'assist';
-    // Show existing pins as reference, highlight active one
-    const refShots = sp.sx != null ? [{ sx: sp.sx, sy: sp.sy }] : [];
-    const refAssists = ap.ax != null ? [{ sx: ap.ax, sy: ap.ay }] : [];
     pinInfo = hmapRender(canvas, [], {
+      width: W,
+      markerType: isAssistMode ? 'assist' : 'shot',
       pin: isAssistMode
         ? (ap.ax != null ? { sx: ap.ax, sy: ap.ay } : { sx: null })
         : sp,
       assistPin: isAssistMode ? null : (ap.ax != null ? { sx: ap.ax, sy: ap.ay } : null),
     });
-    canvas.addEventListener('click', e => {
+    // Remove previous listener before adding new one to avoid stacking
+    if (canvas._pinClickHandler) canvas.removeEventListener('click', canvas._pinClickHandler);
+    canvas._pinClickHandler = e => {
       const r = canvas.getBoundingClientRect();
-      const nx = (e.clientX - r.left) / pinInfo.W;
-      const ny = (e.clientY - r.top) / pinInfo.H;
+      const nx = (e.clientX - r.left) / (pinInfo.W || W);
+      const ny = (e.clientY - r.top) / (pinInfo.H || Math.round(W * 0.52));
       if (pinMode === 'assist') {
         assistPins[current] = { ax: nx, ay: ny };
         saveAssistPin();
@@ -4342,10 +4346,10 @@ function openShotLocationModal(mid) {
         saveShotPin();
       }
       renderCanvas();
-      // Update hint text
-      const hintEl = modal.querySelector('[style*="Click anywhere"], [style*="Location set"]');
+      const hintEl = modal.querySelector('.pin-hint');
       if (hintEl) hintEl.textContent = pinMode === 'assist' ? '📍 Assist location set — click to move' : '📍 Shot location set — click to move';
-    }, { once: false });
+    };
+    canvas.addEventListener('click', canvas._pinClickHandler);
   }
 
   function refresh() {
@@ -5136,7 +5140,7 @@ function loadData(csv) {
   renderAll();
   // Re-render heatmap if profile is open (loadData wipes canvas via renderAll→renderPlayers)
   if (currentPage === 'profile' && currentProfileName) {
-    setTimeout(() => renderProfileHeatmap(currentProfileName), 100);
+    setTimeout(() => renderProfileHeatmap(currentProfileName, window._hmapType||'shot'), 100);
   }
 }
 
@@ -5195,6 +5199,7 @@ function setGlobalFilter(f) {
       // profile-name now contains uppercase text — find matching player by case-insensitive lookup
       const rawName = profName.textContent.trim();
       const match = Object.keys(playerStats).find(k => k.toUpperCase() === rawName.toUpperCase()) || rawName;
+      window._hmapType = window._hmapType || 'shot'; // preserve active tab
       renderProfile(match);
     }
   }
@@ -11138,7 +11143,7 @@ document.addEventListener('DOMContentLoaded', () => {
       // Rerender profile if open so highlights appear
       if (currentPage === 'profile' && currentProfileName) {
         renderAll();
-        setTimeout(() => renderProfileHeatmap(currentProfileName), 300);
+        setTimeout(() => renderProfileHeatmap(currentProfileName, window._hmapType||'shot'), 300);
       }
       console.log(`✅ Loaded combos.csv — ${Object.keys(loaded).length} matches with combo data`);
     })
