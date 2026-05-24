@@ -3999,16 +3999,19 @@ function drawWormCanvas(canvasId, matchId) {
   pts.forEach((p,i) => i===0 ? ctx.moveTo(p.x,p.y) : ctx.lineTo(p.x,p.y));
   ctx.strokeStyle = 'rgba(255,255,255,.82)'; ctx.lineWidth = 2; ctx.lineJoin = 'round'; ctx.stroke();
 
-  // Goal dots
+  // Store pts and rows on canvas for hover
+  canvas._wormPts  = pts;
+  canvas._wormRows = rows;
+  canvas._wormMeta = { pad, cW, cH, matchDur, toX, toY, fA, fB, W, H, maxLead, yRange };
+
+  // Goal dots — drawn + stored for hover
   const dotData = [];
   rows.forEach(e => {
     const x = toX(e.secs), y = toY(e.scoreA - e.scoreB);
     ctx.beginPath(); ctx.arc(x, y, 5, 0, Math.PI*2);
     if (e.isOG) {
-      // Own goal — red hollow dot
       ctx.fillStyle = 'rgba(0,0,0,.6)'; ctx.fill();
       ctx.strokeStyle = '#f87171'; ctx.lineWidth = 2; ctx.stroke();
-      // Small X inside
       ctx.strokeStyle = '#f87171'; ctx.lineWidth = 1.5;
       ctx.beginPath(); ctx.moveTo(x-2.5,y-2.5); ctx.lineTo(x+2.5,y+2.5); ctx.stroke();
       ctx.beginPath(); ctx.moveTo(x+2.5,y-2.5); ctx.lineTo(x-2.5,y+2.5); ctx.stroke();
@@ -4016,25 +4019,125 @@ function drawWormCanvas(canvasId, matchId) {
       ctx.fillStyle = e.team==='A' ? '#4ade80' : '#60a5fa'; ctx.fill();
       ctx.strokeStyle = 'rgba(0,0,0,.6)'; ctx.lineWidth = 1.5; ctx.stroke();
     }
-    if (ytId && e.time) dotData.push({x, y, r:10, time:e.time, half:e.half, scorer: e.isOG && e.assister ? e.assister+' (OG)' : e.scorer+(e.isOG?' (OG)':'')});
-  });
-
-  // Click/hover
-  if (ytId && dotData.length && !canvas._clickBound) {
-    canvas._clickBound = true; canvas._dots = dotData; canvas.style.cursor = 'pointer';
-    canvas.addEventListener('click', ev => {
-      const r = canvas.getBoundingClientRect();
-      const cx = (ev.clientX-r.left)*(W/r.width), cy = (ev.clientY-r.top)*(H/r.height);
-      const hit = (canvas._dots||[]).find(d => Math.hypot(cx-d.x,cy-d.y)<=d.r);
-      if (hit) seekYtVideo(matchId.replace(/[#,]/g,'_'), ytId, timeToYtSeconds(hit.time, hit.half));
+    dotData.push({
+      x, y, r: 10,
+      secs: e.secs, time: e.time, half: e.half,
+      scorer: e.isOG && e.assister ? e.assister+' (OG)' : e.scorer+(e.isOG?' (OG)':''),
+      scoreA: e.scoreA, scoreB: e.scoreB,
+      team: e.team, isOG: e.isOG,
+      ytTime: ytId && e.time ? timeToYtSeconds(e.time, e.half) : null,
     });
+  });
+  canvas._dots = dotData;
+
+  // Bind interactive events once
+  if (!canvas._wormBound) {
+    canvas._wormBound = true;
+    canvas.style.cursor = 'crosshair';
+
+    // Shared tooltip el — reuse across all worm canvases
+    let ttEl = document.getElementById('worm-tooltip');
+    if (!ttEl) {
+      ttEl = document.createElement('div');
+      ttEl.id = 'worm-tooltip';
+      ttEl.style.cssText = 'position:fixed;z-index:9998;background:#0d1f10;border:1px solid rgba(255,255,255,.15);border-radius:8px;padding:8px 12px;font-family:"Barlow Condensed",sans-serif;pointer-events:none;opacity:0;transition:opacity .1s;min-width:120px;box-shadow:0 4px 16px rgba(0,0,0,.6)';
+      document.body.appendChild(ttEl);
+    }
+
     canvas.addEventListener('mousemove', ev => {
       const r = canvas.getBoundingClientRect();
-      const cx = (ev.clientX-r.left)*(W/r.width), cy = (ev.clientY-r.top)*(H/r.height);
-      const hit = (canvas._dots||[]).find(d => Math.hypot(cx-d.x,cy-d.y)<=d.r);
-      canvas.title = hit ? '▶ '+hit.scorer+' '+hit.half+' '+hit.time : '';
+      const scaleX = canvas._wormMeta.W / r.width;
+      const scaleY = canvas._wormMeta.H / r.height;
+      const cx = (ev.clientX - r.left) * scaleX;
+      const cy = (ev.clientY - r.top)  * scaleY;
+      const { pad: p, cW: cw, matchDur: dur, toX: tx, toY: ty, fA: fa, fB: fb } = canvas._wormMeta;
+
+      // Only show inside the chart area
+      if (cx < p.left - 4 || cx > p.left + cw + 4) { ttEl.style.opacity = '0'; return; }
+
+      // Snap cursor X to a time value
+      const timeFrac = Math.max(0, Math.min(1, (cx - p.left) / cw));
+      const curSecs  = timeFrac * dur;
+
+      // Find what the score was at this point
+      const rows2 = canvas._wormRows;
+      let sA = 0, sB = 0;
+      let prevGoal = null;
+      for (const e of rows2) {
+        if (e.secs > curSecs) break;
+        sA = e.scoreA; sB = e.scoreB;
+        prevGoal = e;
+      }
+
+      // Is cursor on a dot?
+      const hitDot = (canvas._dots || []).find(d => Math.hypot(cx - d.x, cy - d.y) <= d.r);
+
+      // Draw crosshair on an overlay — use a second canvas or just reposition a div line
+      // We use a dedicated overlay div approach (position relative to canvas)
+      let xhEl = document.getElementById('worm-xhair-' + canvas.id);
+      if (!xhEl) {
+        xhEl = document.createElement('div');
+        xhEl.id = 'worm-xhair-' + canvas.id;
+        xhEl.style.cssText = 'position:absolute;width:1px;top:0;bottom:0;background:rgba(255,255,255,.25);pointer-events:none;z-index:10';
+        const wrap = canvas.parentElement;
+        if (wrap && getComputedStyle(wrap).position === 'static') wrap.style.position = 'relative';
+        wrap && wrap.appendChild(xhEl);
+      }
+      xhEl.style.left = (ev.clientX - r.left) + 'px';
+      xhEl.style.display = 'block';
+
+      // Build tooltip content
+      const mins = Math.floor(curSecs / 60), secs2 = Math.round(curSecs % 60);
+      const timeStr = mins + "'" + (secs2 ? String(secs2).padStart(2,'0') + '"' : '');
+      const half = curSecs <= dur/2 ? '1st half' : '2nd half';
+      const lead = sA > sB ? '<span style="color:#4ade80">A leading</span>' :
+                   sB > sA ? '<span style="color:#60a5fa">B leading</span>' :
+                   '<span style="color:rgba(255,255,255,.5)">Level</span>';
+      const goalLine = hitDot
+        ? `<div style="margin-top:5px;padding-top:5px;border-top:1px solid rgba(255,255,255,.1);font-size:.75rem;color:${hitDot.isOG?'#f87171':hitDot.team==='A'?'#4ade80':'#60a5fa'}">⚽ ${hitDot.scorer}${hitDot.time?' · '+hitDot.half+' '+hitDot.time:''}</div>`
+        : prevGoal
+          ? `<div style="margin-top:5px;font-size:.7rem;color:rgba(255,255,255,.35)">Last goal: ${prevGoal.isOG&&prevGoal.assister?prevGoal.assister+' (OG)':prevGoal.scorer}</div>`
+          : '';
+      const ytHint = hitDot && hitDot.ytTime !== null
+        ? `<div style="margin-top:4px;font-size:.7rem;color:rgba(255,255,255,.4)">Click to watch ▶</div>` : '';
+
+      ttEl.innerHTML = `
+        <div style="font-size:.68rem;color:rgba(255,255,255,.4);margin-bottom:4px;letter-spacing:.5px">${timeStr} · ${half}</div>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:2px">
+          <span style="font-family:'Bebas Neue',sans-serif;font-size:1.6rem;color:#4ade80;line-height:1">${sA}</span>
+          <span style="font-size:.75rem;color:rgba(255,255,255,.3)">—</span>
+          <span style="font-family:'Bebas Neue',sans-serif;font-size:1.6rem;color:#60a5fa;line-height:1">${sB}</span>
+          <span style="font-size:.7rem;margin-left:2px">${lead}</span>
+        </div>
+        ${goalLine}${ytHint}`;
+
+      // Position tooltip — keep on screen
+      const tx2 = ev.clientX + 16, ty2 = ev.clientY - 10;
+      const ow = ttEl.offsetWidth || 150, oh = ttEl.offsetHeight || 80;
+      ttEl.style.left = (tx2 + ow > window.innerWidth  ? ev.clientX - ow - 10 : tx2) + 'px';
+      ttEl.style.top  = (ty2 + oh > window.innerHeight ? ev.clientY - oh - 5  : ty2) + 'px';
+      ttEl.style.opacity = '1';
+
+      canvas.style.cursor = hitDot && hitDot.ytTime !== null ? 'pointer' : 'crosshair';
     });
-  } else if (ytId) { canvas._dots = dotData; }
+
+    canvas.addEventListener('mouseleave', () => {
+      ttEl.style.opacity = '0';
+      const xhEl = document.getElementById('worm-xhair-' + canvas.id);
+      if (xhEl) xhEl.style.display = 'none';
+      canvas.style.cursor = 'crosshair';
+    });
+
+    canvas.addEventListener('click', ev => {
+      const r = canvas.getBoundingClientRect();
+      const scaleX = canvas._wormMeta.W / r.width;
+      const scaleY = canvas._wormMeta.H / r.height;
+      const cx = (ev.clientX - r.left) * scaleX;
+      const cy = (ev.clientY - r.top)  * scaleY;
+      const hit = (canvas._dots || []).find(d => Math.hypot(cx - d.x, cy - d.y) <= d.r);
+      if (hit && hit.ytTime !== null) seekYtVideo(matchId.replace(/[#,]/g,'_'), ytId, hit.ytTime);
+    });
+  }
 }
 
 // =====================================================================
