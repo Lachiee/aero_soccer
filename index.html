@@ -5583,6 +5583,9 @@ function nav(page, extra) {
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
   document.getElementById('page-' + page)?.classList.add('active');
   document.querySelector(`.nav-btn[data-page="${page}"]`)?.classList.add('active');
+  // Scroll to top on every navigation
+  document.documentElement.scrollTop = 0;
+  document.body.scrollTop = 0; // Safari fallback
   if (page === 'leaderboard') renderLeaderboard();
   if (page === 'teams') renderTeamBuilder();
   if (page === 'compare') renderComparePage();
@@ -6465,14 +6468,14 @@ function renderProfile(name) {
         ? `<img src="${playerGifs[name]}" alt="${name}" style="${mediaStyle}">`
         : `<video id="banner-video-${gifKey}" autoplay loop muted playsinline
              style="${mediaStyle}"
-             onloadeddata="document.getElementById('banner-placeholder-${gifKey}').style.display='none'"
+             onloadeddata="this._hasData=true;document.getElementById('banner-placeholder-${gifKey}').style.display='none'"
              onloadedmetadata="initBannerSlowmo('banner-video-${gifKey}','${name.replace(/'/g,"\\'")}')"
              onerror="this.style.display='none';loadFallbackBanner('${gifKey}','${name.replace(/'/g,"\\'")}')">
              <source src="${BANNERS_PATH}${name}.mp4" type="video/mp4">
            </video>
            <img id="banner-img-${gifKey}" src="${BANNERS_PATH}${name}.gif" alt="" style="${mediaStyle.replace('display:block','display:none')}"
-             onload="document.getElementById('banner-video-${gifKey}').style.display='none';this.style.display='block';document.getElementById('banner-placeholder-${gifKey}').style.display='none'"
-             onerror="this.src='${BANNERS_PATH}${name}.png';this.onerror=function(){this.src='${BANNERS_PATH}${name}.jpg';this.onerror=function(){this.style.display='none';document.getElementById('banner-placeholder-${gifKey}').style.display='flex'}}"
+             onload="if(this.naturalWidth>0){const v=document.getElementById('banner-video-${gifKey}');if(v&&v._hasData)return;if(v)v.style.display='none';this.style.display='block';document.getElementById('banner-placeholder-${gifKey}').style.display='none'}"
+             onerror="this.src='${BANNERS_PATH}${name}.png';this.onerror=function(){this.src='${BANNERS_PATH}${name}.jpg';this.onerror=function(){this.style.display='none';const v=document.getElementById('banner-video-${gifKey}');if(!v||!v._hasData)document.getElementById('banner-placeholder-${gifKey}').style.display='flex'}}"
            >
            <div id="banner-placeholder-${gifKey}" style="width:100%;height:100%;flex-direction:column;align-items:center;justify-content:center;gap:8px;position:absolute;inset:0;display:none;background:var(--card2)">
              <div style="font-size:2rem;opacity:.2">🎭</div>
