@@ -104,9 +104,11 @@
     "Amin": true
   },
   "bannerPos": {
-    "Amin": 30
+    "Amin": 40
   },
-  "bannerZoom": {},
+  "bannerZoom": {
+    "Amin": 100
+  },
   "matchVideos": {
     "2026-04-23#1": "ylb15aE4V9I",
     "2026-04-16#1": "LfgfLgZDZtM",
