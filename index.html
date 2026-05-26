@@ -11096,26 +11096,36 @@ function computePeakWindow(events, windowSecs) {
 }
 
 function computeFatigueTrids(events, halfDur, h2OffsetSecs) {
-  // Use 10-minute buckets on the continuous match timeline
-  // halfDur values are in seconds (raw, continuous)
-  const bucketMins = 10;
-  const bucketSecs = bucketMins * 60;
-  // Full match duration = last event timestamp (raw)
-  const allTimes = events.map(e => e.tsSecsRaw).filter(t => t > 0);
-  const matchEnd = allTimes.length ? Math.max(...allTimes) : 3600;
-  const numBuckets = Math.ceil(matchEnd / bucketSecs) || 1;
+  // Bucket ALL events on the raw continuous timeline (0:00 → end of match)
+  // 10-minute buckets, max 6 buckets (60 min cap)
+  const BUCKET_SECS = 600; // 10 minutes
+  const MAX_BUCKETS = 6;
+  const buckets = new Array(MAX_BUCKETS).fill(0);
+  const labels  = Array.from({length: MAX_BUCKETS}, (_, i) => `${i*10}–${(i+1)*10}'`);
 
-  const result = { buckets: [], labels: [] };
-  for (let i = 0; i < numBuckets; i++) {
-    const from = i * bucketSecs;
-    const to   = (i + 1) * bucketSecs;
-    result.buckets.push(events.filter(e => e.tsSecsRaw >= from && e.tsSecsRaw < to).length);
-    result.labels.push(`${i*bucketMins}–${(i+1)*bucketMins}'`);
-  }
-  // Also keep per-half breakdown for other stats
-  result['1H'] = result.buckets.slice(0, Math.ceil((h2OffsetSecs || matchEnd/2) / bucketSecs));
-  result['2H'] = result.buckets.slice(result['1H'].length);
-  return result;
+  events.forEach(e => {
+    const t = e.tsSecsRaw;
+    if (t == null || isNaN(t) || t < 0) return;
+    const idx = Math.min(Math.floor(t / BUCKET_SECS), MAX_BUCKETS - 1);
+    buckets[idx]++;
+  });
+
+  // Trim trailing empty buckets (but keep at least 1)
+  let last = buckets.length - 1;
+  while (last > 0 && buckets[last] === 0) last--;
+  const trimmed = buckets.slice(0, last + 1);
+  const trimmedLabels = labels.slice(0, last + 1);
+
+  // Which bucket index is the HT boundary
+  const htBucket = h2OffsetSecs != null ? Math.floor(h2OffsetSecs / BUCKET_SECS) : null;
+
+  // Keep 1H/2H arrays for other stats (clutch, pressure etc.) using tsSecsNorm
+  const h1Events = events.filter(e => e.half === '1H');
+  const h2Events = events.filter(e => e.half === '2H');
+  const h1 = h1Events.length ? [h1Events.length] : [0]; // simplified — just total counts
+  const h2 = h2Events.length ? [h2Events.length] : [0];
+
+  return { buckets: trimmed, labels: trimmedLabels, htBucket, '1H': h1, '2H': h2 };
 }
 
 function computeClutchStats(events, halfDur, finalSecs) {
@@ -11512,8 +11522,8 @@ function showTimelinePreview(timeStats, allPlayers) {
 
   // Derive display structure from actual fatigue buckets
   const samplePlayer = allPlayers.find(p => playerStats[p]?.fatigue?.buckets?.length);
-  const allLabels    = samplePlayer ? playerStats[samplePlayer].fatigue.labels   : [];
-  const h1BucketCount = samplePlayer ? (playerStats[samplePlayer].fatigue['1H']?.length || 0) : 0;
+  const allLabels     = samplePlayer ? playerStats[samplePlayer].fatigue.labels   : [];
+  const h1BucketCount = samplePlayer ? (playerStats[samplePlayer].fatigue.htBucket ?? 0) : 0;
 
   const fatigueTable = allPlayers
     .filter(p => playerStats[p]?.fatigue?.buckets?.some(v=>v>0))
