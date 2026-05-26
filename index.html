@@ -11772,6 +11772,19 @@ function showTimelinePreview(timeStats, allPlayers) {
     .filter(p => playerStats[p]?.fatigue?.buckets?.some(v=>v>0))
     .map(p => ({ p, buckets: playerStats[p].fatigue.buckets }));
 
+  // Find which column indices have at least one non-zero value across all players
+  // This removes the dead gaps where nothing happened in that 5-min window
+  const numCols = allLabels.length;
+  const activeCols = Array.from({length: numCols}, (_,i) =>
+    fatigueTable.some(({buckets}) => (buckets[i] || 0) > 0)
+  );
+  // Always keep the column just before HT and first column after HT for context
+  if (h1BucketCount > 0 && h1BucketCount < numCols) {
+    activeCols[h1BucketCount - 1] = true; // last col before HT
+    activeCols[h1BucketCount]     = true; // first col after HT
+  }
+  const visibleIndices = allLabels.map((_,i) => i).filter(i => activeCols[i]);
+
   const content = document.getElementById('weekly-timeline-content');
   const tdS = 'padding:5px 6px;font-size:.75rem;border-bottom:1px solid rgba(37,53,39,.3);text-align:center';
   const thS = 'padding:5px 6px;font-size:.62rem;color:var(--muted);letter-spacing:.3px;text-transform:uppercase;border-bottom:1px solid var(--border);text-align:center;white-space:nowrap;font-family:"Barlow Condensed",sans-serif';
@@ -11785,24 +11798,27 @@ function showTimelinePreview(timeStats, allPlayers) {
           <div style="font-size:.85rem;font-weight:600;color:var(--text)">${ins.text}</div>
         </div>`).join('')}
     </div>
-    <div style="font-family:'Barlow Condensed',sans-serif;font-size:.7rem;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:8px">Activity by 10-Minute Window</div>
+    <div style="font-family:'Barlow Condensed',sans-serif;font-size:.7rem;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:8px">Activity by 5-Minute Window</div>
     <div style="overflow-x:auto">
     <table style="border-collapse:collapse;width:100%">
       <thead><tr>
         <th style="${thS};text-align:left">Player</th>
-        ${allLabels.map((lbl, i) => i === h1BucketCount
-          ? `<th style="${thHT}">HT</th><th style="${thS}">${lbl}</th>`
-          : `<th style="${thS}">${lbl}</th>`
-        ).join('')}
+        ${visibleIndices.map((i) => {
+          const isHT = i === h1BucketCount;
+          const htCell = isHT ? `<th style="${thHT}">HT</th>` : '';
+          return htCell + `<th style="${thS}${isHT ? ';border-left:2px solid rgba(251,191,36,.4)' : ''}">${allLabels[i]}</th>`;
+        }).join('')}
         <th style="${thS}">Trend</th>
       </tr></thead>
       <tbody>
         ${fatigueTable.map(({p, buckets}) => {
-          const mx = Math.max(...buckets, 1);
+          const visibleVals = visibleIndices.map(i => buckets[i] || 0);
+          const mx = Math.max(...visibleVals, 1);
           const bar = (v, i) => {
             const pct = Math.round(v/mx*100);
             const col = pct > 66 ? 'var(--green)' : pct > 33 ? 'var(--amber,#f59e0b)' : 'var(--muted)';
-            const htBorder = i === h1BucketCount ? 'border-left:2px solid rgba(251,191,36,.4);' : '';
+            const isHT = i === h1BucketCount;
+            const htBorder = isHT ? 'border-left:2px solid rgba(251,191,36,.4);' : '';
             return `<td style="${tdS};${htBorder}"><div style="display:inline-flex;align-items:center;gap:3px">
               <div style="width:${Math.max(pct*.25,2)}px;height:5px;background:${col};border-radius:2px"></div>
               <span style="font-size:.75rem;${v>0?'font-weight:600':''}">${v}</span>
@@ -11815,9 +11831,10 @@ function showTimelinePreview(timeStats, allPlayers) {
           const trendTip = `Avg activity per 5-min window: 1H=${avg1.toFixed(1)}, 2H=${avg2.toFixed(1)} — ${trend==='↗'?'more active in 2H':trend==='↘'?'less active in 2H':'consistent across both halves'}`;
           return `<tr>
             <td style="${tdS};text-align:left;font-weight:600">${p}</td>
-            ${buckets.map((v,i) => {
-              const htCell = i === h1BucketCount ? `<td style="${tdS};border-left:2px solid rgba(251,191,36,.4);color:var(--amber,#f59e0b);font-size:.6rem;padding:5px 2px">HT</td>` : '';
-              return htCell + bar(v, i);
+            ${visibleIndices.map((colIdx, displayIdx) => {
+              const isHT = colIdx === h1BucketCount;
+              const htCell = isHT ? `<td style="${tdS};border-left:2px solid rgba(251,191,36,.4);color:var(--amber,#f59e0b);font-size:.6rem;padding:5px 2px">HT</td>` : '';
+              return htCell + bar(buckets[colIdx] || 0, colIdx);
             }).join('')}
             <td style="${tdS};color:${trendCol};font-size:1.1rem" data-tip="${trendTip}">${trend}</td>
           </tr>`;
