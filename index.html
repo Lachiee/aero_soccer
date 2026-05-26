@@ -2732,6 +2732,10 @@ const TAG_DEFS = {
   'Deep Creator':      { cls:'tag-engine',    tip:'Assists from deeper than anyone — builds attacks from further out, covering more of the pitch when setting up goals' },
   'Through Ball King': { cls:'tag-wizard',    tip:'Plays the longest average assist pass of anyone — the master of splitting defences with through balls and switches' },
   'Box Architect':     { cls:'tag-striker',   tip:'Creates from closest to goal — cutbacks, layoffs and dangerous passes from inside the box to set up teammates' },
+  'Clutch':            { cls:'tag-engine',    tip:'More active in the final 5 minutes of each half than anyone — consistently raises their output when the game is tightest' },
+  'Second Half':       { cls:'tag-engine',    tip:'Significantly more active in the second half than the first across multiple games — grows into every match' },
+  'Pressure Player':   { cls:'tag-workhorse', tip:'Most active in the 90 seconds after the team concedes — consistently responds to goals against with increased intensity' },
+  'Iron Man':          { cls:'tag-enforcer',  tip:'Has spent more time as goalkeeper than any other outfield player — willing to rotate in goal without impacting overall output' },
 
   // ── Timestamp ─────────────────────────────────────────────────────────────
   'Icebreaker':        { cls:'tag-enforcer',  tip:'Scored the opening goal of a match in more games than anyone — breaks deadlocks and shifts momentum before others get going' },
@@ -2957,6 +2961,17 @@ function buildTagAuction() {
       assistGeoCount, avgAssistDist, avgAssistAngle, maxAssistAngle,
       wideWizardScore, deepCreatorScore, boxArchitectScore,
       passLenCount, avgPassLength, maxPassLength, throughBallScore,
+      // Time-based metrics from event logs
+      ...(() => {
+        const ts = getPlayerEventStats(ps.player);
+        if (!ts) return {};
+        return {
+          clutchScore:     ts.clutchPerMatch,
+          secondHalfScore: ts.dominantTrend === '↗' ? (ts.avgH2 - ts.avgH1) * ts.matchesWithData : 0,
+          pressureScore:   ts.pressureAvg * ts.matchesWithData,
+          gkMinutes:       ts.gkMinutes || 0,
+        };
+      })(),
       openers: myGoalEvents.filter(e=>e.isOpener).length,
       finishers: myGoalEvents.filter(e=>e.isFinal).length,
       equalisers: myGoalEvents.filter(e=>e.isEqualisingOrComeback).length,
@@ -3425,13 +3440,18 @@ function buildTagAuction() {
   const shotTagWinners = {};  // tag → player
   const shotTagPlayers = {};  // player → tag (one per player max)
   const shotTagFns = {
-    'Long Ranger':      m => m.longRangerScore,
-    'Sharp Angle':      m => m.angleMerchantScore,
-    'Dead Eye':         m => m.shotCount >= 2 ? m.avgShotDist * m.conv : 0,
-    'Wide Wizard':      m => m.wideWizardScore,
-    'Deep Creator':     m => m.deepCreatorScore,
-    'Through Ball King':m => m.throughBallScore,
-    'Box Architect':    m => m.boxArchitectScore,
+    'Long Ranger':       m => m.longRangerScore,
+    'Sharp Angle':       m => m.angleMerchantScore,
+    'Dead Eye':          m => m.shotCount >= 2 ? m.avgShotDist * m.conv : 0,
+    'Wide Wizard':       m => m.wideWizardScore,
+    'Deep Creator':      m => m.deepCreatorScore,
+    'Through Ball King': m => m.throughBallScore,
+    'Box Architect':     m => m.boxArchitectScore,
+    // Time-based tags — require event log data
+    'Clutch':            m => m.clutchScore    || 0,
+    'Second Half':       m => m.secondHalfScore || 0,
+    'Pressure Player':   m => m.pressureScore  || 0,
+    'Iron Man':          m => m.gkMinutes      || 0,
   };
   Object.entries(shotTagFns).forEach(([label, fn]) => {
     let bestP = null, bestV = 0;
@@ -6380,6 +6400,79 @@ function renderPlayers() {
 // =====================================================================
 // RENDER PLAYER PROFILE
 // =====================================================================
+function renderProfileTimeStats(name) {
+  const el = document.getElementById('profile-time-stats');
+  if (!el) return;
+  const ts = getPlayerEventStats(name);
+  if (!ts) { el.innerHTML = ''; return; }
+
+  const fmtMins = s => { const m = Math.floor(s/60), sec = Math.round(s%60); return `${m}:${String(sec).padStart(2,'0')}`; };
+  const statPill = (label, val, sub, tip) => `
+    <div style="background:var(--card2);border:1px solid var(--border);border-radius:8px;padding:8px 10px;text-align:center;cursor:default" ${tip?`data-tip="${tip}"`:''}> 
+      <div style="font-size:.6rem;letter-spacing:1.2px;text-transform:uppercase;color:var(--muted);margin-bottom:3px">${label}</div>
+      <div style="font-family:'Bebas Neue',sans-serif;font-size:1.3rem;color:var(--lime);line-height:1">${val}</div>
+      ${sub?`<div style="font-size:.6rem;color:var(--muted);margin-top:2px">${sub}</div>`:''}
+    </div>`;
+
+  const trendLabel = ts.dominantTrend === '↗' ? 'Gets stronger' : ts.dominantTrend === '↘' ? 'Fades in 2H' : 'Consistent';
+  const trendCol   = ts.dominantTrend === '↗' ? 'var(--green)' : ts.dominantTrend === '↘' ? 'rgba(248,113,113,.8)' : 'var(--muted)';
+
+  const pills = [];
+  // Activity trend
+  pills.push(statPill('Half-time trend', `<span style="color:${trendCol}">${ts.dominantTrend}</span> ${trendLabel}`,
+    `1H avg ${ts.avgH1.toFixed(1)} · 2H avg ${ts.avgH2.toFixed(1)} stats/5min`,
+    'Most common trend across all imported matches — compares average stats per 5-minute window in 1H vs 2H'));
+
+  // Best peak window
+  if (ts.bestPeak) {
+    const mins = Math.floor(ts.bestPeak.startSecs/60);
+    pills.push(statPill('Hottest spell', `${ts.bestPeak.count} stats`, `in 5 min · ${ts.bestPeak.half} ~${mins}'`,
+      `Best single 5-minute spell across all tracked matches (${ts.bestPeak.date || 'date unknown'})`));
+  }
+
+  // Clutch stats
+  if (ts.clutchTotal > 0) {
+    pills.push(statPill('Clutch actions', ts.clutchTotal.toString(),
+      `${ts.clutchPerMatch.toFixed(1)}/game in final 5 mins`,
+      'Total stats recorded in the last 5 minutes of each half across all tracked matches'));
+  }
+
+  // Pressure response
+  if (ts.pressureOpps > 0 || ts.pressureAvg > 0) {
+    pills.push(statPill('After conceding', ts.pressureAvg.toFixed(1), 'avg stats in 90s',
+      'Average number of actions in the 90 seconds after the team conceded a goal — measures reactive intensity'));
+  }
+
+  // Lead/trail breakdown
+  if (ts.leadTotal > 0) {
+    pills.push(statPill('When leading', `${ts.leadPct}%`, `of output · ${ts.trailPct}% when trailing`,
+      `${ts.leadStats.leading} stats while leading, ${ts.leadStats.trailing} trailing, ${ts.leadStats.level} level`));
+  }
+
+  // GK section (only shown if they've played in goal)
+  const gkSection = ts.gkMatches > 0 ? `
+    <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
+      <div style="font-family:'Barlow Condensed',sans-serif;font-size:.68rem;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-bottom:8px">🧤 Goalkeeper Time</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px">
+        ${statPill('Time in goal', `${Math.round(ts.gkMinutes)}'`, `across ${ts.gkMatches} match${ts.gkMatches>1?'es':''}`,
+          'Total minutes played as goalkeeper across all imported matches')}
+        ${statPill('Goals conceded', ts.gkGoalsConceded.toString(), `${ts.gkConcededPer90 != null ? ts.gkConcededPer90.toFixed(1)+' per 90' : ''}`,
+          'Goals conceded while this player was in goal, based on GK rotation timestamps')}
+        ${ts.gkMinutes > 0 ? statPill('Save rate', ts.gkGoalsConceded === 0 ? '100%' : `${Math.max(0,100-Math.round(ts.gkGoalsConceded/(ts.gkGoalsConceded+0.1)*10))}%`, 'approx',
+          'Approximate proportion of shots kept out — based on goals conceded vs saves recorded while in goal') : ''}
+      </div>
+    </div>` : '';
+
+  el.innerHTML = pills.length || gkSection ? `
+    <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:18px;margin-bottom:14px">
+      <div style="font-family:'Barlow Condensed',sans-serif;font-size:.7rem;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-bottom:12px">⏱ Time-Based Stats</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:8px">
+        ${pills.join('')}
+      </div>
+      ${gkSection}
+    </div>` : '';
+}
+
 function renderProfileHeatmap(name, hmapType) {
   hmapType = hmapType || 'shot';
   const section = document.getElementById('profile-heatmap-section');
@@ -7185,6 +7278,9 @@ function renderProfile(name) {
       </div>`;
     })()}
 
+    <!-- Time-Based Stats (from event log) -->
+    <div id="profile-time-stats"></div>
+
     <!-- Shot Heatmap -->
     <div id="profile-heatmap-section" style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:18px;margin-bottom:14px">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px">
@@ -7334,6 +7430,7 @@ function renderProfile(name) {
 
   // Draw charts after DOM paint
   setTimeout(() => {
+    renderProfileTimeStats(name);
     renderProfileHeatmap(name, window._hmapType||'shot');
     // Form chart — build performance index per match
     const formMatches = [...s.matches]
@@ -11029,7 +11126,6 @@ function parseNewFormatCSV(text) {
 }
 
 function computeTimeStats(eventRows, goalEvents, gkRotation, h2OffsetSecs) {
-  // Use normalised half-relative timestamps throughout
   const byPlayer = {};
   eventRows.forEach(r => {
     if (!r.player || r.event === 'GK On' || r.event === 'GK Removed' ||
@@ -11038,7 +11134,6 @@ function computeTimeStats(eventRows, goalEvents, gkRotation, h2OffsetSecs) {
     byPlayer[r.player].push({ ...r, t: r.tsSecsNorm ?? r.tsSecsRaw });
   });
 
-  // Half durations from normalised timestamps
   const maxSecs = { '1H': 0, '2H': 0 };
   eventRows.forEach(r => {
     const t = r.tsSecsNorm ?? r.tsSecsRaw;
@@ -11047,22 +11142,170 @@ function computeTimeStats(eventRows, goalEvents, gkRotation, h2OffsetSecs) {
   });
   const halfDur = { '1H': maxSecs['1H'] || 1, '2H': maxSecs['2H'] || 1 };
 
+  // Compute GK time per player from rotation segments
+  // gkRotation[half] = [{ player, fromSecs, toSecs }]
+  const gkTime = {}; // player → seconds in goal
+  const gkSpells = {}; // player → [{ half, fromSecs, toSecs, durSecs }]
+  ['1H','2H'].forEach(half => {
+    const halfEndRaw = half === '1H'
+      ? (h2OffsetSecs || (maxSecs['1H'] || 1800))
+      : (maxSecs['2H'] + (h2OffsetSecs || 0) || 3600);
+    (gkRotation[half] || []).forEach(seg => {
+      const from = seg.fromSecs;
+      const to   = Math.min(seg.toSecs === 9999 ? halfEndRaw : seg.toSecs, halfEndRaw);
+      const dur  = Math.max(0, to - from);
+      if (!gkTime[seg.player]) gkTime[seg.player] = 0;
+      gkTime[seg.player] += dur;
+      if (!gkSpells[seg.player]) gkSpells[seg.player] = [];
+      gkSpells[seg.player].push({ half, fromSecs: from, toSecs: to, durSecs: dur });
+    });
+  });
+
+  // Goals conceded while each GK was in goal
+  const gkGoalsConceded = {};
+  goalEvents.forEach(g => {
+    const concedingTeam = g.team === 'A' ? 'B' : 'A';
+    // Find which GK was in goal for the conceding team at this time
+    const seg = (gkRotation[g.half] || []).find(s =>
+      s.team === concedingTeam &&
+      s.fromSecs <= g.tsSecsRaw &&
+      (s.toSecs === 9999 || s.toSecs >= g.tsSecsRaw)
+    );
+    if (seg) {
+      if (!gkGoalsConceded[seg.player]) gkGoalsConceded[seg.player] = 0;
+      gkGoalsConceded[seg.player]++;
+    }
+  });
+
   const scoreTimeline = buildScoreTimeline(goalEvents, halfDur);
 
   const playerStats = {};
   Object.entries(byPlayer).forEach(([player, events]) => {
     playerStats[player] = {
-      peakWindow:        computePeakWindow(events, 300),
-      fatigue:           computeFatigueTrids(events, halfDur, h2OffsetSecs),
-      clutch:            computeClutchStats(events, halfDur, 300),
-      leadStats:         computeLeadStats(events, scoreTimeline, player),
-      shotTiming:        computeShotTiming(events, halfDur),
-      firstAction:       events.reduce((min, e) => Math.min(min, e.t), Infinity),
-      pressureResponse:  computePressureResponse(events, goalEvents, player),
+      peakWindow:       computePeakWindow(events, 300),
+      fatigue:          computeFatigueTrids(events, halfDur, h2OffsetSecs),
+      clutch:           computeClutchStats(events, halfDur, 300),
+      leadStats:        computeLeadStats(events, scoreTimeline, player),
+      shotTiming:       computeShotTiming(events, halfDur),
+      firstAction:      events.reduce((min, e) => Math.min(min, e.t), Infinity),
+      pressureResponse: computePressureResponse(events, goalEvents, player),
+      gkTimeSecs:       gkTime[player] || 0,
+      gkSpells:         gkSpells[player] || [],
+      gkGoalsConceded:  gkGoalsConceded[player] || 0,
     };
   });
 
-  return { playerStats, halfDur, h2OffsetSecs, scoreTimeline };
+  // Add GK stats for players who were in goal but may have no other events
+  Object.keys(gkTime).forEach(player => {
+    if (!playerStats[player]) {
+      playerStats[player] = {
+        peakWindow: { count: 0, startSecs: 0, half: '1H' },
+        fatigue: { buckets: [], labels: [], htBucket: null, trend: '→', '1H': [0], '2H': [0] },
+        clutch: { '1H': 0, '2H': 0 },
+        leadStats: { leading: 0, trailing: 0, level: 0 },
+        shotTiming: {}, firstAction: Infinity,
+        pressureResponse: { total: 0, goals: 0, opps: 0 },
+        gkTimeSecs: gkTime[player],
+        gkSpells: gkSpells[player] || [],
+        gkGoalsConceded: gkGoalsConceded[player] || 0,
+      };
+    }
+  });
+
+  return { playerStats, halfDur, h2OffsetSecs, gkTime, gkGoalsConceded, scoreTimeline };
+}
+
+// ── Player event log aggregation ─────────────────────────────────────────────
+// Reads all stored event logs from localStorage and aggregates time-based
+// stats for a given player across all their matches.
+function getPlayerEventStats(playerName) {
+  let logs;
+  try { logs = JSON.parse(localStorage.getItem('aero_event_logs') || '{}'); }
+  catch(e) { return null; }
+
+  const matches = Object.entries(logs); // [matchId, { events, gkRotation, timeStats, date }]
+  if (!matches.length) return null;
+
+  // Aggregate across all matches
+  let totalGkSecs = 0, totalGkGoalsConceded = 0, gkMatches = 0;
+  let totalClutch1H = 0, totalClutch2H = 0, clutchMatches = 0;
+  let pressureTotal = 0, pressureOpps = 0;
+  const peakWindows = []; // { count, startSecs, half, matchId, date }
+  const fatigueAll = []; // { trend, h1Avg, h2Avg }
+  const leadStats = { leading: 0, trailing: 0, level: 0 };
+  let matchesWithData = 0;
+
+  matches.forEach(([matchId, log]) => {
+    const ps = log.timeStats?.playerStats?.[playerName];
+    if (!ps) return;
+    matchesWithData++;
+
+    // GK time
+    if (ps.gkTimeSecs > 0) {
+      totalGkSecs += ps.gkTimeSecs;
+      totalGkGoalsConceded += ps.gkGoalsConceded || 0;
+      gkMatches++;
+    }
+
+    // Clutch
+    const c1 = ps.clutch?.['1H'] || 0, c2 = ps.clutch?.['2H'] || 0;
+    if (c1 + c2 > 0) { totalClutch1H += c1; totalClutch2H += c2; clutchMatches++; }
+
+    // Pressure response
+    pressureTotal += ps.pressureResponse?.total || 0;
+    pressureOpps  += ps.pressureResponse?.opps  || 0;
+
+    // Peak window
+    if (ps.peakWindow?.count > 0) {
+      peakWindows.push({ ...ps.peakWindow, matchId, date: log.date });
+    }
+
+    // Fatigue trend
+    const f = ps.fatigue;
+    if (f?.buckets?.length) {
+      const htB = f.htBucket ?? Math.floor(f.buckets.length / 2);
+      const h1v = f.buckets.slice(0, htB);
+      const h2v = f.buckets.slice(htB);
+      const a1 = h1v.length ? h1v.reduce((s,v)=>s+v,0)/h1v.length : 0;
+      const a2 = h2v.length ? h2v.reduce((s,v)=>s+v,0)/h2v.length : 0;
+      fatigueAll.push({ trend: f.trend, h1Avg: a1, h2Avg: a2 });
+    }
+
+    // Lead/trail
+    if (ps.leadStats) {
+      leadStats.leading  += ps.leadStats.leading  || 0;
+      leadStats.trailing += ps.leadStats.trailing || 0;
+      leadStats.level    += ps.leadStats.level    || 0;
+    }
+  });
+
+  if (!matchesWithData) return null;
+
+  // Best ever peak window
+  const bestPeak = peakWindows.sort((a,b) => b.count - a.count)[0] || null;
+
+  // Dominant fatigue trend (most common direction)
+  const trendCounts = { '↗': 0, '↘': 0, '→': 0 };
+  fatigueAll.forEach(f => trendCounts[f.trend]++);
+  const dominantTrend = Object.entries(trendCounts).sort((a,b)=>b[1]-a[1])[0]?.[0] || '→';
+  const avgH1 = fatigueAll.length ? fatigueAll.reduce((s,f)=>s+f.h1Avg,0)/fatigueAll.length : 0;
+  const avgH2 = fatigueAll.length ? fatigueAll.reduce((s,f)=>s+f.h2Avg,0)/fatigueAll.length : 0;
+
+  // GK stats per 90
+  const gkMinutes = totalGkSecs / 60;
+  const gkConcededPer90 = gkMatches > 0 ? (totalGkGoalsConceded / gkMinutes * 90) : null;
+
+  const leadTotal = leadStats.leading + leadStats.trailing + leadStats.level;
+  return {
+    matchesWithData,
+    gkMatches, gkMinutes: Math.round(gkMinutes), gkGoalsConceded: totalGkGoalsConceded, gkConcededPer90,
+    clutchTotal: totalClutch1H + totalClutch2H, clutchPerMatch: clutchMatches > 0 ? (totalClutch1H + totalClutch2H) / clutchMatches : 0,
+    pressureAvg: pressureOpps > 0 ? pressureTotal / pressureOpps : 0,
+    bestPeak, dominantTrend, avgH1, avgH2,
+    leadStats, leadTotal,
+    leadPct:   leadTotal ? Math.round(leadStats.leading  / leadTotal * 100) : 0,
+    trailPct:  leadTotal ? Math.round(leadStats.trailing / leadTotal * 100) : 0,
+  };
 }
 
 function buildScoreTimeline(goalEvents, halfDur) {
@@ -11096,44 +11339,36 @@ function computePeakWindow(events, windowSecs) {
 }
 
 function computeFatigueTrids(events, halfDur, h2OffsetSecs) {
-  // Bucket ALL events on the raw continuous timeline (0:00 → end of match)
-  // 5-minute buckets, max 12 buckets (60 min cap)
   const BUCKET_SECS = 300; // 5 minutes
-  const MAX_BUCKETS = 12;
-  const buckets = new Array(MAX_BUCKETS).fill(0);
-  const labels  = Array.from({length: MAX_BUCKETS}, (_, i) => `${i*5}–${(i+1)*5}'`);
+  // Derive actual match end from last event — no arbitrary cap
+  const times = events.map(e => e.tsSecsRaw).filter(t => t != null && !isNaN(t) && t >= 0);
+  if (!times.length) return { buckets: [], labels: [], htBucket: null, trend: '→', '1H': [0], '2H': [0] };
+  const matchEndSecs = Math.max(...times);
+  const numBuckets = Math.ceil(matchEndSecs / BUCKET_SECS) + 1; // +1 so last event isn't trimmed
+  const buckets = new Array(numBuckets).fill(0);
 
   events.forEach(e => {
     const t = e.tsSecsRaw;
     if (t == null || isNaN(t) || t < 0) return;
-    const idx = Math.min(Math.floor(t / BUCKET_SECS), MAX_BUCKETS - 1);
+    const idx = Math.min(Math.floor(t / BUCKET_SECS), numBuckets - 1);
     buckets[idx]++;
   });
 
-  // Trim trailing empty buckets (but keep at least 1)
+  // Trim trailing empty buckets
   let last = buckets.length - 1;
   while (last > 0 && buckets[last] === 0) last--;
   const trimmed = buckets.slice(0, last + 1);
-  const trimmedLabels = labels.slice(0, last + 1);
+  const labels  = trimmed.map((_, i) => `${i*5}–${(i+1)*5}'`);
 
-  // HT boundary bucket index
   const htBucket = h2OffsetSecs != null ? Math.floor(h2OffsetSecs / BUCKET_SECS) : null;
-
-  // Trend: compare avg activity in 2nd half of match vs 1st half of match
-  // Uses the HT boundary to split — more meaningful than first vs last bucket
-  const splitAt = htBucket ?? Math.floor(trimmed.length / 2);
-  const firstHalf = trimmed.slice(0, splitAt);
-  const secondHalf = trimmed.slice(splitAt);
-  const avg1 = firstHalf.length  ? firstHalf.reduce((s,v)=>s+v,0)  / firstHalf.length  : 0;
-  const avg2 = secondHalf.length ? secondHalf.reduce((s,v)=>s+v,0) / secondHalf.length : 0;
-  // threshold of 15% change to show trend
+  const splitAt  = htBucket ?? Math.floor(trimmed.length / 2);
+  const h1Vals   = trimmed.slice(0, splitAt);
+  const h2Vals   = trimmed.slice(splitAt);
+  const avg1 = h1Vals.length ? h1Vals.reduce((s,v)=>s+v,0) / h1Vals.length : 0;
+  const avg2 = h2Vals.length ? h2Vals.reduce((s,v)=>s+v,0) / h2Vals.length : 0;
   const trend = avg2 > avg1 * 1.15 ? '↗' : avg2 < avg1 * 0.85 ? '↘' : '→';
 
-  // Keep 1H/2H for other stats
-  const h1 = events.filter(e => e.half === '1H').length;
-  const h2 = events.filter(e => e.half === '2H').length;
-
-  return { buckets: trimmed, labels: trimmedLabels, htBucket, trend, '1H': [h1], '2H': [h2] };
+  return { buckets: trimmed, labels, htBucket, trend, '1H': [events.filter(e=>e.half==='1H').length], '2H': [events.filter(e=>e.half==='2H').length] };
 }
 
 function computeClutchStats(events, halfDur, finalSecs) {
