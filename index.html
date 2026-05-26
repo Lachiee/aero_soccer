@@ -11023,12 +11023,12 @@ function parseNewFormatCSV(text) {
   });
 
   // Compute time-based stats from event log
-  const timeStats = computeTimeStats(eventRows, goalEvents, gkRotation);
+  const timeStats = computeTimeStats(eventRows, goalEvents, gkRotation, h2OffsetSecs);
 
   return { eventRows, goalEvents, gkRotation, resolvedTeams, summary1H, summary2H, summaryFull, timeStats, allPlayers: [...allEventPlayers].sort(), swappedPlayers, h2OffsetSecs };
 }
 
-function computeTimeStats(eventRows, goalEvents, gkRotation) {
+function computeTimeStats(eventRows, goalEvents, gkRotation, h2OffsetSecs) {
   // Use normalised half-relative timestamps throughout
   const byPlayer = {};
   eventRows.forEach(r => {
@@ -11053,7 +11053,7 @@ function computeTimeStats(eventRows, goalEvents, gkRotation) {
   Object.entries(byPlayer).forEach(([player, events]) => {
     playerStats[player] = {
       peakWindow:        computePeakWindow(events, 300),
-      fatigue:           computeFatigueTrids(events, halfDur),
+      fatigue:           computeFatigueTrids(events, halfDur, h2OffsetSecs),
       clutch:            computeClutchStats(events, halfDur, 300),
       leadStats:         computeLeadStats(events, scoreTimeline, player),
       shotTiming:        computeShotTiming(events, halfDur),
@@ -11062,7 +11062,7 @@ function computeTimeStats(eventRows, goalEvents, gkRotation) {
     };
   });
 
-  return { playerStats, halfDur, scoreTimeline };
+  return { playerStats, halfDur, h2OffsetSecs, scoreTimeline };
 }
 
 function buildScoreTimeline(goalEvents, halfDur) {
@@ -11095,21 +11095,26 @@ function computePeakWindow(events, windowSecs) {
   return { count: best, startSecs: bestStart, half: bestHalf };
 }
 
-function computeFatigueTrids(events, halfDur) {
-  // Use fixed 5-minute buckets based on actual half duration
-  // halfDur values are in seconds — convert to minutes for bucket count
-  const result = {};
-  ['1H','2H'].forEach(half => {
-    const durMins = Math.ceil(halfDur[half] / 60); // actual half length in minutes
-    const bucketMins = 5;
-    const numBuckets = Math.max(1, Math.ceil(durMins / bucketMins));
-    const halveEvents = events.filter(e => e.half === half);
-    result[half] = Array.from({ length: numBuckets }, (_, i) => {
-      const fromSecs = i * bucketMins * 60;
-      const toSecs   = (i + 1) * bucketMins * 60;
-      return halveEvents.filter(e => e.t >= fromSecs && e.t < toSecs).length;
-    });
-  });
+function computeFatigueTrids(events, halfDur, h2OffsetSecs) {
+  // Use 10-minute buckets on the continuous match timeline
+  // halfDur values are in seconds (raw, continuous)
+  const bucketMins = 10;
+  const bucketSecs = bucketMins * 60;
+  // Full match duration = last event timestamp (raw)
+  const allTimes = events.map(e => e.tsSecsRaw).filter(t => t > 0);
+  const matchEnd = allTimes.length ? Math.max(...allTimes) : 3600;
+  const numBuckets = Math.ceil(matchEnd / bucketSecs) || 1;
+
+  const result = { buckets: [], labels: [] };
+  for (let i = 0; i < numBuckets; i++) {
+    const from = i * bucketSecs;
+    const to   = (i + 1) * bucketSecs;
+    result.buckets.push(events.filter(e => e.tsSecsRaw >= from && e.tsSecsRaw < to).length);
+    result.labels.push(`${i*bucketMins}–${(i+1)*bucketMins}'`);
+  }
+  // Also keep per-half breakdown for other stats
+  result['1H'] = result.buckets.slice(0, Math.ceil((h2OffsetSecs || matchEnd/2) / bucketSecs));
+  result['2H'] = result.buckets.slice(result['1H'].length);
   return result;
 }
 
@@ -11505,39 +11510,19 @@ function showTimelinePreview(timeStats, allPlayers) {
     if (total > 0) insights.push({ icon:'⚡', label:'Strongest when chasing', text:`${top} — ${l.trailing} stats while trailing (${Math.round(l.trailing/total*100)}% of output)`});
   }
 
-  // Determine which halves have event data
-  const has1H = Object.values(playerStats).some(s => (s.fatigue?.['1H']||[]).some(v=>v>0));
-  const has2H = Object.values(playerStats).some(s => (s.fatigue?.['2H']||[]).some(v=>v>0));
+  // Derive display structure from actual fatigue buckets
+  const samplePlayer = allPlayers.find(p => playerStats[p]?.fatigue?.buckets?.length);
+  const allLabels    = samplePlayer ? playerStats[samplePlayer].fatigue.labels   : [];
+  const h1BucketCount = samplePlayer ? (playerStats[samplePlayer].fatigue['1H']?.length || 0) : 0;
 
-  // Derive bucket counts from the actual fatigue arrays — ground truth, no recalculation
-  const bucketMins = 5;
-  const samplePlayer = allPlayers.find(p => playerStats[p]?.fatigue);
-  const h1Buckets = samplePlayer ? (playerStats[samplePlayer].fatigue['1H']?.length || 1) : 1;
-  const h2Buckets = samplePlayer ? (playerStats[samplePlayer].fatigue['2H']?.length || 1) : 1;
-  const bucketLabel = (i) => `${i*bucketMins}–${(i+1)*bucketMins}'`;
-
-  // Per-player fatigue table
   const fatigueTable = allPlayers
-    .filter(p => playerStats[p]?.fatigue)
-    .map(p => {
-      const f = playerStats[p].fatigue;
-      const h1 = (f['1H'] || []).slice(0, h1Buckets);
-      const h2 = (f['2H'] || []).slice(0, h2Buckets);
-      while (h1.length < h1Buckets) h1.push(0);
-      while (h2.length < h2Buckets) h2.push(0);
-      return { p, h1, h2 };
-    })
-    .filter(r => r.h1.some(v=>v>0) || r.h2.some(v=>v>0));
+    .filter(p => playerStats[p]?.fatigue?.buckets?.some(v=>v>0))
+    .map(p => ({ p, buckets: playerStats[p].fatigue.buckets }));
 
   const content = document.getElementById('weekly-timeline-content');
-  const tdS = 'padding:5px 8px;font-size:.75rem;border-bottom:1px solid rgba(37,53,39,.3);text-align:center';
-  const thS = 'padding:5px 8px;font-size:.65rem;color:var(--muted);letter-spacing:.5px;text-transform:uppercase;border-bottom:1px solid var(--border);text-align:center;white-space:nowrap;font-family:"Barlow Condensed",sans-serif';
-
-  const coverageNote = (!has1H || !has2H)
-    ? `<div style="font-size:.72rem;color:var(--amber,#f59e0b);margin-bottom:10px;padding:7px 10px;background:rgba(251,191,36,.07);border:1px solid rgba(251,191,36,.2);border-radius:6px">
-        ⚠ Event log only contains ${has1H ? '1st half' : '2nd half'} data — ${has1H ? '2H' : '1H'} columns show zero because no timestamped events were recorded for that half.
-       </div>`
-    : '';
+  const tdS = 'padding:5px 6px;font-size:.75rem;border-bottom:1px solid rgba(37,53,39,.3);text-align:center';
+  const thS = 'padding:5px 6px;font-size:.62rem;color:var(--muted);letter-spacing:.3px;text-transform:uppercase;border-bottom:1px solid var(--border);text-align:center;white-space:nowrap;font-family:"Barlow Condensed",sans-serif';
+  const thHT = `padding:5px 3px;font-size:.6rem;color:var(--amber,#f59e0b);border-bottom:1px solid var(--border);text-align:center;font-family:"Barlow Condensed",sans-serif;border-left:2px solid rgba(251,191,36,.4)`;
 
   content.innerHTML = `
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px;margin-bottom:18px">
@@ -11547,33 +11532,39 @@ function showTimelinePreview(timeStats, allPlayers) {
           <div style="font-size:.85rem;font-weight:600;color:var(--text)">${ins.text}</div>
         </div>`).join('')}
     </div>
-    <div style="font-family:'Barlow Condensed',sans-serif;font-size:.7rem;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:8px">Activity by 5-Minute Window</div>
-    ${coverageNote}
+    <div style="font-family:'Barlow Condensed',sans-serif;font-size:.7rem;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:8px">Activity by 10-Minute Window</div>
     <div style="overflow-x:auto">
-    <table style="border-collapse:collapse;min-width:300px;width:100%">
+    <table style="border-collapse:collapse;width:100%">
       <thead><tr>
         <th style="${thS};text-align:left">Player</th>
-        ${has1H ? Array.from({length:h1Buckets},(_,i)=>`<th style="${thS}">1H ${bucketLabel(i)}</th>`).join('') : ''}
-        ${has2H ? Array.from({length:h2Buckets},(_,i)=>`<th style="${thS}">2H ${bucketLabel(i)}</th>`).join('') : ''}
+        ${allLabels.map((lbl, i) => i === h1BucketCount
+          ? `<th style="${thHT}">HT</th><th style="${thS}">${lbl}</th>`
+          : `<th style="${thS}">${lbl}</th>`
+        ).join('')}
         <th style="${thS}">Trend</th>
       </tr></thead>
       <tbody>
-        ${fatigueTable.map(({p, h1, h2}) => {
-          const activeCols = [...(has1H ? h1 : []), ...(has2H ? h2 : [])];
-          const mx = Math.max(...activeCols, 1);
-          const bar = v => {
+        ${fatigueTable.map(({p, buckets}) => {
+          const mx = Math.max(...buckets, 1);
+          const bar = (v, i) => {
             const pct = Math.round(v/mx*100);
             const col = pct > 66 ? 'var(--green)' : pct > 33 ? 'var(--amber,#f59e0b)' : 'var(--muted)';
-            return `<td style="${tdS}"><div style="display:inline-flex;align-items:center;gap:4px"><div style="width:${Math.max(pct*.3,2)}px;height:6px;background:${col};border-radius:2px"></div><span style="font-size:.78rem;${v>0?'font-weight:600':''}">${v}</span></div></td>`;
+            const htBorder = i === h1BucketCount ? 'border-left:2px solid rgba(251,191,36,.4);' : '';
+            return `<td style="${tdS};${htBorder}"><div style="display:inline-flex;align-items:center;gap:3px">
+              <div style="width:${Math.max(pct*.25,2)}px;height:5px;background:${col};border-radius:2px"></div>
+              <span style="font-size:.75rem;${v>0?'font-weight:600':''}">${v}</span>
+            </div></td>`;
           };
-          const first = has1H ? h1[0] : h2[0];
-          const last  = has2H ? h2[h2.length-1] : h1[h1.length-1];
+          const first = buckets[0] || 0;
+          const last  = buckets[buckets.length-1] || 0;
           const trend = last > first ? '↗' : last < first ? '↘' : '→';
           const trendCol = trend==='↗'?'var(--green)':trend==='↘'?'rgba(248,113,113,.7)':'var(--muted)';
           return `<tr>
             <td style="${tdS};text-align:left;font-weight:600">${p}</td>
-            ${has1H ? h1.map(v=>bar(v)).join('') : ''}
-            ${has2H ? h2.map(v=>bar(v)).join('') : ''}
+            ${buckets.map((v,i) => {
+              const htCell = i === h1BucketCount ? `<td style="${tdS};border-left:2px solid rgba(251,191,36,.4);color:var(--amber,#f59e0b);font-size:.6rem;padding:5px 2px">HT</td>` : '';
+              return htCell + bar(v, i);
+            }).join('')}
             <td style="${tdS};color:${trendCol};font-size:1.1rem">${trend}</td>
           </tr>`;
         }).join('')}
