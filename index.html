@@ -10900,9 +10900,10 @@ function parseNewFormatCSV(text) {
     if (!player || !event || !ts) continue;
 
     const tsSecsRaw = (() => {
-      const parts = ts.split(':');
-      if (parts.length === 2) return parseInt(parts[0]) * 60 + parseInt(parts[1]);
-      if (parts.length === 3) return parseInt(parts[0]) * 3600 + parseInt(parts[1]) * 60 + parseInt(parts[2]);
+      const clean = ts.replace(/['"]/g, '');
+      const parts = clean.split(':');
+      if (parts.length === 2) return parseInt(parts[0]) * 60 + parseFloat(parts[1]);
+      if (parts.length === 3) return parseInt(parts[0]) * 3600 + parseInt(parts[1]) * 60 + parseFloat(parts[2]);
       return 0;
     })();
 
@@ -10918,13 +10919,40 @@ function parseNewFormatCSV(text) {
     });
   }
 
+  // Find 2H start offset from "2nd Half Started" marker (or first 2H event)
+  const halfStartMarker = eventRows.find(r => r.event === '2nd Half Started' && r.half === '1H');
+  const firstH2Event    = eventRows.find(r => r.half === '2H');
+  const h2OffsetSecs = halfStartMarker
+    ? halfStartMarker.tsSecsRaw
+    : (firstH2Event ? firstH2Event.tsSecsRaw : 0);
+
+  // Normalise all 2H timestamps to be half-relative (0-based)
+  eventRows.forEach(r => {
+    if (r.half === '2H' && h2OffsetSecs > 0) {
+      r.tsSecsNorm = Math.max(0, r.tsSecsRaw - h2OffsetSecs);
+    } else {
+      r.tsSecsNorm = r.tsSecsRaw;
+    }
+  });
+
+  // Handle Team Swap events — update player teams for 2H
+  const teamSwaps = eventRows.filter(r => r.event === 'Team Swap');
+  const swappedPlayers = new Set(teamSwaps.map(r => r.player));
+
   // Build per-player per-half team map from event log
-  const playerTeams = {}; // player → { h1: Set, h2: Set }
+  const playerTeams = {};
   eventRows.forEach(r => {
     if (!r.player || !r.team || r.team === '-') return;
+    if (r.event === 'Team Swap' || r.event === 'GK On' || r.event === 'GK Removed' || r.event === '2nd Half Started') return;
     if (!playerTeams[r.player]) playerTeams[r.player] = { h1: new Set(), h2: new Set() };
     if (r.half === '1H') playerTeams[r.player].h1.add(r.team);
     if (r.half === '2H') playerTeams[r.player].h2.add(r.team);
+  });
+
+  // Apply team swaps — the Team Swap event's team field is the new team for 2H
+  teamSwaps.forEach(r => {
+    if (!playerTeams[r.player]) playerTeams[r.player] = { h1: new Set(), h2: new Set() };
+    playerTeams[r.player].h2 = new Set([r.team]);
   });
 
   // Resolve team per player per half (most common if multiple)
@@ -10997,89 +11025,83 @@ function parseNewFormatCSV(text) {
   // Compute time-based stats from event log
   const timeStats = computeTimeStats(eventRows, goalEvents, gkRotation);
 
-  return { eventRows, goalEvents, gkRotation, resolvedTeams, summary1H, summary2H, summaryFull, timeStats, allPlayers: [...allEventPlayers].sort() };
+  return { eventRows, goalEvents, gkRotation, resolvedTeams, summary1H, summary2H, summaryFull, timeStats, allPlayers: [...allEventPlayers].sort(), swappedPlayers, h2OffsetSecs };
 }
 
 function computeTimeStats(eventRows, goalEvents, gkRotation) {
-  // Group events by player
+  // Use normalised half-relative timestamps throughout
   const byPlayer = {};
   eventRows.forEach(r => {
-    if (!r.player || r.event === 'GK On' || r.event === 'GK Removed') return;
+    if (!r.player || r.event === 'GK On' || r.event === 'GK Removed' ||
+        r.event === '2nd Half Started' || r.event === 'Team Swap') return;
     if (!byPlayer[r.player]) byPlayer[r.player] = [];
-    byPlayer[r.player].push(r);
+    byPlayer[r.player].push({ ...r, t: r.tsSecsNorm ?? r.tsSecsRaw });
   });
 
-  // Find the match duration per half
+  // Half durations from normalised timestamps
   const maxSecs = { '1H': 0, '2H': 0 };
   eventRows.forEach(r => {
-    if (r.half === '1H' && r.tsSecsRaw > maxSecs['1H']) maxSecs['1H'] = r.tsSecsRaw;
-    if (r.half === '2H' && r.tsSecsRaw > maxSecs['2H']) maxSecs['2H'] = r.tsSecsRaw;
+    const t = r.tsSecsNorm ?? r.tsSecsRaw;
+    if (r.half === '1H' && t > maxSecs['1H']) maxSecs['1H'] = t;
+    if (r.half === '2H' && t > maxSecs['2H']) maxSecs['2H'] = t;
   });
   const halfDur = { '1H': maxSecs['1H'] || 1, '2H': maxSecs['2H'] || 1 };
 
-  // Score timeline — needed for "playing with/against lead" analysis
   const scoreTimeline = buildScoreTimeline(goalEvents, halfDur);
 
   const playerStats = {};
   Object.entries(byPlayer).forEach(([player, events]) => {
-    const s = {
-      // Momentum: best 5-minute window (total stats in any 300s span)
-      peakWindow: computePeakWindow(events, 300),
-      // Fatigue: stat rate in each third of each half
-      fatigue: computeFatigueTrids(events, halfDur),
-      // Clutch: stats in final 5 mins of each half
-      clutch: computeClutchStats(events, halfDur, 300),
-      // Lead/trail performance
-      leadStats: computeLeadStats(events, scoreTimeline, player),
-      // Shot timing distribution
-      shotTiming: computeShotTiming(events, halfDur),
-      // First action timestamp
-      firstAction: events.reduce((min, e) => Math.min(min, e.tsSecsRaw), Infinity),
-      // Response stats: activity in 90s after a goal conceded
-      pressureResponse: computePressureResponse(events, goalEvents, player),
+    playerStats[player] = {
+      peakWindow:        computePeakWindow(events, 300),
+      fatigue:           computeFatigueTrids(events, halfDur),
+      clutch:            computeClutchStats(events, halfDur, 300),
+      leadStats:         computeLeadStats(events, scoreTimeline, player),
+      shotTiming:        computeShotTiming(events, halfDur),
+      firstAction:       events.reduce((min, e) => Math.min(min, e.t), Infinity),
+      pressureResponse:  computePressureResponse(events, goalEvents, player),
     };
-    playerStats[player] = s;
   });
 
   return { playerStats, halfDur, scoreTimeline };
 }
 
 function buildScoreTimeline(goalEvents, halfDur) {
-  // Returns sorted array of { secs, halfAbsSecs, scoreA, scoreB }
   let sA = 0, sB = 0;
   const timeline = [{ secs: 0, halfAbsSecs: 0, scoreA: 0, scoreB: 0 }];
   const sorted = [...goalEvents].sort((a, b) => {
     const hOrd = a.half === b.half ? 0 : a.half < b.half ? -1 : 1;
-    return hOrd || a.tsSecsRaw - b.tsSecsRaw;
+    const tA = a.tsSecsNorm ?? a.tsSecsRaw;
+    const tB = b.tsSecsNorm ?? b.tsSecsRaw;
+    return hOrd || tA - tB;
   });
   sorted.forEach(g => {
     if (g.team === 'A') sA++; else sB++;
-    const abs = (g.half === '2H' ? halfDur['1H'] : 0) + g.tsSecsRaw;
-    timeline.push({ secs: g.tsSecsRaw, half: g.half, halfAbsSecs: abs, scoreA: sA, scoreB: sB, goalTeam: g.team });
+    const t = g.tsSecsNorm ?? g.tsSecsRaw;
+    const abs = (g.half === '2H' ? halfDur['1H'] : 0) + t;
+    timeline.push({ secs: t, half: g.half, halfAbsSecs: abs, scoreA: sA, scoreB: sB, goalTeam: g.team });
   });
   return timeline;
 }
 
 function computePeakWindow(events, windowSecs) {
-  if (!events.length) return { count: 0, start: 0, half: '1H' };
-  const statEvents = events.filter(e => e.event !== 'GK On' && e.event !== 'GK Removed');
+  if (!events.length) return { count: 0, startSecs: 0, half: '1H' };
+  const statEvents = events.filter(e => e.event !== 'GK On' && e.event !== 'GK Removed' && e.event !== 'Team Swap' && e.event !== '2nd Half Started');
   let best = 0, bestStart = 0, bestHalf = '1H';
-  statEvents.forEach((e, i) => {
-    const windowEnd = e.tsSecsRaw + windowSecs;
-    const count = statEvents.filter(e2 => e2.half === e.half && e2.tsSecsRaw >= e.tsSecsRaw && e2.tsSecsRaw < windowEnd).length;
-    if (count > best) { best = count; bestStart = e.tsSecsRaw; bestHalf = e.half; }
+  statEvents.forEach(e => {
+    const windowEnd = e.t + windowSecs;
+    const count = statEvents.filter(e2 => e2.half === e.half && e2.t >= e.t && e2.t < windowEnd).length;
+    if (count > best) { best = count; bestStart = e.t; bestHalf = e.half; }
   });
   return { count: best, startSecs: bestStart, half: bestHalf };
 }
 
 function computeFatigueTrids(events, halfDur) {
-  // Split each half into 3 equal thirds, count stats per third
   const result = {};
   ['1H','2H'].forEach(half => {
     const dur = halfDur[half];
     const third = dur / 3;
     const halveEvents = events.filter(e => e.half === half);
-    result[half] = [0,1,2].map(t => halveEvents.filter(e => e.tsSecsRaw >= t*third && e.tsSecsRaw < (t+1)*third).length);
+    result[half] = [0,1,2].map(t => halveEvents.filter(e => e.t >= t*third && e.t < (t+1)*third).length);
   });
   return result;
 }
@@ -11088,25 +11110,21 @@ function computeClutchStats(events, halfDur, finalSecs) {
   const result = {};
   ['1H','2H'].forEach(half => {
     const dur = halfDur[half];
-    result[half] = events.filter(e => e.half === half && e.tsSecsRaw >= dur - finalSecs).length;
+    result[half] = events.filter(e => e.half === half && e.t >= dur - finalSecs).length;
   });
   return result;
 }
 
 function computeLeadStats(events, scoreTimeline, player) {
-  // For each event, look up score at that time and classify as leading/trailing/level
   const counts = { leading: 0, trailing: 0, level: 0 };
   events.forEach(e => {
-    // Find score just before this event
-    const abs = (e.half === '2H' ? (scoreTimeline[1]?.halfAbsSecs || 0) : 0) + e.tsSecsRaw;
     let scoreA = 0, scoreB = 0;
     for (const entry of scoreTimeline) {
-      if (entry.halfAbsSecs <= abs) { scoreA = entry.scoreA; scoreB = entry.scoreB; }
+      if (entry.halfAbsSecs <= e.t) { scoreA = entry.scoreA; scoreB = entry.scoreB; }
       else break;
     }
-    const teamAtTime = e.team;
-    const teamScore = teamAtTime === 'A' ? scoreA : scoreB;
-    const oppScore  = teamAtTime === 'A' ? scoreB : scoreA;
+    const teamScore = e.team === 'A' ? scoreA : scoreB;
+    const oppScore  = e.team === 'A' ? scoreB : scoreA;
     if (teamScore > oppScore) counts.leading++;
     else if (teamScore < oppScore) counts.trailing++;
     else counts.level++;
@@ -11115,11 +11133,10 @@ function computeLeadStats(events, scoreTimeline, player) {
 }
 
 function computeShotTiming(events, halfDur) {
-  // Bucket shots into 5-min windows across the match
   const shots = events.filter(e => e.event === 'On Target' || e.event === 'Off Target' || e.event === 'Goals');
   const buckets = {};
   shots.forEach(e => {
-    const bucket = Math.floor(e.tsSecsRaw / 300) * 5; // 5-min bucket label in minutes
+    const bucket = Math.floor(e.t / 300) * 5;
     const key = `${e.half}-${bucket}`;
     buckets[key] = (buckets[key] || 0) + 1;
   });
@@ -11127,16 +11144,12 @@ function computeShotTiming(events, halfDur) {
 }
 
 function computePressureResponse(events, goalEvents, player) {
-  // Count stats in 90 seconds after the team conceded a goal
   const playerTeam = events[0]?.team || 'A';
   const concededGoals = goalEvents.filter(g => g.team !== playerTeam);
   let responseTotal = 0, responseGoals = 0;
   concededGoals.forEach(g => {
-    const responseWindow = events.filter(e =>
-      e.half === g.half &&
-      e.tsSecsRaw >= g.tsSecsRaw &&
-      e.tsSecsRaw < g.tsSecsRaw + 90
-    );
+    const gT = g.tsSecsNorm ?? g.tsSecsRaw;
+    const responseWindow = events.filter(e => e.half === g.half && e.t >= gT && e.t < gT + 90);
     responseTotal += responseWindow.length;
     responseGoals += responseWindow.filter(e => e.event === 'Goals').length;
   });
@@ -11168,10 +11181,13 @@ function newFormatFileSelected(input) {
       renderNewTeamAssignments();
 
       const el = document.getElementById('new-file-summary');
-      const e2 = _newFormatParsed.eventRows;
+      const evs = _newFormatParsed.eventRows;
       const goals = _newFormatParsed.goalEvents.length;
       const players = _newFormatParsed.allPlayers.length;
-      el.innerHTML = `<span style="color:var(--lime)">✓ ${e2.length} events</span> &nbsp;·&nbsp; ${goals} goals &nbsp;·&nbsp; ${players} players &nbsp;·&nbsp; ${[...(new Set(e2.map(r=>r.half).filter(Boolean)))].join(' + ')}`;
+      const halves = [...new Set(evs.map(r=>r.half).filter(Boolean))].sort().join(' + ');
+      const swaps = _newFormatParsed.swappedPlayers?.size || 0;
+      const offset = _newFormatParsed.h2OffsetSecs ? `· 2H starts at ${Math.floor(_newFormatParsed.h2OffsetSecs/60)}:${String(Math.round(_newFormatParsed.h2OffsetSecs%60)).padStart(2,'0')}` : '';
+      el.innerHTML = `<span style="color:var(--lime)">✓ ${evs.length} events</span> &nbsp;·&nbsp; ${goals} goals &nbsp;·&nbsp; ${players} players &nbsp;·&nbsp; ${halves} ${offset}${swaps ? ` &nbsp;·&nbsp; <span style="color:var(--amber,#f59e0b)">${swaps} team swap${swaps>1?'s':''} detected</span>` : ''}`;
       document.getElementById('new-file-info').style.display = '';
       document.getElementById('new-team-section').style.display = '';
       document.getElementById('new-generate-btn').disabled = false;
@@ -11462,6 +11478,10 @@ function showTimelinePreview(timeStats, allPlayers) {
     if (total > 0) insights.push({ icon:'⚡', label:'Strongest when chasing', text:`${top} — ${l.trailing} stats while trailing (${Math.round(l.trailing/total*100)}% of output)`});
   }
 
+  // Determine which halves have event data
+  const has1H = Object.values(playerStats).some(s => (s.fatigue?.['1H']||[]).some(v=>v>0));
+  const has2H = Object.values(playerStats).some(s => (s.fatigue?.['2H']||[]).some(v=>v>0));
+
   // Per-player fatigue table
   const fatigueTable = allPlayers
     .filter(p => playerStats[p]?.fatigue)
@@ -11476,6 +11496,12 @@ function showTimelinePreview(timeStats, allPlayers) {
   const tdS = 'padding:5px 8px;font-size:.75rem;border-bottom:1px solid rgba(37,53,39,.3);text-align:center';
   const thS = 'padding:5px 8px;font-size:.65rem;color:var(--muted);letter-spacing:.5px;text-transform:uppercase;border-bottom:1px solid var(--border);text-align:center;white-space:nowrap;font-family:"Barlow Condensed",sans-serif';
 
+  const coverageNote = (!has1H || !has2H)
+    ? `<div style="font-size:.72rem;color:var(--amber,#f59e0b);margin-bottom:10px;padding:7px 10px;background:rgba(251,191,36,.07);border:1px solid rgba(251,191,36,.2);border-radius:6px">
+        ⚠ Event log only contains ${has1H ? '1st half' : '2nd half'} data — ${has1H ? '2H' : '1H'} columns show zero because no timestamped events were recorded for that half.
+       </div>`
+    : '';
+
   content.innerHTML = `
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px;margin-bottom:18px">
       ${insights.map(ins => `
@@ -11485,29 +11511,32 @@ function showTimelinePreview(timeStats, allPlayers) {
         </div>`).join('')}
     </div>
     <div style="font-family:'Barlow Condensed',sans-serif;font-size:.7rem;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:8px">Activity by Third of Half</div>
+    ${coverageNote}
     <div style="overflow-x:auto">
-    <table style="border-collapse:collapse;min-width:500px;width:100%">
+    <table style="border-collapse:collapse;min-width:300px;width:100%">
       <thead><tr>
         <th style="${thS};text-align:left">Player</th>
-        <th style="${thS}">1H Early</th><th style="${thS}">1H Mid</th><th style="${thS}">1H Late</th>
-        <th style="${thS}">2H Early</th><th style="${thS}">2H Mid</th><th style="${thS}">2H Late</th>
+        ${has1H ? `<th style="${thS}">1H Early</th><th style="${thS}">1H Mid</th><th style="${thS}">1H Late</th>` : ''}
+        ${has2H ? `<th style="${thS}">2H Early</th><th style="${thS}">2H Mid</th><th style="${thS}">2H Late</th>` : ''}
         <th style="${thS}">Trend</th>
       </tr></thead>
       <tbody>
         ${fatigueTable.map(({p, h1, h2}) => {
-          const all = [...h1,...h2];
-          const mx = Math.max(...all, 1);
+          const activeCols = [...(has1H ? h1 : []), ...(has2H ? h2 : [])];
+          const mx = Math.max(...activeCols, 1);
           const bar = v => {
             const pct = Math.round(v/mx*100);
             const col = pct > 66 ? 'var(--green)' : pct > 33 ? 'var(--amber,#f59e0b)' : 'var(--muted)';
             return `<td style="${tdS}"><div style="display:inline-flex;align-items:center;gap:4px"><div style="width:${Math.max(pct*.3,2)}px;height:6px;background:${col};border-radius:2px"></div><span style="font-size:.78rem;${v>0?'font-weight:600':''}">${v}</span></div></td>`;
           };
-          // Trend arrow: compare first third to last third across whole game
-          const trend = (h1[2]+h2[2]) > (h1[0]+h2[0]) ? '↗' : (h1[2]+h2[2]) < (h1[0]+h2[0]) ? '↘' : '→';
+          const first = has1H ? h1[0] : h2[0];
+          const last  = has2H ? h2[2] : h1[2];
+          const trend = last > first ? '↗' : last < first ? '↘' : '→';
           const trendCol = trend==='↗'?'var(--green)':trend==='↘'?'rgba(248,113,113,.7)':'var(--muted)';
           return `<tr>
             <td style="${tdS};text-align:left;font-weight:600">${p}</td>
-            ${h1.map(v=>bar(v)).join('')}${h2.map(v=>bar(v)).join('')}
+            ${has1H ? h1.map(v=>bar(v)).join('') : ''}
+            ${has2H ? h2.map(v=>bar(v)).join('') : ''}
             <td style="${tdS};color:${trendCol};font-size:1.1rem">${trend}</td>
           </tr>`;
         }).join('')}
