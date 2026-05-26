@@ -11429,10 +11429,6 @@ function showTimelinePreview(timeStats, allPlayers) {
   if (!timeStats) return;
   const { playerStats, halfDur } = timeStats;
 
-  // Determine which halves have event data
-  const has1H = Object.values(playerStats).some(s => (s.fatigue?.['1H']||[]).some(v=>v>0));
-  const has2H = Object.values(playerStats).some(s => (s.fatigue?.['2H']||[]).some(v=>v>0));
-
   // Build insights list
   const insights = [];
 
@@ -11509,13 +11505,15 @@ function showTimelinePreview(timeStats, allPlayers) {
     if (total > 0) insights.push({ icon:'⚡', label:'Strongest when chasing', text:`${top} — ${l.trailing} stats while trailing (${Math.round(l.trailing/total*100)}% of output)`});
   }
 
-  // Build bucket labels from actual half durations (halfDur is in seconds)
+  // Determine which halves have event data
+  const has1H = Object.values(playerStats).some(s => (s.fatigue?.['1H']||[]).some(v=>v>0));
+  const has2H = Object.values(playerStats).some(s => (s.fatigue?.['2H']||[]).some(v=>v>0));
+
+  // Derive bucket counts from the actual fatigue arrays — ground truth, no recalculation
   const bucketMins = 5;
-  const bucketSize = bucketMins * 60; // 300 seconds
-  const h1DurMins = Math.ceil((timeStats.halfDur?.['1H'] || 1800) / 60);
-  const h2DurMins = Math.ceil((timeStats.halfDur?.['2H'] || 1800) / 60);
-  const h1Buckets = Math.max(1, Math.ceil(h1DurMins / bucketMins));
-  const h2Buckets = Math.max(1, Math.ceil(h2DurMins / bucketMins));
+  const samplePlayer = allPlayers.find(p => playerStats[p]?.fatigue);
+  const h1Buckets = samplePlayer ? (playerStats[samplePlayer].fatigue['1H']?.length || 1) : 1;
+  const h2Buckets = samplePlayer ? (playerStats[samplePlayer].fatigue['2H']?.length || 1) : 1;
   const bucketLabel = (i) => `${i*bucketMins}–${(i+1)*bucketMins}'`;
 
   // Per-player fatigue table
