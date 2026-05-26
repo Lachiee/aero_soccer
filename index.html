@@ -11096,19 +11096,19 @@ function computePeakWindow(events, windowSecs) {
 }
 
 function computeFatigueTrids(events, halfDur) {
-  // Use fixed 5-minute buckets rather than equal thirds
-  // This gives consistent, meaningful columns regardless of half length
+  // Use fixed 5-minute buckets based on actual half duration
+  // halfDur values are in seconds — convert to minutes for bucket count
   const result = {};
   ['1H','2H'].forEach(half => {
-    const dur = halfDur[half];
-    const bucketSize = 300; // 5 minutes in seconds
-    const numBuckets = Math.max(3, Math.ceil(dur / bucketSize));
+    const durMins = Math.ceil(halfDur[half] / 60); // actual half length in minutes
+    const bucketMins = 5;
+    const numBuckets = Math.max(1, Math.ceil(durMins / bucketMins));
     const halveEvents = events.filter(e => e.half === half);
-    result[half] = Array.from({ length: numBuckets }, (_, i) =>
-      halveEvents.filter(e => e.t >= i * bucketSize && e.t < (i + 1) * bucketSize).length
-    );
-    // Pad to at least 3 buckets
-    while (result[half].length < 3) result[half].push(0);
+    result[half] = Array.from({ length: numBuckets }, (_, i) => {
+      const fromSecs = i * bucketMins * 60;
+      const toSecs   = (i + 1) * bucketMins * 60;
+      return halveEvents.filter(e => e.t >= fromSecs && e.t < toSecs).length;
+    });
   });
   return result;
 }
@@ -11177,6 +11177,26 @@ function newFormatFileSelected(input) {
     try {
       _newFormatParsed = parseNewFormatCSV(e.target.result);
       if (!_newFormatParsed) { alert('Could not parse file — make sure it is the combined event log CSV format.'); return; }
+
+      // Auto-fill date: prefer one week after the last match in app data,
+      // fall back to date from filename
+      const dateInput = document.getElementById('new-weekly-date');
+      if (!dateInput.value) {
+        let autoDate = null;
+        if (typeof matchList !== 'undefined' && matchList.length) {
+          const lastDate = matchList.map(m => m.date).filter(Boolean).sort().pop();
+          if (lastDate) {
+            const d = new Date(lastDate);
+            d.setDate(d.getDate() + 7);
+            autoDate = d.toISOString().slice(0, 10);
+          }
+        }
+        if (!autoDate) {
+          const dateMatch = file.name.match(/(\d{4}-\d{2}-\d{2})/);
+          if (dateMatch) autoDate = dateMatch[1];
+        }
+        if (autoDate) dateInput.value = autoDate;
+      }
 
       // Pre-fill team assignments from resolved teams
       _newFormatTeams = {};
@@ -11489,15 +11509,14 @@ function showTimelinePreview(timeStats, allPlayers) {
     if (total > 0) insights.push({ icon:'⚡', label:'Strongest when chasing', text:`${top} — ${l.trailing} stats while trailing (${Math.round(l.trailing/total*100)}% of output)`});
   }
 
-  // Build bucket labels from actual half durations
-  const bucketSize = 300;
-  const h1Buckets = Math.max(3, Math.ceil((timeStats.halfDur?.['1H'] || 1800) / bucketSize));
-  const h2Buckets = Math.max(3, Math.ceil((timeStats.halfDur?.['2H'] || 1800) / bucketSize));
-  const bucketLabel = (i, bucketSize) => {
-    const start = i * bucketSize / 60;
-    const end   = (i + 1) * bucketSize / 60;
-    return `${start}–${end}'`;
-  };
+  // Build bucket labels from actual half durations (halfDur is in seconds)
+  const bucketMins = 5;
+  const bucketSize = bucketMins * 60; // 300 seconds
+  const h1DurMins = Math.ceil((timeStats.halfDur?.['1H'] || 1800) / 60);
+  const h2DurMins = Math.ceil((timeStats.halfDur?.['2H'] || 1800) / 60);
+  const h1Buckets = Math.max(1, Math.ceil(h1DurMins / bucketMins));
+  const h2Buckets = Math.max(1, Math.ceil(h2DurMins / bucketMins));
+  const bucketLabel = (i) => `${i*bucketMins}–${(i+1)*bucketMins}'`;
 
   // Per-player fatigue table
   const fatigueTable = allPlayers
@@ -11536,8 +11555,8 @@ function showTimelinePreview(timeStats, allPlayers) {
     <table style="border-collapse:collapse;min-width:300px;width:100%">
       <thead><tr>
         <th style="${thS};text-align:left">Player</th>
-        ${has1H ? Array.from({length:h1Buckets},(_,i)=>`<th style="${thS}">1H ${bucketLabel(i,bucketSize)}</th>`).join('') : ''}
-        ${has2H ? Array.from({length:h2Buckets},(_,i)=>`<th style="${thS}">2H ${bucketLabel(i,bucketSize)}</th>`).join('') : ''}
+        ${has1H ? Array.from({length:h1Buckets},(_,i)=>`<th style="${thS}">1H ${bucketLabel(i)}</th>`).join('') : ''}
+        ${has2H ? Array.from({length:h2Buckets},(_,i)=>`<th style="${thS}">2H ${bucketLabel(i)}</th>`).join('') : ''}
         <th style="${thS}">Trend</th>
       </tr></thead>
       <tbody>
