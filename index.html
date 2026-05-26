@@ -11096,12 +11096,19 @@ function computePeakWindow(events, windowSecs) {
 }
 
 function computeFatigueTrids(events, halfDur) {
+  // Use fixed 5-minute buckets rather than equal thirds
+  // This gives consistent, meaningful columns regardless of half length
   const result = {};
   ['1H','2H'].forEach(half => {
     const dur = halfDur[half];
-    const third = dur / 3;
+    const bucketSize = 300; // 5 minutes in seconds
+    const numBuckets = Math.max(3, Math.ceil(dur / bucketSize));
     const halveEvents = events.filter(e => e.half === half);
-    result[half] = [0,1,2].map(t => halveEvents.filter(e => e.t >= t*third && e.t < (t+1)*third).length);
+    result[half] = Array.from({ length: numBuckets }, (_, i) =>
+      halveEvents.filter(e => e.t >= i * bucketSize && e.t < (i + 1) * bucketSize).length
+    );
+    // Pad to at least 3 buckets
+    while (result[half].length < 3) result[half].push(0);
   });
   return result;
 }
@@ -11402,6 +11409,10 @@ function showTimelinePreview(timeStats, allPlayers) {
   if (!timeStats) return;
   const { playerStats, halfDur } = timeStats;
 
+  // Determine which halves have event data
+  const has1H = Object.values(playerStats).some(s => (s.fatigue?.['1H']||[]).some(v=>v>0));
+  const has2H = Object.values(playerStats).some(s => (s.fatigue?.['2H']||[]).some(v=>v>0));
+
   // Build insights list
   const insights = [];
 
@@ -11478,16 +11489,25 @@ function showTimelinePreview(timeStats, allPlayers) {
     if (total > 0) insights.push({ icon:'⚡', label:'Strongest when chasing', text:`${top} — ${l.trailing} stats while trailing (${Math.round(l.trailing/total*100)}% of output)`});
   }
 
-  // Determine which halves have event data
-  const has1H = Object.values(playerStats).some(s => (s.fatigue?.['1H']||[]).some(v=>v>0));
-  const has2H = Object.values(playerStats).some(s => (s.fatigue?.['2H']||[]).some(v=>v>0));
+  // Build bucket labels from actual half durations
+  const bucketSize = 300;
+  const h1Buckets = Math.max(3, Math.ceil((timeStats.halfDur?.['1H'] || 1800) / bucketSize));
+  const h2Buckets = Math.max(3, Math.ceil((timeStats.halfDur?.['2H'] || 1800) / bucketSize));
+  const bucketLabel = (i, bucketSize) => {
+    const start = i * bucketSize / 60;
+    const end   = (i + 1) * bucketSize / 60;
+    return `${start}–${end}'`;
+  };
 
   // Per-player fatigue table
   const fatigueTable = allPlayers
     .filter(p => playerStats[p]?.fatigue)
     .map(p => {
       const f = playerStats[p].fatigue;
-      const h1 = f['1H'] || [0,0,0], h2 = f['2H'] || [0,0,0];
+      const h1 = (f['1H'] || []).slice(0, h1Buckets);
+      const h2 = (f['2H'] || []).slice(0, h2Buckets);
+      while (h1.length < h1Buckets) h1.push(0);
+      while (h2.length < h2Buckets) h2.push(0);
       return { p, h1, h2 };
     })
     .filter(r => r.h1.some(v=>v>0) || r.h2.some(v=>v>0));
@@ -11510,14 +11530,14 @@ function showTimelinePreview(timeStats, allPlayers) {
           <div style="font-size:.85rem;font-weight:600;color:var(--text)">${ins.text}</div>
         </div>`).join('')}
     </div>
-    <div style="font-family:'Barlow Condensed',sans-serif;font-size:.7rem;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:8px">Activity by Third of Half</div>
+    <div style="font-family:'Barlow Condensed',sans-serif;font-size:.7rem;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:8px">Activity by 5-Minute Window</div>
     ${coverageNote}
     <div style="overflow-x:auto">
     <table style="border-collapse:collapse;min-width:300px;width:100%">
       <thead><tr>
         <th style="${thS};text-align:left">Player</th>
-        ${has1H ? `<th style="${thS}">1H Early</th><th style="${thS}">1H Mid</th><th style="${thS}">1H Late</th>` : ''}
-        ${has2H ? `<th style="${thS}">2H Early</th><th style="${thS}">2H Mid</th><th style="${thS}">2H Late</th>` : ''}
+        ${has1H ? Array.from({length:h1Buckets},(_,i)=>`<th style="${thS}">1H ${bucketLabel(i,bucketSize)}</th>`).join('') : ''}
+        ${has2H ? Array.from({length:h2Buckets},(_,i)=>`<th style="${thS}">2H ${bucketLabel(i,bucketSize)}</th>`).join('') : ''}
         <th style="${thS}">Trend</th>
       </tr></thead>
       <tbody>
@@ -11530,7 +11550,7 @@ function showTimelinePreview(timeStats, allPlayers) {
             return `<td style="${tdS}"><div style="display:inline-flex;align-items:center;gap:4px"><div style="width:${Math.max(pct*.3,2)}px;height:6px;background:${col};border-radius:2px"></div><span style="font-size:.78rem;${v>0?'font-weight:600':''}">${v}</span></div></td>`;
           };
           const first = has1H ? h1[0] : h2[0];
-          const last  = has2H ? h2[2] : h1[2];
+          const last  = has2H ? h2[h2.length-1] : h1[h1.length-1];
           const trend = last > first ? '↗' : last < first ? '↘' : '→';
           const trendCol = trend==='↗'?'var(--green)':trend==='↘'?'rgba(248,113,113,.7)':'var(--muted)';
           return `<tr>
