@@ -794,20 +794,38 @@ canvas.spider{display:block;margin:0 auto}
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px">
       <div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:20px">
         <div style="font-family:'Barlow Condensed',sans-serif;font-size:.85rem;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:14px">Upload Stat Files</div>
-        ${[
-          ['0','1H File 1 — Goals / Assists / Shots / Tackles / Nutmegs'],
-          ['1','1H File 2 — Interceptions / Key Passes / Blocks / Saves / Posts'],
-          ['2','2H File 1 — Goals / Assists / Shots / Tackles / Nutmegs'],
-          ['3','2H File 2 — Interceptions / Key Passes / Blocks / Saves / Posts'],
-        ].map(([i,label]) => `
         <div style="margin-bottom:12px">
-          <div style="font-size:.78rem;color:var(--text2);margin-bottom:5px">${label}</div>
-          <label style="display:flex;align-items:center;gap:10px;background:var(--bg2);border:1px solid var(--border);border-radius:7px;padding:9px 12px;cursor:pointer" id="file-label-${i}">
+          <div style="font-size:.78rem;color:var(--text2);margin-bottom:5px">1H File 1 — Goals / Assists / Shots / Tackles / Nutmegs</div>
+          <label style="display:flex;align-items:center;gap:10px;background:var(--bg2);border:1px solid var(--border);border-radius:7px;padding:9px 12px;cursor:pointer" id="file-label-0">
             <span>📂</span>
-            <span id="file-name-${i}" style="font-size:.82rem;color:var(--muted)">Choose CSV file…</span>
-            <input type="file" accept=".csv" style="display:none" id="file-input-${i}" onchange="weeklyFileSelected(${i},this)">
+            <span id="file-name-0" style="font-size:.82rem;color:var(--muted)">Choose CSV file…</span>
+            <input type="file" accept=".csv" style="display:none" id="file-input-0" onchange="weeklyFileSelected(0,this)">
           </label>
-        </div>`).join('')}
+        </div>
+        <div style="margin-bottom:12px">
+          <div style="font-size:.78rem;color:var(--text2);margin-bottom:5px">1H File 2 — Interceptions / Key Passes / Blocks / Saves / Posts</div>
+          <label style="display:flex;align-items:center;gap:10px;background:var(--bg2);border:1px solid var(--border);border-radius:7px;padding:9px 12px;cursor:pointer" id="file-label-1">
+            <span>📂</span>
+            <span id="file-name-1" style="font-size:.82rem;color:var(--muted)">Choose CSV file…</span>
+            <input type="file" accept=".csv" style="display:none" id="file-input-1" onchange="weeklyFileSelected(1,this)">
+          </label>
+        </div>
+        <div style="margin-bottom:12px">
+          <div style="font-size:.78rem;color:var(--text2);margin-bottom:5px">2H File 1 — Goals / Assists / Shots / Tackles / Nutmegs</div>
+          <label style="display:flex;align-items:center;gap:10px;background:var(--bg2);border:1px solid var(--border);border-radius:7px;padding:9px 12px;cursor:pointer" id="file-label-2">
+            <span>📂</span>
+            <span id="file-name-2" style="font-size:.82rem;color:var(--muted)">Choose CSV file…</span>
+            <input type="file" accept=".csv" style="display:none" id="file-input-2" onchange="weeklyFileSelected(2,this)">
+          </label>
+        </div>
+        <div style="margin-bottom:12px">
+          <div style="font-size:.78rem;color:var(--text2);margin-bottom:5px">2H File 2 — Interceptions / Key Passes / Blocks / Saves / Posts</div>
+          <label style="display:flex;align-items:center;gap:10px;background:var(--bg2);border:1px solid var(--border);border-radius:7px;padding:9px 12px;cursor:pointer" id="file-label-3">
+            <span>📂</span>
+            <span id="file-name-3" style="font-size:.82rem;color:var(--muted)">Choose CSV file…</span>
+            <input type="file" accept=".csv" style="display:none" id="file-input-3" onchange="weeklyFileSelected(3,this)">
+          </label>
+        </div>
       </div>
       <div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:20px">
         <div style="font-family:'Barlow Condensed',sans-serif;font-size:.85rem;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:14px">Match Settings</div>
