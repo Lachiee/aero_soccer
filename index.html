@@ -10959,20 +10959,26 @@ function parseNewFormatCSV(text) {
   if (!headerLine) return null;
   const mainHeader = parseLine(headerLine).map(h => h.toLowerCase().replace(/\s+/g,'_'));
 
+  let inEventSection = true; // stop adding event rows once summary starts
+
   for (const line of allLines) {
     if (!line || line.startsWith('//')) continue;
-    // Detect summary section headers
-    if (line.includes('PLAYER STATS SUMMARY')) {
-      if (line.includes('1ST HALF') || line.includes('1H'))  currentSummary = '1H';
-      else if (line.includes('2ND HALF') || line.includes('2H')) currentSummary = '2H';
-      else currentSummary = 'FULL';
-      continue;
+
+    // Detect summary section headers — stop event parsing from here on
+    if (line.includes('PLAYER STATS SUMMARY') || line.includes('PLAYER STATS') || line.match(/^(Team|Player),/i)) {
+      if (line.includes('PLAYER STATS')) {
+        inEventSection = false;
+        if (line.includes('1ST HALF') || line.includes('1H'))  currentSummary = '1H';
+        else if (line.includes('2ND HALF') || line.includes('2H')) currentSummary = '2H';
+        else currentSummary = 'FULL';
+        continue;
+      }
     }
     const vals = parseLine(line);
     if (!vals.length || vals.every(v => !v)) continue;
 
     if (currentSummary) {
-      // Summary section rows: Team, Player, Goals, OG, Assists, KP, On Target, Off Target, GK Saves, Blocks, Tackles, Interceptions, Nutmegs, Post
+      // Summary section
       if (!summaryHeaders[currentSummary] && vals[0] === 'Team') {
         summaryHeaders[currentSummary] = vals.map(v => v.toLowerCase().replace(/\s+/g,'_'));
         continue;
@@ -10983,7 +10989,9 @@ function parseNewFormatCSV(text) {
       continue;
     }
 
-    // Event log rows — skip the header line itself
+    // Event log section — only while inEventSection
+    if (!inEventSection) continue;
+    // Skip the event log header row
     if (vals[0] === 'Timestamp' || vals[0] === 'timestamp') continue;
     // Must have at least Timestamp, Half, Team, Player, Event
     if (vals.length < 5) continue;
