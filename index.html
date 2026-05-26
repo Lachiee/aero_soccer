@@ -718,116 +718,160 @@ canvas.spider{display:block;margin:0 auto}
 
 <!-- ===== PAGE: WEEKLY IMPORT ===== -->
 <div class="page" id="page-weekly">
-  <div class="section-hd"><h2>Weekly Import</h2><span>Upload 4 stat files from a match to generate CSV rows</span></div>
+  <div class="section-hd"><h2>Weekly Import</h2><span>Upload a combined match CSV or legacy 4-file format</span></div>
 
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px">
-    <!-- File uploads -->
-    <div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:20px">
-      <div style="font-family:'Barlow Condensed',sans-serif;font-size:.85rem;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:14px">Upload Stat Files</div>
+  <!-- Format toggle -->
+  <div style="display:flex;gap:8px;margin-bottom:20px">
+    <button id="fmt-btn-new" onclick="weeklySetFormat('new')"
+      style="padding:7px 18px;border-radius:7px;border:1px solid var(--border);cursor:pointer;font-family:'Barlow Condensed',sans-serif;font-size:.85rem;letter-spacing:.5px;background:var(--green);color:#071009;font-weight:700">
+      ✦ New Format (combined CSV)
+    </button>
+    <button id="fmt-btn-legacy" onclick="weeklySetFormat('legacy')"
+      style="padding:7px 18px;border-radius:7px;border:1px solid var(--border);cursor:pointer;font-family:'Barlow Condensed',sans-serif;font-size:.85rem;letter-spacing:.5px;background:var(--card2);color:var(--muted)">
+      Legacy (4 files)
+    </button>
+  </div>
 
-      <div style="margin-bottom:12px">
-        <div style="font-size:.78rem;color:var(--text2);margin-bottom:5px">1H File 1 — Goals / Assists / Shots / Tackles / Nutmegs</div>
-        <label style="display:flex;align-items:center;gap:10px;background:var(--bg2);border:1px solid var(--border);border-radius:7px;padding:9px 12px;cursor:pointer;transition:border-color .15s" id="file-label-0">
-          <span>📂</span>
-          <span id="file-name-0" style="font-size:.82rem;color:var(--muted)">Choose CSV file…</span>
-          <input type="file" accept=".csv" style="display:none" id="file-input-0" onchange="weeklyFileSelected(0,this)">
-        </label>
-      </div>
+  <!-- NEW FORMAT -->
+  <div id="weekly-new-format">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px">
 
-      <div style="margin-bottom:12px">
-        <div style="font-size:.78rem;color:var(--text2);margin-bottom:5px">1H File 2 — Interceptions / Key Passes / Blocks / Saves / Posts</div>
-        <label style="display:flex;align-items:center;gap:10px;background:var(--bg2);border:1px solid var(--border);border-radius:7px;padding:9px 12px;cursor:pointer;transition:border-color .15s" id="file-label-1">
-          <span>📂</span>
-          <span id="file-name-1" style="font-size:.82rem;color:var(--muted)">Choose CSV file…</span>
-          <input type="file" accept=".csv" style="display:none" id="file-input-1" onchange="weeklyFileSelected(1,this)">
-        </label>
-      </div>
-
-      <div style="margin-bottom:12px">
-        <div style="font-size:.78rem;color:var(--text2);margin-bottom:5px">2H File 1 — Goals / Assists / Shots / Tackles / Nutmegs</div>
-        <label style="display:flex;align-items:center;gap:10px;background:var(--bg2);border:1px solid var(--border);border-radius:7px;padding:9px 12px;cursor:pointer;transition:border-color .15s" id="file-label-2">
-          <span>📂</span>
-          <span id="file-name-2" style="font-size:.82rem;color:var(--muted)">Choose CSV file…</span>
-          <input type="file" accept=".csv" style="display:none" id="file-input-2" onchange="weeklyFileSelected(2,this)">
-        </label>
-      </div>
-
-      <div style="margin-bottom:12px">
-        <div style="font-size:.78rem;color:var(--text2);margin-bottom:5px">2H File 2 — Interceptions / Key Passes / Blocks / Saves / Posts</div>
-        <label style="display:flex;align-items:center;gap:10px;background:var(--bg2);border:1px solid var(--border);border-radius:7px;padding:9px 12px;cursor:pointer;transition:border-color .15s" id="file-label-3">
-          <span>📂</span>
-          <span id="file-name-3" style="font-size:.82rem;color:var(--muted)">Choose CSV file…</span>
-          <input type="file" accept=".csv" style="display:none" id="file-input-3" onchange="weeklyFileSelected(3,this)">
-        </label>
-      </div>
-    </div>
-
-    <!-- Match settings -->
-    <div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:20px">
-      <div style="font-family:'Barlow Condensed',sans-serif;font-size:.85rem;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:14px">Match Settings</div>
-
-      <div style="margin-bottom:14px">
-        <div style="font-size:.78rem;color:var(--text2);margin-bottom:5px">Match Date</div>
-        <input type="date" id="weekly-date" style="background:var(--bg2);border:1px solid var(--border);color:var(--text);border-radius:7px;padding:9px 12px;font-size:.88rem;font-family:'Barlow',sans-serif;outline:none;width:100%">
-      </div>
-
-      <div style="margin-bottom:14px">
-        <div style="font-size:.78rem;color:var(--text2);margin-bottom:5px">Match ID (leave blank to auto-generate)</div>
-        <input type="text" id="weekly-matchid" placeholder="e.g. 2026-04-16#1" style="background:var(--bg2);border:1px solid var(--border);color:var(--text);border-radius:7px;padding:9px 12px;font-size:.88rem;font-family:'Barlow',sans-serif;outline:none;width:100%">
-      </div>
-
-      <div style="margin-bottom:14px">
-        <div style="font-size:.78rem;color:var(--text2);margin-bottom:8px">Assign players to teams (Team A / Team B)</div>
-        <div id="weekly-team-assignments" style="font-size:.78rem;color:var(--muted)">Upload files first to see players</div>
-      </div>
-
-      <div style="margin-bottom:16px">
-        <div style="font-size:.78rem;color:var(--text2);margin-bottom:5px">Own Goal Notes (optional)</div>
-        <textarea id="weekly-og-notes" placeholder="e.g. Bailey scored an own goal in 2H" style="width:100%;background:var(--bg2);border:1px solid var(--border);color:var(--text);border-radius:7px;padding:9px 12px;font-size:.78rem;font-family:'Barlow',sans-serif;outline:none;resize:vertical;min-height:60px;line-height:1.5"></textarea>
-        <div style="font-size:.7rem;color:var(--muted);margin-top:4px">One note per line. Include player name and half (1H/2H).</div>
-      </div>
-
-      <!-- Match Conditions -->
-      <div style="border-top:1px solid var(--border);padding-top:14px;margin-bottom:16px">
-        <div style="font-family:'Barlow Condensed',sans-serif;font-size:.78rem;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:10px">Match Conditions</div>
-
-        <!-- Two separate games (score reset) -->
-        <label style="display:flex;align-items:center;gap:9px;cursor:pointer;margin-bottom:10px">
-          <input type="checkbox" id="weekly-two-games" onchange="weeklyUpdateConditions()" style="accent-color:var(--green);width:15px;height:15px">
+      <!-- File upload -->
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:20px">
+        <div style="font-family:'Barlow Condensed',sans-serif;font-size:.85rem;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:14px">Match File</div>
+        <label style="display:flex;align-items:center;gap:10px;background:var(--bg2);border:2px dashed var(--border);border-radius:7px;padding:20px 16px;cursor:pointer;transition:border-color .15s" id="new-file-label">
+          <span style="font-size:1.5rem">📂</span>
           <div>
-            <div style="font-size:.82rem;color:var(--text2)">Two separate games (score reset at half time)</div>
-            <div style="font-size:.7rem;color:var(--muted)">1H and 2H are treated as two independent matches with different IDs</div>
+            <div id="new-file-name" style="font-size:.85rem;color:var(--muted)">Choose A_vs_B_YYYY-MM-DD.csv…</div>
+            <div style="font-size:.7rem;color:var(--muted);margin-top:3px">Combined event log + summary format</div>
           </div>
+          <input type="file" accept=".csv" style="display:none" id="new-file-input" onchange="newFormatFileSelected(this)">
         </label>
 
-        <!-- Player switched teams -->
-        <label style="display:flex;align-items:center;gap:9px;cursor:pointer;margin-bottom:8px">
-          <input type="checkbox" id="weekly-team-swaps-enabled" onchange="weeklyUpdateConditions()" style="accent-color:var(--green);width:15px;height:15px">
-          <div>
-            <div style="font-size:.82rem;color:var(--text2)">A player switched teams between halves</div>
-            <div style="font-size:.7rem;color:var(--muted)">Assign different teams per half for that player</div>
-          </div>
-        </label>
-
-        <!-- Team swap player rows (shown when checkbox enabled) -->
-        <div id="weekly-team-swaps" style="display:none;margin-top:8px;padding:10px 12px;background:var(--bg2);border:1px solid var(--border);border-radius:8px">
-          <div style="font-size:.75rem;color:var(--muted);margin-bottom:8px">Set per-half team for players who switched:</div>
-          <div id="weekly-swap-rows">
-            <div style="font-size:.75rem;color:var(--muted)">Upload files first to see players</div>
-          </div>
-          <button onclick="weeklyAddSwapRow()" class="btn-secondary" style="margin-top:8px;font-size:.75rem;padding:5px 12px">+ Add another player</button>
+        <div id="new-file-info" style="display:none;margin-top:14px;padding:10px 12px;background:var(--card2);border-radius:7px;font-size:.78rem">
+          <div id="new-file-summary"></div>
         </div>
       </div>
 
-      <button onclick="generateWeeklyCSV()" class="btn-primary" style="width:100%">⚡ Generate CSV Rows</button>
+      <!-- Match settings -->
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:20px">
+        <div style="font-family:'Barlow Condensed',sans-serif;font-size:.85rem;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:14px">Match Settings</div>
+
+        <div style="margin-bottom:14px">
+          <div style="font-size:.78rem;color:var(--text2);margin-bottom:5px">Match Date</div>
+          <input type="date" id="new-weekly-date" style="background:var(--bg2);border:1px solid var(--border);color:var(--text);border-radius:7px;padding:9px 12px;font-size:.88rem;font-family:'Barlow',sans-serif;outline:none;width:100%">
+        </div>
+
+        <div style="margin-bottom:14px">
+          <div style="font-size:.78rem;color:var(--text2);margin-bottom:5px">Match ID (leave blank to auto-generate)</div>
+          <input type="text" id="new-weekly-matchid" placeholder="e.g. 2026-05-22#1" style="background:var(--bg2);border:1px solid var(--border);color:var(--text);border-radius:7px;padding:9px 12px;font-size:.88rem;font-family:'Barlow',sans-serif;outline:none;width:100%">
+        </div>
+
+        <label style="display:flex;align-items:center;gap:9px;cursor:pointer;margin-bottom:16px">
+          <input type="checkbox" id="new-two-games" style="accent-color:var(--green);width:15px;height:15px">
+          <div>
+            <div style="font-size:.82rem;color:var(--text2)">Two separate games (score resets at half time)</div>
+            <div style="font-size:.7rem;color:var(--muted)">1H and 2H treated as independent matches</div>
+          </div>
+        </label>
+
+        <button onclick="generateNewFormatCSV()" class="btn-primary" style="width:100%" id="new-generate-btn" disabled>⚡ Generate Import</button>
+      </div>
+    </div>
+
+    <!-- Team assignments (populated after file parse) -->
+    <div id="new-team-section" style="display:none;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:20px;margin-bottom:20px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px">
+        <div style="font-family:'Barlow Condensed',sans-serif;font-size:.85rem;letter-spacing:1px;text-transform:uppercase;color:var(--muted)">Team Assignments</div>
+        <div style="font-size:.72rem;color:var(--muted)">Teams are auto-filled from the file. Adjust if anyone switched halves.</div>
+      </div>
+      <div id="new-team-assignments"></div>
     </div>
   </div>
 
-  <!-- Preview / output -->
+  <!-- LEGACY FORMAT (unchanged) -->
+  <div id="weekly-legacy-format" style="display:none">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px">
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:20px">
+        <div style="font-family:'Barlow Condensed',sans-serif;font-size:.85rem;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:14px">Upload Stat Files</div>
+        ${[
+          ['0','1H File 1 — Goals / Assists / Shots / Tackles / Nutmegs'],
+          ['1','1H File 2 — Interceptions / Key Passes / Blocks / Saves / Posts'],
+          ['2','2H File 1 — Goals / Assists / Shots / Tackles / Nutmegs'],
+          ['3','2H File 2 — Interceptions / Key Passes / Blocks / Saves / Posts'],
+        ].map(([i,label]) => `
+        <div style="margin-bottom:12px">
+          <div style="font-size:.78rem;color:var(--text2);margin-bottom:5px">${label}</div>
+          <label style="display:flex;align-items:center;gap:10px;background:var(--bg2);border:1px solid var(--border);border-radius:7px;padding:9px 12px;cursor:pointer" id="file-label-${i}">
+            <span>📂</span>
+            <span id="file-name-${i}" style="font-size:.82rem;color:var(--muted)">Choose CSV file…</span>
+            <input type="file" accept=".csv" style="display:none" id="file-input-${i}" onchange="weeklyFileSelected(${i},this)">
+          </label>
+        </div>`).join('')}
+      </div>
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:20px">
+        <div style="font-family:'Barlow Condensed',sans-serif;font-size:.85rem;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:14px">Match Settings</div>
+        <div style="margin-bottom:14px">
+          <div style="font-size:.78rem;color:var(--text2);margin-bottom:5px">Match Date</div>
+          <input type="date" id="weekly-date" style="background:var(--bg2);border:1px solid var(--border);color:var(--text);border-radius:7px;padding:9px 12px;font-size:.88rem;font-family:'Barlow',sans-serif;outline:none;width:100%">
+        </div>
+        <div style="margin-bottom:14px">
+          <div style="font-size:.78rem;color:var(--text2);margin-bottom:5px">Match ID (leave blank to auto-generate)</div>
+          <input type="text" id="weekly-matchid" placeholder="e.g. 2026-04-16#1" style="background:var(--bg2);border:1px solid var(--border);color:var(--text);border-radius:7px;padding:9px 12px;font-size:.88rem;font-family:'Barlow',sans-serif;outline:none;width:100%">
+        </div>
+        <div style="margin-bottom:14px">
+          <div style="font-size:.78rem;color:var(--text2);margin-bottom:8px">Assign players to teams (Team A / Team B)</div>
+          <div id="weekly-team-assignments" style="font-size:.78rem;color:var(--muted)">Upload files first to see players</div>
+        </div>
+        <div style="margin-bottom:16px">
+          <div style="font-size:.78rem;color:var(--text2);margin-bottom:5px">Own Goal Notes (optional)</div>
+          <textarea id="weekly-og-notes" placeholder="e.g. Bailey scored an own goal in 2H" style="width:100%;background:var(--bg2);border:1px solid var(--border);color:var(--text);border-radius:7px;padding:9px 12px;font-size:.78rem;font-family:'Barlow',sans-serif;outline:none;resize:vertical;min-height:60px;line-height:1.5"></textarea>
+          <div style="font-size:.7rem;color:var(--muted);margin-top:4px">One note per line. Include player name and half (1H/2H).</div>
+        </div>
+        <div style="border-top:1px solid var(--border);padding-top:14px;margin-bottom:16px">
+          <label style="display:flex;align-items:center;gap:9px;cursor:pointer;margin-bottom:10px">
+            <input type="checkbox" id="weekly-two-games" onchange="weeklyUpdateConditions()" style="accent-color:var(--green);width:15px;height:15px">
+            <div>
+              <div style="font-size:.82rem;color:var(--text2)">Two separate games (score reset at half time)</div>
+              <div style="font-size:.7rem;color:var(--muted)">1H and 2H are treated as two independent matches with different IDs</div>
+            </div>
+          </label>
+          <label style="display:flex;align-items:center;gap:9px;cursor:pointer;margin-bottom:8px">
+            <input type="checkbox" id="weekly-team-swaps-enabled" onchange="weeklyUpdateConditions()" style="accent-color:var(--green);width:15px;height:15px">
+            <div>
+              <div style="font-size:.82rem;color:var(--text2)">A player switched teams between halves</div>
+              <div style="font-size:.7rem;color:var(--muted)">Assign different teams per half for that player</div>
+            </div>
+          </label>
+          <div id="weekly-team-swaps" style="display:none;margin-top:8px;padding:10px 12px;background:var(--bg2);border:1px solid var(--border);border-radius:8px">
+            <div style="font-size:.75rem;color:var(--muted);margin-bottom:8px">Set per-half team for players who switched:</div>
+            <div id="weekly-swap-rows"><div style="font-size:.75rem;color:var(--muted)">Upload files first to see players</div></div>
+            <button onclick="weeklyAddSwapRow()" class="btn-secondary" style="margin-top:8px;font-size:.75rem;padding:5px 12px">+ Add another player</button>
+          </div>
+        </div>
+        <button onclick="generateWeeklyCSV()" class="btn-primary" style="width:100%">⚡ Generate CSV Rows</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Preview / output (shared) -->
   <div id="weekly-output" style="display:none">
     <div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:20px;margin-bottom:16px">
       <div style="font-family:'Barlow Condensed',sans-serif;font-size:.85rem;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:10px">Player Stats Preview</div>
       <div id="weekly-preview-table" style="overflow-x:auto"></div>
+    </div>
+
+    <!-- Timeline stats preview (new format only) -->
+    <div id="weekly-timeline-preview" style="display:none;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:20px;margin-bottom:16px">
+      <div style="font-family:'Barlow Condensed',sans-serif;font-size:.85rem;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:4px">⏱ Time-Based Insights</div>
+      <div style="font-size:.7rem;color:var(--muted);margin-bottom:14px">Derived from timestamped event log — stored with match data</div>
+      <div id="weekly-timeline-content"></div>
+    </div>
+
+    <!-- Combos preview (new format only) -->
+    <div id="weekly-combos-preview" style="display:none;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:20px;margin-bottom:16px">
+      <div style="font-family:'Barlow Condensed',sans-serif;font-size:.85rem;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:10px">⚽ Goal Combos Generated</div>
+      <div id="weekly-combos-content"></div>
     </div>
 
     <div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:20px">
@@ -842,6 +886,22 @@ canvas.spider{display:block;margin:0 auto}
       <div style="font-size:.72rem;color:var(--muted);margin-top:8px">
         <strong style="color:var(--green)">Add to App Data</strong> imports directly into the live app and refreshes all stats instantly.
         Or copy rows to paste into your backup CSV.
+      </div>
+      <!-- GitHub push reminder — shown after new format import -->
+      <div id="weekly-github-reminder" style="display:none;margin-top:14px;padding:12px 14px;background:var(--card2);border:1px solid var(--border);border-radius:8px">
+        <div style="font-family:'Barlow Condensed',sans-serif;font-size:.75rem;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:8px">Push to GitHub</div>
+        <div style="font-size:.75rem;color:var(--text2);margin-bottom:10px">Download these files and commit them to your repo so all devices stay in sync:</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button onclick="downloadEventsJson()"
+            style="display:flex;align-items:center;gap:6px;padding:7px 14px;background:var(--green);color:#071009;border:none;border-radius:7px;font-family:'Barlow Condensed',sans-serif;font-size:.85rem;font-weight:700;cursor:pointer">
+            ⬇ events.json
+          </button>
+          <button onclick="exportCombosCsv()"
+            style="display:flex;align-items:center;gap:6px;padding:7px 14px;background:var(--card2);border:1px solid var(--border);color:var(--text);border-radius:7px;font-family:'Barlow Condensed',sans-serif;font-size:.85rem;cursor:pointer">
+            ⬇ combos.csv
+          </button>
+        </div>
+        <div style="font-size:.68rem;color:var(--muted);margin-top:8px">data.csv can be downloaded from the admin panel backup section as usual.</div>
       </div>
       <div id="weekly-append-status" style="margin-top:8px;font-size:.8rem"></div>
     </div>
@@ -4959,6 +5019,26 @@ function previewCombos() {
         <span style="color:var(--lime);font-weight:600">${p.scorer}</span>${p.assister?` <span style="color:var(--muted)">←</span> <span style="color:var(--text2)">${p.assister}</span>`:''}
         <span style="color:var(--muted);font-size:.62rem;margin-left:2px">${p.half}${p.time?' '+p.time:''}</span>
       </span>`).join('')}</div>`;
+}
+
+function downloadEventsJson() {
+  try {
+    const stored = JSON.parse(localStorage.getItem('aero_event_logs') || '{}');
+    if (!Object.keys(stored).length) {
+      alert('No event logs stored yet — import a match using the new format first.');
+      return;
+    }
+    const json = JSON.stringify(stored, null, 2);
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'events.json';
+    document.body.appendChild(a); a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  } catch(e) {
+    alert('Failed to generate events.json: ' + e.message);
+  }
 }
 
 function exportCombosCsv() {
@@ -10718,6 +10798,830 @@ function weeklyFileSelected(idx, input) {
   reader.readAsText(file);
 }
 
+// =====================================================================
+// NEW FORMAT IMPORT — combined event log CSV
+// =====================================================================
+
+let _newFormatParsed = null; // parsed result from the new format file
+let _newFormatTeams  = {};   // player → { h1: 'A'|'B'|'DNP', h2: 'A'|'B'|'DNP' }
+
+function weeklySetFormat(fmt) {
+  document.getElementById('weekly-new-format').style.display    = fmt === 'new'    ? '' : 'none';
+  document.getElementById('weekly-legacy-format').style.display = fmt === 'legacy' ? '' : 'none';
+  document.getElementById('fmt-btn-new').style.background    = fmt === 'new'    ? 'var(--green)' : 'var(--card2)';
+  document.getElementById('fmt-btn-new').style.color         = fmt === 'new'    ? '#071009'      : 'var(--muted)';
+  document.getElementById('fmt-btn-legacy').style.background = fmt === 'legacy' ? 'var(--green)' : 'var(--card2)';
+  document.getElementById('fmt-btn-legacy').style.color      = fmt === 'legacy' ? '#071009'      : 'var(--muted)';
+  document.getElementById('weekly-output').style.display = 'none';
+}
+
+function parseNewFormatCSV(text) {
+  // Strip BOM
+  text = text.replace(/^\uFEFF/, '');
+  const allLines = text.split('\n').map(l => l.trim());
+
+  // Parse a quoted CSV line
+  function parseLine(line) {
+    const vals = []; let cur = '', inQ = false;
+    for (let i = 0; i < line.length; i++) {
+      const c = line[i];
+      if (c === '"') { inQ = !inQ; continue; }
+      if (c === ',' && !inQ) { vals.push(cur.trim()); cur = ''; continue; }
+      cur += c;
+    }
+    vals.push(cur.trim());
+    return vals;
+  }
+
+  // Detect sections
+  const eventRows  = [];
+  let summarySection = null; // 'FULL' summary rows
+  const summaryHeaders = { FULL: null, '1H': null, '2H': null };
+  const summaryRows    = { FULL: [], '1H': [], '2H': [] };
+  let currentSummary = null;
+
+  const headerLine = allLines.find(l => l.includes('Timestamp') || l.includes('timestamp'));
+  if (!headerLine) return null;
+  const mainHeader = parseLine(headerLine).map(h => h.toLowerCase().replace(/\s+/g,'_'));
+
+  for (const line of allLines) {
+    if (!line || line.startsWith('//')) continue;
+    // Detect summary section headers
+    if (line.includes('PLAYER STATS SUMMARY')) {
+      if (line.includes('1ST HALF') || line.includes('1H'))  currentSummary = '1H';
+      else if (line.includes('2ND HALF') || line.includes('2H')) currentSummary = '2H';
+      else currentSummary = 'FULL';
+      continue;
+    }
+    const vals = parseLine(line);
+    if (!vals.length || vals.every(v => !v)) continue;
+
+    if (currentSummary) {
+      // Summary section rows: Team, Player, Goals, OG, Assists, KP, On Target, Off Target, GK Saves, Blocks, Tackles, Interceptions, Nutmegs, Post
+      if (!summaryHeaders[currentSummary] && vals[0] === 'Team') {
+        summaryHeaders[currentSummary] = vals.map(v => v.toLowerCase().replace(/\s+/g,'_'));
+        continue;
+      }
+      if (summaryHeaders[currentSummary] && vals[0] !== 'Team' && vals.length >= 3) {
+        summaryRows[currentSummary].push(vals);
+      }
+      continue;
+    }
+
+    // Event log rows — skip the header line itself
+    if (vals[0] === 'Timestamp' || vals[0] === 'timestamp') continue;
+    // Must have at least Timestamp, Half, Team, Player, Event
+    if (vals.length < 5) continue;
+    const idx = {};
+    mainHeader.forEach((h, i) => idx[h] = i);
+    const ts   = vals[idx['timestamp']] || '';
+    const half = vals[idx['half']]      || '';
+    const team = vals[idx['team']]      || '';
+    const player = vals[idx['player']] || '';
+    const event  = vals[idx['event']]  || '';
+    if (!player || !event || !ts) continue;
+
+    const tsSecsRaw = (() => {
+      const parts = ts.split(':');
+      if (parts.length === 2) return parseInt(parts[0]) * 60 + parseInt(parts[1]);
+      if (parts.length === 3) return parseInt(parts[0]) * 3600 + parseInt(parts[1]) * 60 + parseInt(parts[2]);
+      return 0;
+    })();
+
+    eventRows.push({
+      ts, tsSecsRaw, half, team, player, event,
+      assistBy:     vals[idx['assist_by']]         || '',
+      highlight:    vals[idx['highlight']]          || '',
+      assistHL:     vals[idx['assist_highlight']]   || '',
+      shotX:        parseFloat(vals[idx['shot_x']]) || null,
+      shotY:        parseFloat(vals[idx['shot_y']]) || null,
+      assistX:      parseFloat(vals[idx['assist_x']]) || null,
+      assistY:      parseFloat(vals[idx['assist_y']]) || null,
+    });
+  }
+
+  // Build per-player per-half team map from event log
+  const playerTeams = {}; // player → { h1: Set, h2: Set }
+  eventRows.forEach(r => {
+    if (!r.player || !r.team || r.team === '-') return;
+    if (!playerTeams[r.player]) playerTeams[r.player] = { h1: new Set(), h2: new Set() };
+    if (r.half === '1H') playerTeams[r.player].h1.add(r.team);
+    if (r.half === '2H') playerTeams[r.player].h2.add(r.team);
+  });
+
+  // Resolve team per player per half (most common if multiple)
+  const resolvedTeams = {};
+  const allEventPlayers = new Set(eventRows.map(r => r.player).filter(Boolean));
+
+  // Also include summary players
+  Object.values(summaryRows).forEach(rows => rows.forEach(r => {
+    if (r[1]) allEventPlayers.add(r[1]);
+  }));
+
+  allEventPlayers.forEach(p => {
+    const t = playerTeams[p];
+    const h1 = t ? ([...t.h1][0] || '-') : '-';
+    const h2 = t ? ([...t.h2][0] || h1 || '-') : '-';
+    resolvedTeams[p] = { h1, h2 };
+  });
+
+  // Parse summary rows into stat objects
+  function parseSummarySection(rows, headers) {
+    if (!headers) return {};
+    const result = {};
+    rows.forEach(vals => {
+      const obj = {};
+      headers.forEach((h, i) => { obj[h] = vals[i] || ''; });
+      const player = obj['player']; if (!player || player === 'Player') return;
+      result[player] = {
+        team:               obj['team'] || '-',
+        goals:              parseInt(obj['goals'])          || 0,
+        own_goals:          parseInt(obj['og'])             || 0,
+        assists:            parseInt(obj['assists'])        || 0,
+        key_passes:         parseInt(obj['key_passes'])     || 0,
+        shots_on_target:    parseInt(obj['on_target'])      || 0,
+        shots_off_target:   parseInt(obj['off_target'])     || 0,
+        goalkeeper_saves:   parseInt(obj['gk_saves'])       || 0,
+        blocks:             parseInt(obj['blocks'])         || 0,
+        tackles:            parseInt(obj['tackles'])        || 0,
+        interceptions:      parseInt(obj['interceptions'])  || 0,
+        nutmegs:            parseInt(obj['nutmegs'])        || 0,
+        post:               parseInt(obj['post'])           || 0,
+      };
+      result[player].total_shots  = result[player].shots_on_target + result[player].shots_off_target;
+      result[player].total_saves  = result[player].goalkeeper_saves + result[player].blocks;
+    });
+    return result;
+  }
+
+  const summary1H   = parseSummarySection(summaryRows['1H'],   summaryHeaders['1H']);
+  const summary2H   = parseSummarySection(summaryRows['2H'],   summaryHeaders['2H']);
+  const summaryFull = parseSummarySection(summaryRows['FULL'], summaryHeaders['FULL']);
+
+  // Extract goal combos from event log
+  const goalEvents = eventRows.filter(r => r.event === 'Goals');
+
+  // Build GK rotation: who was in goal at each timestamp
+  const gkRotation = {}; // half → [ { player, fromSecs, toSecs } ]
+  const gkOnEvents  = eventRows.filter(r => r.event === 'GK On');
+  const gkOffEvents = eventRows.filter(r => r.event === 'GK Removed');
+  ['1H','2H'].forEach(half => {
+    const ons  = gkOnEvents .filter(r => r.half === half).sort((a,b) => a.tsSecsRaw - b.tsSecsRaw);
+    const offs = gkOffEvents.filter(r => r.half === half).sort((a,b) => a.tsSecsRaw - b.tsSecsRaw);
+    const segments = [];
+    ons.forEach(on => {
+      const off = offs.find(o => o.player === on.player && o.tsSecsRaw >= on.tsSecsRaw);
+      segments.push({ player: on.player, team: on.team, fromSecs: on.tsSecsRaw, toSecs: off ? off.tsSecsRaw : 9999 });
+    });
+    gkRotation[half] = segments;
+  });
+
+  // Compute time-based stats from event log
+  const timeStats = computeTimeStats(eventRows, goalEvents, gkRotation);
+
+  return { eventRows, goalEvents, gkRotation, resolvedTeams, summary1H, summary2H, summaryFull, timeStats, allPlayers: [...allEventPlayers].sort() };
+}
+
+function computeTimeStats(eventRows, goalEvents, gkRotation) {
+  // Group events by player
+  const byPlayer = {};
+  eventRows.forEach(r => {
+    if (!r.player || r.event === 'GK On' || r.event === 'GK Removed') return;
+    if (!byPlayer[r.player]) byPlayer[r.player] = [];
+    byPlayer[r.player].push(r);
+  });
+
+  // Find the match duration per half
+  const maxSecs = { '1H': 0, '2H': 0 };
+  eventRows.forEach(r => {
+    if (r.half === '1H' && r.tsSecsRaw > maxSecs['1H']) maxSecs['1H'] = r.tsSecsRaw;
+    if (r.half === '2H' && r.tsSecsRaw > maxSecs['2H']) maxSecs['2H'] = r.tsSecsRaw;
+  });
+  const halfDur = { '1H': maxSecs['1H'] || 1, '2H': maxSecs['2H'] || 1 };
+
+  // Score timeline — needed for "playing with/against lead" analysis
+  const scoreTimeline = buildScoreTimeline(goalEvents, halfDur);
+
+  const playerStats = {};
+  Object.entries(byPlayer).forEach(([player, events]) => {
+    const s = {
+      // Momentum: best 5-minute window (total stats in any 300s span)
+      peakWindow: computePeakWindow(events, 300),
+      // Fatigue: stat rate in each third of each half
+      fatigue: computeFatigueTrids(events, halfDur),
+      // Clutch: stats in final 5 mins of each half
+      clutch: computeClutchStats(events, halfDur, 300),
+      // Lead/trail performance
+      leadStats: computeLeadStats(events, scoreTimeline, player),
+      // Shot timing distribution
+      shotTiming: computeShotTiming(events, halfDur),
+      // First action timestamp
+      firstAction: events.reduce((min, e) => Math.min(min, e.tsSecsRaw), Infinity),
+      // Response stats: activity in 90s after a goal conceded
+      pressureResponse: computePressureResponse(events, goalEvents, player),
+    };
+    playerStats[player] = s;
+  });
+
+  return { playerStats, halfDur, scoreTimeline };
+}
+
+function buildScoreTimeline(goalEvents, halfDur) {
+  // Returns sorted array of { secs, halfAbsSecs, scoreA, scoreB }
+  let sA = 0, sB = 0;
+  const timeline = [{ secs: 0, halfAbsSecs: 0, scoreA: 0, scoreB: 0 }];
+  const sorted = [...goalEvents].sort((a, b) => {
+    const hOrd = a.half === b.half ? 0 : a.half < b.half ? -1 : 1;
+    return hOrd || a.tsSecsRaw - b.tsSecsRaw;
+  });
+  sorted.forEach(g => {
+    if (g.team === 'A') sA++; else sB++;
+    const abs = (g.half === '2H' ? halfDur['1H'] : 0) + g.tsSecsRaw;
+    timeline.push({ secs: g.tsSecsRaw, half: g.half, halfAbsSecs: abs, scoreA: sA, scoreB: sB, goalTeam: g.team });
+  });
+  return timeline;
+}
+
+function computePeakWindow(events, windowSecs) {
+  if (!events.length) return { count: 0, start: 0, half: '1H' };
+  const statEvents = events.filter(e => e.event !== 'GK On' && e.event !== 'GK Removed');
+  let best = 0, bestStart = 0, bestHalf = '1H';
+  statEvents.forEach((e, i) => {
+    const windowEnd = e.tsSecsRaw + windowSecs;
+    const count = statEvents.filter(e2 => e2.half === e.half && e2.tsSecsRaw >= e.tsSecsRaw && e2.tsSecsRaw < windowEnd).length;
+    if (count > best) { best = count; bestStart = e.tsSecsRaw; bestHalf = e.half; }
+  });
+  return { count: best, startSecs: bestStart, half: bestHalf };
+}
+
+function computeFatigueTrids(events, halfDur) {
+  // Split each half into 3 equal thirds, count stats per third
+  const result = {};
+  ['1H','2H'].forEach(half => {
+    const dur = halfDur[half];
+    const third = dur / 3;
+    const halveEvents = events.filter(e => e.half === half);
+    result[half] = [0,1,2].map(t => halveEvents.filter(e => e.tsSecsRaw >= t*third && e.tsSecsRaw < (t+1)*third).length);
+  });
+  return result;
+}
+
+function computeClutchStats(events, halfDur, finalSecs) {
+  const result = {};
+  ['1H','2H'].forEach(half => {
+    const dur = halfDur[half];
+    result[half] = events.filter(e => e.half === half && e.tsSecsRaw >= dur - finalSecs).length;
+  });
+  return result;
+}
+
+function computeLeadStats(events, scoreTimeline, player) {
+  // For each event, look up score at that time and classify as leading/trailing/level
+  const counts = { leading: 0, trailing: 0, level: 0 };
+  events.forEach(e => {
+    // Find score just before this event
+    const abs = (e.half === '2H' ? (scoreTimeline[1]?.halfAbsSecs || 0) : 0) + e.tsSecsRaw;
+    let scoreA = 0, scoreB = 0;
+    for (const entry of scoreTimeline) {
+      if (entry.halfAbsSecs <= abs) { scoreA = entry.scoreA; scoreB = entry.scoreB; }
+      else break;
+    }
+    const teamAtTime = e.team;
+    const teamScore = teamAtTime === 'A' ? scoreA : scoreB;
+    const oppScore  = teamAtTime === 'A' ? scoreB : scoreA;
+    if (teamScore > oppScore) counts.leading++;
+    else if (teamScore < oppScore) counts.trailing++;
+    else counts.level++;
+  });
+  return counts;
+}
+
+function computeShotTiming(events, halfDur) {
+  // Bucket shots into 5-min windows across the match
+  const shots = events.filter(e => e.event === 'On Target' || e.event === 'Off Target' || e.event === 'Goals');
+  const buckets = {};
+  shots.forEach(e => {
+    const bucket = Math.floor(e.tsSecsRaw / 300) * 5; // 5-min bucket label in minutes
+    const key = `${e.half}-${bucket}`;
+    buckets[key] = (buckets[key] || 0) + 1;
+  });
+  return buckets;
+}
+
+function computePressureResponse(events, goalEvents, player) {
+  // Count stats in 90 seconds after the team conceded a goal
+  const playerTeam = events[0]?.team || 'A';
+  const concededGoals = goalEvents.filter(g => g.team !== playerTeam);
+  let responseTotal = 0, responseGoals = 0;
+  concededGoals.forEach(g => {
+    const responseWindow = events.filter(e =>
+      e.half === g.half &&
+      e.tsSecsRaw >= g.tsSecsRaw &&
+      e.tsSecsRaw < g.tsSecsRaw + 90
+    );
+    responseTotal += responseWindow.length;
+    responseGoals += responseWindow.filter(e => e.event === 'Goals').length;
+  });
+  return { total: responseTotal, goals: responseGoals, opps: concededGoals.length };
+}
+
+function newFormatFileSelected(input) {
+  const file = input.files[0];
+  if (!file) return;
+  document.getElementById('new-file-name').textContent = file.name;
+
+  // Try to extract date from filename: A_vs_B_YYYY-MM-DD.csv
+  const dateMatch = file.name.match(/(\d{4}-\d{2}-\d{2})/);
+  if (dateMatch) document.getElementById('new-weekly-date').value = dateMatch[1];
+
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      _newFormatParsed = parseNewFormatCSV(e.target.result);
+      if (!_newFormatParsed) { alert('Could not parse file — make sure it is the combined event log CSV format.'); return; }
+
+      // Pre-fill team assignments from resolved teams
+      _newFormatTeams = {};
+      _newFormatParsed.allPlayers.forEach(p => {
+        const t = _newFormatParsed.resolvedTeams[p];
+        _newFormatTeams[p] = { h1: t?.h1 || 'A', h2: t?.h2 || t?.h1 || 'A' };
+      });
+
+      renderNewTeamAssignments();
+
+      const el = document.getElementById('new-file-summary');
+      const e2 = _newFormatParsed.eventRows;
+      const goals = _newFormatParsed.goalEvents.length;
+      const players = _newFormatParsed.allPlayers.length;
+      el.innerHTML = `<span style="color:var(--lime)">✓ ${e2.length} events</span> &nbsp;·&nbsp; ${goals} goals &nbsp;·&nbsp; ${players} players &nbsp;·&nbsp; ${[...(new Set(e2.map(r=>r.half).filter(Boolean)))].join(' + ')}`;
+      document.getElementById('new-file-info').style.display = '';
+      document.getElementById('new-team-section').style.display = '';
+      document.getElementById('new-generate-btn').disabled = false;
+    } catch(err) {
+      alert('Parse error: ' + err.message);
+    }
+  };
+  reader.readAsText(file);
+}
+
+function renderNewTeamAssignments() {
+  if (!_newFormatParsed) return;
+  const container = document.getElementById('new-team-assignments');
+  const players = _newFormatParsed.allPlayers;
+  const hasBothHalves = players.some(p => {
+    const t = _newFormatParsed.resolvedTeams[p];
+    return t && t.h1 && t.h2 && t.h1 !== '-' && t.h2 !== '-' && t.h1 !== t.h2;
+  });
+
+  const btnStyle = (active, col) => `padding:4px 10px;border:1px solid var(--border);border-radius:5px;cursor:pointer;font-family:'Barlow Condensed',sans-serif;font-size:.8rem;letter-spacing:.5px;transition:all .15s;background:${active?col:'var(--card2)'};color:${active?(col==='var(--green)'?'#071009':'#fff'):'var(--muted)'}`;
+
+  container.innerHTML = `
+    <div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap;align-items:center">
+      <span style="font-size:.72rem;color:var(--muted)">Quick set:</span>
+      <button onclick="newSetAllTeam('A')" style="padding:4px 10px;border:1px solid var(--border);border-radius:5px;cursor:pointer;font-family:'Barlow Condensed',sans-serif;font-size:.75rem;background:var(--card2);color:var(--muted)">All → A</button>
+      <button onclick="newSetAllTeam('B')" style="padding:4px 10px;border:1px solid var(--border);border-radius:5px;cursor:pointer;font-family:'Barlow Condensed',sans-serif;font-size:.75rem;background:var(--card2);color:var(--muted)">All → B</button>
+      <button onclick="newSetAllTeam('DNP')" style="padding:4px 10px;border:1px solid var(--border);border-radius:5px;cursor:pointer;font-family:'Barlow Condensed',sans-serif;font-size:.75rem;background:var(--card2);color:var(--muted)">All → DNP</button>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:6px">
+      ${players.map(p => {
+        const t = _newFormatTeams[p] || { h1: 'A', h2: 'A' };
+        const switched = t.h1 !== t.h2;
+        return `<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--card2);border-radius:7px;border:1px solid ${switched?'rgba(249,115,22,.3)':'var(--border)'}">
+          <span style="flex:1;font-size:.82rem;font-weight:500;color:${t.h1==='DNP'&&t.h2==='DNP'?'var(--muted)':'var(--text)'}">${p}${switched?`<span style="font-size:.6rem;color:var(--amber,#f59e0b);margin-left:4px">⇄ switched</span>`:''}</span>
+          <div style="display:flex;gap:3px;align-items:center">
+            <span style="font-size:.62rem;color:var(--muted)">1H</span>
+            ${['A','B','DNP'].map(v=>`<button onclick="newSetTeam('${p}','h1','${v}')" style="${btnStyle(t.h1===v,v==='A'?'var(--green)':v==='B'?'var(--blue)':'var(--muted)')}">${v}</button>`).join('')}
+          </div>
+          <div style="display:flex;gap:3px;align-items:center">
+            <span style="font-size:.62rem;color:var(--muted)">2H</span>
+            ${['A','B','DNP'].map(v=>`<button onclick="newSetTeam('${p}','h2','${v}')" style="${btnStyle(t.h2===v,v==='A'?'var(--green)':v==='B'?'var(--blue)':'var(--muted)')}">${v}</button>`).join('')}
+          </div>
+        </div>`;
+      }).join('')}
+    </div>`;
+}
+
+function newSetTeam(player, half, team) {
+  if (!_newFormatTeams[player]) _newFormatTeams[player] = { h1: 'A', h2: 'A' };
+  _newFormatTeams[player][half] = team;
+  renderNewTeamAssignments();
+}
+
+function newSetAllTeam(team) {
+  if (!_newFormatParsed) return;
+  _newFormatParsed.allPlayers.forEach(p => { _newFormatTeams[p] = { h1: team, h2: team }; });
+  renderNewTeamAssignments();
+}
+
+function generateNewFormatCSV() {
+  if (!_newFormatParsed) return;
+  const dateVal = document.getElementById('new-weekly-date').value;
+  if (!dateVal) { alert('Please enter the match date.'); return; }
+
+  const matchDate   = dateVal;
+  const matchIdInput = document.getElementById('new-weekly-matchid').value.trim();
+  const matchId     = matchIdInput || `${matchDate}#1`;
+  const twoGames    = document.getElementById('new-two-games').checked;
+
+  const { summary1H, summary2H, summaryFull, goalEvents, gkRotation, timeStats, allPlayers } = _newFormatParsed;
+
+  const headers = ['match_id','match_date','team','player','half','goals','assists',
+    'shots_on_target','shots_off_target','total_shots','goalkeeper_saves','blocks',
+    'total_saves','interceptions','tackles','nutmegs','post','key_passes','own_goals'];
+
+  const makeRow = (mId, mDate, team, player, half, s) => [
+    mId, mDate, team, player, half,
+    s.goals||0, s.assists||0,
+    s.shots_on_target||0, s.shots_off_target||0, s.total_shots||0,
+    s.goalkeeper_saves||0, s.blocks||0, s.total_saves||0,
+    s.interceptions||0, s.tackles||0, s.nutmegs||0,
+    s.post||0, s.key_passes||0, s.own_goals||0,
+  ].join(',');
+
+  const rows = [];
+
+  allPlayers.forEach(player => {
+    const ta = _newFormatTeams[player] || { h1: 'A', h2: 'A' };
+    if (ta.h1 === 'DNP' && ta.h2 === 'DNP') {
+      rows.push([matchId, matchDate, 'DNP', player, 'DNP', 0,0,0,0,0,'N/A',0,0,0,0,0,0,0,0].join(','));
+      return;
+    }
+
+    const s1   = summary1H[player]   || {};
+    const s2   = summary2H[player]   || {};
+    const full = summaryFull[player] || {};
+
+    // Determine effective team per row — use the assigned teams
+    const t1 = ta.h1 !== 'DNP' ? ta.h1 : (ta.h2 !== 'DNP' ? ta.h2 : 'A');
+    const t2 = ta.h2 !== 'DNP' ? ta.h2 : (ta.h1 !== 'DNP' ? ta.h1 : 'A');
+    // For FULL row: use the team they played most of the game for
+    // If switched, use h1 team for FULL (convention) — override-able by user
+    const tFull = ta.h1 !== 'DNP' ? ta.h1 : ta.h2;
+
+    if (twoGames) {
+      const id1 = (matchIdInput || matchDate).replace(/#\d+$/, '') + '#1';
+      const id2 = (matchIdInput || matchDate).replace(/#\d+$/, '') + '#2';
+      if (ta.h1 !== 'DNP') rows.push(makeRow(id1, matchDate, t1, player, 'FULL', s1));
+      if (ta.h2 !== 'DNP') rows.push(makeRow(id2, matchDate, t2, player, 'FULL', s2));
+    } else {
+      if (ta.h1 !== 'DNP') rows.push(makeRow(matchId, matchDate, t1, player, '1H', s1));
+      if (ta.h2 !== 'DNP') rows.push(makeRow(matchId, matchDate, t2, player, '2H', s2));
+      // FULL row uses summaryFull stats (trusted from file), team = tFull
+      rows.push(makeRow(matchId, matchDate, tFull, player, 'FULL', full));
+    }
+  });
+
+  // Generate combos CSV rows from goal events
+  const combosRows = generateCombosFromGoalEvents(goalEvents, matchId);
+
+  // Store event log in localStorage keyed by matchId
+  try {
+    const stored = JSON.parse(localStorage.getItem('aero_event_logs') || '{}');
+    stored[matchId] = {
+      date: matchDate,
+      events: _newFormatParsed.eventRows,
+      gkRotation,
+      timeStats: _newFormatParsed.timeStats,
+    };
+    localStorage.setItem('aero_event_logs', JSON.stringify(stored));
+  } catch(e) { console.warn('Event log storage failed:', e); }
+
+  const csvText = rows.join('\n');
+  window._weeklyPendingCSV   = csvText;
+  window._weeklyPendingDate  = matchDate;
+  window._weeklyPendingCombos = combosRows;
+  window._weeklyMatchId      = matchId;
+
+  // Show previews
+  showNewFormatPreview(allPlayers, summary1H, summary2H, summaryFull);
+  showTimelinePreview(_newFormatParsed.timeStats, allPlayers);
+  showCombosPreview(goalEvents, matchId);
+
+  document.getElementById('weekly-csv-output').value = csvText;
+  document.getElementById('weekly-output').style.display = 'block';
+  document.getElementById('weekly-timeline-preview').style.display = '';
+  document.getElementById('weekly-combos-preview').style.display = '';
+  document.getElementById('weekly-github-reminder').style.display = '';
+  document.getElementById('weekly-append-status').textContent = '';
+}
+
+function generateCombosFromGoalEvents(goalEvents, matchId) {
+  // Group goal events by half
+  const byHalf = { '1H': [], '2H': [] };
+  goalEvents.forEach(g => { if (byHalf[g.half]) byHalf[g.half].push(g); });
+  const rows = [];
+  Object.entries(byHalf).forEach(([half, goals]) => {
+    goals.forEach(g => {
+      const isHL     = g.highlight && g.highlight !== 'none' ? '1' : '0';
+      const isAssHL  = g.assistHL  && g.assistHL  !== 'none' ? '1' : '0';
+      const isOG     = g.event === 'Own Goal' ? '1' : '0';
+      rows.push([
+        matchId, half, g.ts||'', g.player||'', g.assistBy||'',
+        isOG, isHL, isAssHL,
+        g.shotX != null ? g.shotX.toFixed(4) : '',
+        g.shotY != null ? g.shotY.toFixed(4) : '',
+        g.assistX != null ? g.assistX.toFixed(4) : '',
+        g.assistY != null ? g.assistY.toFixed(4) : '',
+      ].join(','));
+    });
+  });
+  return rows;
+}
+
+function showNewFormatPreview(players, h1, h2, full) {
+  const cols = ['Goals','Asst','Shots','On Tgt','Tackles','Nmg','Int','KP','Blk','Svs','OG'];
+  const getRow = s => [
+    (s.goals||0),(s.assists||0),(s.total_shots||0),(s.shots_on_target||0),
+    (s.tackles||0),(s.nutmegs||0),(s.interceptions||0),(s.key_passes||0),
+    (s.blocks||0),(s.total_saves||0),(s.own_goals||0),
+  ];
+  const th = 'padding:5px 8px;font-size:.68rem;color:var(--muted);font-family:"Barlow Condensed",sans-serif;letter-spacing:.5px;text-transform:uppercase;border-bottom:1px solid var(--border);text-align:right;white-space:nowrap';
+  const td = 'padding:5px 8px;font-size:.78rem;border-bottom:1px solid rgba(37,53,39,.3);text-align:right';
+  const tn = 'padding:5px 8px;font-size:.78rem;border-bottom:1px solid rgba(37,53,39,.3);font-weight:600';
+  document.getElementById('weekly-preview-table').innerHTML = `
+    <table style="border-collapse:collapse;min-width:600px;width:100%">
+      <thead><tr>
+        <th style="${th};text-align:left">Player</th>
+        <th style="${th};text-align:center">1H</th><th style="${th};text-align:center">2H</th>
+        ${cols.map(c=>`<th style="${th}">1H ${c}</th>`).join('')}
+        ${cols.map(c=>`<th style="${th}">2H ${c}</th>`).join('')}
+      </tr></thead>
+      <tbody>
+        ${players.map(p => {
+          const ta = _newFormatTeams[p] || { h1: 'A', h2: 'A' };
+          if (ta.h1 === 'DNP' && ta.h2 === 'DNP') return `<tr style="opacity:.4"><td style="${tn}">${p}</td><td colspan="${cols.length*2+2}" style="${td};text-align:center;color:var(--muted);font-style:italic">Did not play</td></tr>`;
+          const r1 = getRow(h1[p]||{}), r2 = getRow(h2[p]||{});
+          const tc = (t) => t==='A'?'var(--green)':t==='B'?'var(--blue)':'var(--muted)';
+          return `<tr>
+            <td style="${tn}">${p}</td>
+            <td style="${td};text-align:center;color:${tc(ta.h1)};font-weight:700">${ta.h1}</td>
+            <td style="${td};text-align:center;color:${tc(ta.h2)};font-weight:700">${ta.h2}</td>
+            ${r1.map(v=>`<td style="${td}">${v>0?`<strong>${v}</strong>`:v}</td>`).join('')}
+            ${r2.map(v=>`<td style="${td}">${v>0?`<strong>${v}</strong>`:v}</td>`).join('')}
+          </tr>`;
+        }).join('')}
+      </tbody>
+    </table>`;
+}
+
+function showTimelinePreview(timeStats, allPlayers) {
+  if (!timeStats) return;
+  const { playerStats, halfDur } = timeStats;
+
+  // Build insights list
+  const insights = [];
+
+  // Peak window leader
+  const peakRanked = allPlayers
+    .filter(p => playerStats[p])
+    .sort((a,b) => (playerStats[b].peakWindow?.count||0) - (playerStats[a].peakWindow?.count||0));
+  if (peakRanked.length) {
+    const top = peakRanked[0], pw = playerStats[top].peakWindow;
+    const mins = Math.floor(pw.startSecs/60);
+    insights.push({ icon:'🔥', label:'Hottest spell', text:`${top} — ${pw.count} stats in a 5-min window (${pw.half} ~${mins}')`});
+  }
+
+  // Clutch performers (most stats in final 5 mins)
+  const clutchRanked = allPlayers
+    .filter(p => playerStats[p])
+    .sort((a,b) => {
+      const bC = (playerStats[b].clutch?.['1H']||0)+(playerStats[b].clutch?.['2H']||0);
+      const aC = (playerStats[a].clutch?.['1H']||0)+(playerStats[a].clutch?.['2H']||0);
+      return bC - aC;
+    });
+  if (clutchRanked.length && playerStats[clutchRanked[0]]) {
+    const top = clutchRanked[0], c = playerStats[top].clutch;
+    const total = (c?.['1H']||0) + (c?.['2H']||0);
+    if (total > 0) insights.push({ icon:'⏱', label:'Clutch performer', text:`${top} — ${total} stats in the final 5 mins of halves`});
+  }
+
+  // Best response after conceding
+  const responseRanked = allPlayers
+    .filter(p => playerStats[p]?.pressureResponse?.opps > 0)
+    .sort((a,b) => (playerStats[b].pressureResponse.total/Math.max(playerStats[b].pressureResponse.opps,1)) - (playerStats[a].pressureResponse.total/Math.max(playerStats[a].pressureResponse.opps,1)));
+  if (responseRanked.length) {
+    const top = responseRanked[0], r = playerStats[top].pressureResponse;
+    insights.push({ icon:'💪', label:'Best under pressure', text:`${top} — avg ${(r.total/Math.max(r.opps,1)).toFixed(1)} stats in 90s after conceding`});
+  }
+
+  // Fatigue patterns — most pronounced drop from T1 to T3
+  const fatigueRanked = allPlayers
+    .filter(p => playerStats[p]?.fatigue)
+    .map(p => {
+      const f = playerStats[p].fatigue;
+      const h1 = f['1H'] || [0,0,0];
+      const drop = h1[0] - h1[2]; // first third vs last third of 1H
+      return { p, drop };
+    })
+    .sort((a,b) => b.drop - a.drop);
+  if (fatigueRanked.length && fatigueRanked[0].drop > 1) {
+    const { p, drop } = fatigueRanked[0];
+    insights.push({ icon:'📉', label:'Biggest fatigue drop', text:`${p} — ${drop} fewer stats in last third vs first third of 1H`});
+  }
+
+  // Most improved in 2H
+  const secondHalfSurge = allPlayers
+    .filter(p => playerStats[p]?.fatigue)
+    .map(p => {
+      const f = playerStats[p].fatigue;
+      const h1total = (f['1H']||[0,0,0]).reduce((s,v)=>s+v,0);
+      const h2total = (f['2H']||[0,0,0]).reduce((s,v)=>s+v,0);
+      return { p, surge: h2total - h1total };
+    })
+    .sort((a,b) => b.surge - a.surge);
+  if (secondHalfSurge.length && secondHalfSurge[0].surge > 2) {
+    const { p, surge } = secondHalfSurge[0];
+    insights.push({ icon:'📈', label:'Second half surge', text:`${p} — ${surge} more stats in 2H than 1H`});
+  }
+
+  // Performance when trailing
+  const trailPerformers = allPlayers
+    .filter(p => playerStats[p]?.leadStats?.trailing > 0)
+    .sort((a,b) => playerStats[b].leadStats.trailing - playerStats[a].leadStats.trailing);
+  if (trailPerformers.length) {
+    const top = trailPerformers[0], l = playerStats[top].leadStats;
+    const total = l.leading + l.trailing + l.level;
+    if (total > 0) insights.push({ icon:'⚡', label:'Strongest when chasing', text:`${top} — ${l.trailing} stats while trailing (${Math.round(l.trailing/total*100)}% of output)`});
+  }
+
+  // Per-player fatigue table
+  const fatigueTable = allPlayers
+    .filter(p => playerStats[p]?.fatigue)
+    .map(p => {
+      const f = playerStats[p].fatigue;
+      const h1 = f['1H'] || [0,0,0], h2 = f['2H'] || [0,0,0];
+      return { p, h1, h2 };
+    })
+    .filter(r => r.h1.some(v=>v>0) || r.h2.some(v=>v>0));
+
+  const content = document.getElementById('weekly-timeline-content');
+  const tdS = 'padding:5px 8px;font-size:.75rem;border-bottom:1px solid rgba(37,53,39,.3);text-align:center';
+  const thS = 'padding:5px 8px;font-size:.65rem;color:var(--muted);letter-spacing:.5px;text-transform:uppercase;border-bottom:1px solid var(--border);text-align:center;white-space:nowrap;font-family:"Barlow Condensed",sans-serif';
+
+  content.innerHTML = `
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px;margin-bottom:18px">
+      ${insights.map(ins => `
+        <div style="background:var(--card2);border-radius:8px;padding:10px 12px;border:1px solid var(--border)">
+          <div style="font-size:.75rem;color:var(--muted);margin-bottom:3px">${ins.icon} ${ins.label}</div>
+          <div style="font-size:.85rem;font-weight:600;color:var(--text)">${ins.text}</div>
+        </div>`).join('')}
+    </div>
+    <div style="font-family:'Barlow Condensed',sans-serif;font-size:.7rem;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:8px">Activity by Third of Half</div>
+    <div style="overflow-x:auto">
+    <table style="border-collapse:collapse;min-width:500px;width:100%">
+      <thead><tr>
+        <th style="${thS};text-align:left">Player</th>
+        <th style="${thS}">1H Early</th><th style="${thS}">1H Mid</th><th style="${thS}">1H Late</th>
+        <th style="${thS}">2H Early</th><th style="${thS}">2H Mid</th><th style="${thS}">2H Late</th>
+        <th style="${thS}">Trend</th>
+      </tr></thead>
+      <tbody>
+        ${fatigueTable.map(({p, h1, h2}) => {
+          const all = [...h1,...h2];
+          const mx = Math.max(...all, 1);
+          const bar = v => {
+            const pct = Math.round(v/mx*100);
+            const col = pct > 66 ? 'var(--green)' : pct > 33 ? 'var(--amber,#f59e0b)' : 'var(--muted)';
+            return `<td style="${tdS}"><div style="display:inline-flex;align-items:center;gap:4px"><div style="width:${Math.max(pct*.3,2)}px;height:6px;background:${col};border-radius:2px"></div><span style="font-size:.78rem;${v>0?'font-weight:600':''}">${v}</span></div></td>`;
+          };
+          // Trend arrow: compare first third to last third across whole game
+          const trend = (h1[2]+h2[2]) > (h1[0]+h2[0]) ? '↗' : (h1[2]+h2[2]) < (h1[0]+h2[0]) ? '↘' : '→';
+          const trendCol = trend==='↗'?'var(--green)':trend==='↘'?'rgba(248,113,113,.7)':'var(--muted)';
+          return `<tr>
+            <td style="${tdS};text-align:left;font-weight:600">${p}</td>
+            ${h1.map(v=>bar(v)).join('')}${h2.map(v=>bar(v)).join('')}
+            <td style="${tdS};color:${trendCol};font-size:1.1rem">${trend}</td>
+          </tr>`;
+        }).join('')}
+      </tbody>
+    </table>
+    </div>`;
+}
+
+function showCombosPreview(goalEvents, matchId) {
+  const el = document.getElementById('weekly-combos-content');
+  if (!goalEvents.length) { el.innerHTML = '<div style="font-size:.78rem;color:var(--muted)">No goals found in event log.</div>'; return; }
+  el.innerHTML = goalEvents.map(g => `
+    <div style="display:inline-flex;flex-direction:column;align-items:center;gap:3px;vertical-align:top;margin:0 6px 6px 0">
+      <span style="background:rgba(57,211,83,.08);border:1px solid rgba(57,211,83,.2);border-radius:5px;padding:3px 8px;font-size:.72rem;white-space:nowrap">
+        <span style="color:var(--lime);font-size:.6rem">${g.half} ${g.ts}</span>
+        <span style="color:var(--text);font-weight:600;margin-left:3px">${g.player}</span>
+        ${g.assistBy ? `<span style="color:var(--muted)"> ← </span><span style="color:var(--text2)">${g.assistBy}</span>` : ''}
+        ${g.shotX != null ? `<span style="color:var(--green);font-size:.55rem;margin-left:3px">📍</span>` : ''}
+      </span>
+    </div>`).join('');
+}
+
+function appendToAppData() {
+  const csv = window._weeklyPendingCSV;
+  if (!csv) return;
+  try {
+    const newRows = parseCSV(CSV_HEADER + '\n' + csv);
+    if (!newRows.length) throw new Error('No rows generated');
+    const matchIds = new Set(newRows.map(r=>r.match_id));
+    const filtered = allRows.filter(r=>!matchIds.has(r.match_id));
+    allRows = [...filtered, ...newRows];
+    playerStats = buildPlayerStats(allRows);
+    matchList = buildMatches(allRows);
+    computeWinLoss(playerStats, matchList);
+    computeSpiderMaxima();
+    computeAnalytics();
+    computeFilteredStats();
+    matchList.forEach(m => { m.rows.forEach(r => { r._match = m; }); });
+    renderAll();
+    renderMatches();
+    saveExtraRows();
+    updateDraftBanner();
+    _tagCache = null;
+
+    // Import combos if from new format
+    if (window._weeklyPendingCombos && window._weeklyMatchId) {
+      const combosCsvText = 'match_id,half,time,scorer,assister,is_og,is_goal_highlight,is_assist_highlight,shot_x,shot_y,assist_x,assist_y\n' + window._weeklyPendingCombos.join('\n');
+      importCombosCSV(combosCsvText);
+    }
+
+    // Check for notable performances
+    const matchDate = window._weeklyPendingDate;
+    const newMatch = matchList.find(m => m.date === matchDate);
+    const records = [];
+    if (newMatch) {
+      [...newMatch.teamA, ...newMatch.teamB].forEach(r => {
+        const ps = playerStats[r.player]; if (!ps) return;
+        if (n(r.goals) > 0 && n(r.goals) > (ps.maxGoalsInGame || 0) && ps.games > 1) records.push(`⚽ ${r.player} scored ${n(r.goals)} goals — personal best`);
+        if (n(r.assists) >= 4) records.push(`🎯 ${r.player} recorded ${n(r.assists)} assists`);
+        if (n(r.nutmegs) >= 5) records.push(`🪄 ${r.player} pulled off ${n(r.nutmegs)} nutmegs`);
+        if (n(r.blocks) >= 6) records.push(`🧱 ${r.player} blocked ${n(r.blocks)} shots`);
+        if (n(r.goalkeeper_saves) >= 8) records.push(`🧤 ${r.player} made ${n(r.goalkeeper_saves)} GK saves`);
+      });
+      const margin = Math.abs(newMatch.goalsA - newMatch.goalsB);
+      if (margin >= 10) records.push(`🏆 Biggest win of the season — ${newMatch.goalsA}–${newMatch.goalsB}!`);
+      const total = newMatch.goalsA + newMatch.goalsB;
+      if (total >= 25) records.push(`🔥 Highest scoring game — ${total} goals total!`);
+    }
+
+    const count = newRows.filter(r=>r.half==='FULL').length;
+    const status = document.getElementById('weekly-append-status');
+    status.innerHTML = `<span style="color:var(--green)">✅ ${count} player records for ${matchDate} imported · Saved to browser storage</span>`;
+
+    if (records.length) {
+      const modal = document.createElement('div');
+      modal.style.cssText = 'position:fixed;inset:0;z-index:500;background:rgba(0,0,0,.8);display:flex;align-items:center;justify-content:center;padding:20px';
+      modal.onclick = e => { if (e.target === modal) { modal.remove(); nav('matches'); } };
+      modal.innerHTML = `
+        <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:26px;width:100%;max-width:440px;position:relative">
+          <div style="font-family:'Bebas Neue',sans-serif;font-size:1.6rem;color:var(--green);letter-spacing:2px;margin-bottom:4px">🎉 Notable Performances</div>
+          <div style="font-size:.75rem;color:var(--muted);margin-bottom:16px">${matchDate}</div>
+          <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:20px">
+            ${records.map(r => `<div style="background:var(--card2);border:1px solid var(--border);border-radius:8px;padding:10px 14px;font-size:.85rem;color:var(--text)">${r}</div>`).join('')}
+          </div>
+          <button onclick="this.closest('[style]').remove();nav('matches')"
+            style="width:100%;background:var(--green);color:#071009;border:none;border-radius:8px;padding:10px;font-family:'Bebas Neue',sans-serif;font-size:1.1rem;letter-spacing:1px;cursor:pointer">Let's Go →</button>
+        </div>`;
+      document.body.appendChild(modal);
+    } else {
+      setTimeout(() => nav('matches'), 1500);
+    }
+  } catch(e) {
+    const status = document.getElementById('weekly-append-status');
+    status.innerHTML = `<span style="color:var(--red)">❌ Error: ${e.message}</span>`;
+  }
+}
+
+function importCombosCSV(csvText) {
+  // Parse and merge combos into goalCombos — reuse existing CSV combo import logic
+  const lines = csvText.trim().split('\n');
+  const header = lines[0].split(',').map(h => h.trim().toLowerCase());
+  const idx = {};
+  header.forEach((h, i) => idx[h] = i);
+  lines.slice(1).forEach(line => {
+    if (!line.trim()) return;
+    const cols = line.split(',');
+    const mid    = cols[idx['match_id']]?.trim();
+    const half   = cols[idx['half']]?.trim();
+    const time   = cols[idx['time']]?.trim();
+    const scorer = cols[idx['scorer']]?.trim();
+    const assister = cols[idx['assister']]?.trim() || '';
+    if (!mid || !half || !scorer) return;
+    const isOG  = cols[idx['is_og']]?.trim() === '1';
+    const isGoalHL   = cols[idx['is_goal_highlight']]?.trim() === '1';
+    const isAssistHL = cols[idx['is_assist_highlight']]?.trim() === '1';
+    const sx = parseFloat(cols[idx['shot_x']]) || null;
+    const sy = parseFloat(cols[idx['shot_y']]) || null;
+    const ax = parseFloat(cols[idx['assist_x']]) || null;
+    const ay = parseFloat(cols[idx['assist_y']]) || null;
+    const key = half === '1H' ? 'h1' : 'h2';
+    if (!goalCombos[mid]) goalCombos[mid] = { h1: [], h2: [] };
+    goalCombos[mid][key].push({
+      scorer, assister, time, isOG,
+      isGoalHighlight: isGoalHL, isAssistHighlight: isAssistHL,
+      ...(sx != null && sy != null ? { sx, sy } : {}),
+      ...(ax != null && ay != null ? { ax, ay } : {}),
+    });
+  });
+  saveGoalCombos();
+}
+
+// =====================================================================
 function parseWeeklyContent(text) {
   const lines = text.trim().split('\n').map(l => l.trim()).filter(Boolean);
   const result = {};
@@ -11012,9 +11916,13 @@ function generateWeeklyCSV() {
   showWeeklyPreview(allPlayers, h1stats, h2stats, ogMap);
   document.getElementById('weekly-csv-output').value = csvText;
   document.getElementById('weekly-output').style.display = 'block';
+  document.getElementById('weekly-timeline-preview').style.display = 'none';
+  document.getElementById('weekly-combos-preview').style.display = 'none';
+  document.getElementById('weekly-github-reminder').style.display = 'none';
   document.getElementById('weekly-append-status').textContent = '';
   window._weeklyPendingCSV = csvText;
   window._weeklyPendingDate = matchDate;
+  window._weeklyPendingCombos = null;
 }
 
 function showWeeklyPreview(players, h1, h2, ogMap) {
@@ -11070,89 +11978,6 @@ function copyWeeklyCSV() {
   const btn = document.getElementById('weekly-copy-btn');
   btn.textContent = '✅ Copied!';
   setTimeout(() => btn.textContent = '📋 Copy Rows', 2500);
-}
-
-function appendToAppData() {
-  const csv = window._weeklyPendingCSV;
-  if (!csv) return;
-  try {
-    const newRows = parseCSV(CSV_HEADER + '\n' + csv);
-    if (!newRows.length) throw new Error('No rows generated');
-    // Merge with existing — remove any existing rows for this match_id first
-    const matchIds = new Set(newRows.map(r=>r.match_id));
-    const filtered = allRows.filter(r=>!matchIds.has(r.match_id));
-    allRows = [...filtered, ...newRows];
-    playerStats = buildPlayerStats(allRows);
-    matchList = buildMatches(allRows);
-    computeWinLoss(playerStats, matchList);
-    computeSpiderMaxima();
-    computeAnalytics();
-    computeFilteredStats();
-    matchList.forEach(m => { m.rows.forEach(r => { r._match = m; }); });
-    renderAll();
-    renderMatches(); // always refresh match list after import
-    // Persist the new rows so they survive page reload
-    saveExtraRows();
-    updateDraftBanner();
-
-    // Check for personal records broken in this import
-    const newMatchRows = newRows.filter(r => r.half === 'FULL');
-    const records = [];
-    const matchDate = window._weeklyPendingDate;
-    const newMatch = matchList.find(m => m.date === matchDate);
-    if (newMatch) {
-      [...newMatch.teamA, ...newMatch.teamB].forEach(r => {
-        const ps = playerStats[r.player];
-        if (!ps) return;
-        if (n(r.goals) > 0 && n(r.goals) > (ps.maxGoalsInGame || 0) && ps.games > 1)
-          records.push(`⚽ ${r.player} scored ${n(r.goals)} goals — personal best`);
-        if (n(r.assists) >= 4)
-          records.push(`🎯 ${r.player} recorded ${n(r.assists)} assists`);
-        if (n(r.nutmegs) >= 5)
-          records.push(`🪄 ${r.player} pulled off ${n(r.nutmegs)} nutmegs`);
-        if (n(r.blocks) >= 6)
-          records.push(`🧱 ${r.player} blocked ${n(r.blocks)} shots`);
-        if (n(r.goalkeeper_saves) >= 8)
-          records.push(`🧤 ${r.player} made ${n(r.goalkeeper_saves)} GK saves`);
-      });
-      // Biggest win check
-      const margin = Math.abs(newMatch.goalsA - newMatch.goalsB);
-      if (margin >= 10) records.push(`🏆 Biggest win of the season — ${newMatch.goalsA}–${newMatch.goalsB}!`);
-      const total = newMatch.goalsA + newMatch.goalsB;
-      if (total >= 25) records.push(`🔥 Highest scoring game — ${total} goals total!`);
-    }
-
-    const count = newRows.filter(r=>r.half==='FULL').length;
-    const status = document.getElementById('weekly-append-status');
-    status.textContent = `✅ Added ${count} player records for ${window._weeklyPendingDate} · Saved to browser storage`;
-    status.style.color = 'var(--green)';
-
-    // Show records modal if anything notable happened
-    if (records.length) {
-      const modal = document.createElement('div');
-      modal.style.cssText = 'position:fixed;inset:0;z-index:500;background:rgba(0,0,0,.8);display:flex;align-items:center;justify-content:center;padding:20px';
-      modal.onclick = e => { if (e.target === modal) { modal.remove(); nav('matches'); } };
-      modal.innerHTML = `
-        <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:26px;width:100%;max-width:440px;position:relative">
-          <div style="font-family:'Bebas Neue',sans-serif;font-size:1.6rem;color:var(--green);letter-spacing:2px;margin-bottom:4px">🎉 Notable Performances</div>
-          <div style="font-size:.75rem;color:var(--muted);margin-bottom:16px">${matchDate}</div>
-          <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:20px">
-            ${records.map(r => `<div style="background:var(--card2);border:1px solid var(--border);border-radius:8px;padding:10px 14px;font-size:.85rem;color:var(--text)">${r}</div>`).join('')}
-          </div>
-          <button onclick="this.closest('[style]').remove();nav('matches')"
-            style="width:100%;background:var(--green);color:#071009;border:none;border-radius:8px;padding:10px;font-family:'Bebas Neue',sans-serif;font-size:1.1rem;letter-spacing:1px;cursor:pointer">
-            Let's Go →
-          </button>
-        </div>`;
-      document.body.appendChild(modal);
-    } else {
-      setTimeout(() => nav('matches'), 1500);
-    }
-  } catch(e) {
-    const status = document.getElementById('weekly-append-status');
-    status.textContent = '❌ Error: ' + e.message;
-    status.style.color = 'var(--red)';
-  }
 }
 
 // =====================================================================
@@ -11347,6 +12172,29 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Fetch settings.json and data.csv in parallel
   const ts = Date.now();
+
+  const fetchEvents = fetch('events.json?t=' + ts)
+    .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
+    .then(data => {
+      // Merge GitHub events.json into localStorage — localStorage takes precedence for same match
+      try {
+        const stored = JSON.parse(localStorage.getItem('aero_event_logs') || '{}');
+        let merged = 0;
+        Object.entries(data).forEach(([mid, log]) => {
+          if (!stored[mid]) { stored[mid] = log; merged++; }
+        });
+        if (merged) {
+          localStorage.setItem('aero_event_logs', JSON.stringify(stored));
+          console.log(`✅ Loaded events.json — ${merged} new match logs merged`);
+        } else {
+          console.log(`✅ events.json loaded — ${Object.keys(data).length} matches (all already in localStorage)`);
+        }
+      } catch(e) { console.warn('events.json merge failed:', e); }
+    })
+    .catch(err => {
+      console.log(`events.json not found (${err.message}) — using localStorage event logs only`);
+    });
+
   const fetchSettings = fetch('settings.json?t=' + ts)
     .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
     .then(settings => {
@@ -11469,8 +12317,8 @@ document.addEventListener('DOMContentLoaded', () => {
       return null;
     });
 
-  // Wait for all three, then initialise
-  Promise.all([fetchSettings, fetchData, fetchCombos]).then(([, csv]) => {
+  // Wait for all four, then initialise
+  Promise.all([fetchEvents, fetchSettings, fetchData, fetchCombos]).then(([,, csv]) => {
     initWithCSV(csv || RAW_CSV, csv ? 'data.csv (GitHub)' : 'RAW_CSV (baked)');
   });
 });
