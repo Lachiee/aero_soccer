@@ -11097,11 +11097,11 @@ function computePeakWindow(events, windowSecs) {
 
 function computeFatigueTrids(events, halfDur, h2OffsetSecs) {
   // Bucket ALL events on the raw continuous timeline (0:00 → end of match)
-  // 10-minute buckets, max 6 buckets (60 min cap)
-  const BUCKET_SECS = 600; // 10 minutes
-  const MAX_BUCKETS = 6;
+  // 5-minute buckets, max 12 buckets (60 min cap)
+  const BUCKET_SECS = 300; // 5 minutes
+  const MAX_BUCKETS = 12;
   const buckets = new Array(MAX_BUCKETS).fill(0);
-  const labels  = Array.from({length: MAX_BUCKETS}, (_, i) => `${i*10}–${(i+1)*10}'`);
+  const labels  = Array.from({length: MAX_BUCKETS}, (_, i) => `${i*5}–${(i+1)*5}'`);
 
   events.forEach(e => {
     const t = e.tsSecsRaw;
@@ -11116,16 +11116,24 @@ function computeFatigueTrids(events, halfDur, h2OffsetSecs) {
   const trimmed = buckets.slice(0, last + 1);
   const trimmedLabels = labels.slice(0, last + 1);
 
-  // Which bucket index is the HT boundary
+  // HT boundary bucket index
   const htBucket = h2OffsetSecs != null ? Math.floor(h2OffsetSecs / BUCKET_SECS) : null;
 
-  // Keep 1H/2H arrays for other stats (clutch, pressure etc.) using tsSecsNorm
-  const h1Events = events.filter(e => e.half === '1H');
-  const h2Events = events.filter(e => e.half === '2H');
-  const h1 = h1Events.length ? [h1Events.length] : [0]; // simplified — just total counts
-  const h2 = h2Events.length ? [h2Events.length] : [0];
+  // Trend: compare avg activity in 2nd half of match vs 1st half of match
+  // Uses the HT boundary to split — more meaningful than first vs last bucket
+  const splitAt = htBucket ?? Math.floor(trimmed.length / 2);
+  const firstHalf = trimmed.slice(0, splitAt);
+  const secondHalf = trimmed.slice(splitAt);
+  const avg1 = firstHalf.length  ? firstHalf.reduce((s,v)=>s+v,0)  / firstHalf.length  : 0;
+  const avg2 = secondHalf.length ? secondHalf.reduce((s,v)=>s+v,0) / secondHalf.length : 0;
+  // threshold of 15% change to show trend
+  const trend = avg2 > avg1 * 1.15 ? '↗' : avg2 < avg1 * 0.85 ? '↘' : '→';
 
-  return { buckets: trimmed, labels: trimmedLabels, htBucket, '1H': h1, '2H': h2 };
+  // Keep 1H/2H for other stats
+  const h1 = events.filter(e => e.half === '1H').length;
+  const h2 = events.filter(e => e.half === '2H').length;
+
+  return { buckets: trimmed, labels: trimmedLabels, htBucket, trend, '1H': [h1], '2H': [h2] };
 }
 
 function computeClutchStats(events, halfDur, finalSecs) {
@@ -11565,21 +11573,28 @@ function showTimelinePreview(timeStats, allPlayers) {
               <span style="font-size:.75rem;${v>0?'font-weight:600':''}">${v}</span>
             </div></td>`;
           };
-          const first = buckets[0] || 0;
-          const last  = buckets[buckets.length-1] || 0;
-          const trend = last > first ? '↗' : last < first ? '↘' : '→';
+          const trend    = playerStats[p]?.fatigue?.trend || '→';
           const trendCol = trend==='↗'?'var(--green)':trend==='↘'?'rgba(248,113,113,.7)':'var(--muted)';
+          const avg1 = buckets.slice(0, h1BucketCount||Math.floor(buckets.length/2)).reduce((s,v)=>s+v,0) / Math.max(h1BucketCount||Math.floor(buckets.length/2),1);
+          const avg2 = buckets.slice(h1BucketCount||Math.floor(buckets.length/2)).reduce((s,v)=>s+v,0) / Math.max(buckets.length-(h1BucketCount||Math.floor(buckets.length/2)),1);
+          const trendTip = `Avg activity per 5-min window: 1H=${avg1.toFixed(1)}, 2H=${avg2.toFixed(1)} — ${trend==='↗'?'more active in 2H':trend==='↘'?'less active in 2H':'consistent across both halves'}`;
           return `<tr>
             <td style="${tdS};text-align:left;font-weight:600">${p}</td>
             ${buckets.map((v,i) => {
               const htCell = i === h1BucketCount ? `<td style="${tdS};border-left:2px solid rgba(251,191,36,.4);color:var(--amber,#f59e0b);font-size:.6rem;padding:5px 2px">HT</td>` : '';
               return htCell + bar(v, i);
             }).join('')}
-            <td style="${tdS};color:${trendCol};font-size:1.1rem">${trend}</td>
+            <td style="${tdS};color:${trendCol};font-size:1.1rem" data-tip="${trendTip}">${trend}</td>
           </tr>`;
         }).join('')}
       </tbody>
     </table>
+    </div>
+    <div style="margin-top:10px;display:flex;gap:16px;flex-wrap:wrap;font-size:.68rem;color:var(--muted)">
+      <span><span style="color:var(--green)">↗</span> More active in 2H (>15% higher avg per window)</span>
+      <span><span style="color:rgba(248,113,113,.7)">↘</span> Less active in 2H (>15% lower avg per window)</span>
+      <span><span style="color:var(--muted)">→</span> Consistent across both halves (within 15%)</span>
+      <span style="margin-left:4px">Trend = avg stats per 5-min window in 2H vs 1H</span>
     </div>`;
 }
 
