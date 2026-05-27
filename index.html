@@ -11742,9 +11742,11 @@ function computeTimeStats(eventRows, goalEvents, gkRotation, h2OffsetSecs) {
   const gkTime = {}; // player → seconds in goal
   const gkSpells = {}; // player → [{ half, fromSecs, toSecs, durSecs }]
   ['1H','2H'].forEach(half => {
+    // Timestamps are absolute throughout — halfEnd = last recorded stat in that half
+    // Fall back to sensible defaults if no stats recorded in that half
     const halfEndRaw = half === '1H'
-      ? (h2OffsetSecs || (maxSecs['1H'] || 1800))
-      : (maxSecs['2H'] + (h2OffsetSecs || 0) || 3600);
+      ? (maxSecs['1H'] || 1800)
+      : (maxSecs['2H'] || (maxSecs['1H'] + 1800));
     (gkRotation[half] || []).forEach(seg => {
       const from = seg.fromSecs;
       const to   = Math.min(seg.toSecs === 9999 ? halfEndRaw : seg.toSecs, halfEndRaw);
