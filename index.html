@@ -7441,7 +7441,7 @@ function renderProfile(name) {
         return `<div style="display:flex;align-items:center;gap:8px;padding:3px 0;font-size:.72rem;border-bottom:1px solid rgba(255,255,255,.04)">
           <span style="color:var(--muted);min-width:70px">${d.date||'—'}</span>
           <span style="color:var(--text);min-width:14px;font-weight:600">${d.goals}</span>
-          <span style="color:var(--muted);font-size:.65rem;flex:1">vs avg ${d.oppAvgConceded != null ? d.oppAvgConceded+'g/game' : '—'} defence</span>
+          <span style="color:var(--muted);font-size:.65rem;flex:1">opp conceded ${d.oppConceded != null ? d.oppConceded+'g that game' : '—'}</span>
           <span style="color:${wCol};min-width:28px;text-align:right;font-size:.7rem" data-tip="Quality multiplier — league avg ${sr.leagueAvg} ÷ opp avg ${d.oppAvgConceded}">${d.weight != null ? '×'+d.weight : ''}</span>
           <span style="color:var(--lime);min-width:32px;text-align:right;font-weight:600">${d.qualityGoals}</span>
         </div>`;
@@ -8230,40 +8230,16 @@ function computeStrikerRating(playerName) {
   const ps = playerStats[playerName];
   if (!ps || !ps.matches?.length) return null;
 
-  // Build a map of avg goals conceded per game per "team identity"
-  // We identify teams by the set of players on them — approximate with match history
-  // More practically: for each match, compute goals scored against each team
-  const teamGoalsConceded = {}; // matchId → { A: goalsAgainst, B: goalsAgainst }
+  // League-wide avg goals per team per game — the neutral baseline
+  const allMatchConceded = [];
   matchList.forEach(m => {
-    teamGoalsConceded[m.id] = { A: m.goalsB, B: m.goalsA }; // A concedes what B scores
+    if (m.goalsA != null) { allMatchConceded.push(m.goalsA); allMatchConceded.push(m.goalsB); }
   });
+  const leagueAvg = allMatchConceded.length
+    ? allMatchConceded.reduce((s,v)=>s+v,0) / allMatchConceded.length
+    : 5;
 
-  // Per-player, build a defensive strength score:
-  // avg goals conceded per game across all matches for players on a given team
-  // We approximate "team quality" by looking at all matches where each player appeared
-  // and computing what their team conceded. This is imperfect but sensible.
-  const playerDefStrength = {}; // playerName → avg goals their team conceded/game
-  Object.values(playerStats).forEach(opp => {
-    const conceded = opp.matches
-      .filter(r => r.half === 'FULL')
-      .map(r => {
-        const m = matchList.find(m => m.id === r.match_id);
-        if (!m) return null;
-        return r.team === 'A' ? m.goalsB : m.goalsA; // goals conceded by their team
-      })
-      .filter(v => v != null && v >= 0);
-    if (conceded.length) {
-      playerDefStrength[opp.player] = conceded.reduce((s,v)=>s+v,0) / conceded.length;
-    }
-  });
-
-  // League-wide avg goals per game (baseline for normalisation)
-  const allConceded = Object.values(playerDefStrength);
-  const leagueAvg = allConceded.length
-    ? allConceded.reduce((s,v)=>s+v,0) / allConceded.length
-    : 4; // sensible default
-
-  // Get this player's last 5 FULL-row matches with goals recorded
+  // Last 5 FULL-row matches this player actually played (no DNP)
   const sorted = [...ps.matches]
     .filter(r => r.half === 'FULL' && r.match_date)
     .sort((a,b) => (b.match_date||'').localeCompare(a.match_date||''))
@@ -8276,48 +8252,38 @@ function computeStrikerRating(playerName) {
 
   sorted.forEach(r => {
     const goals = n(r.goals);
-    const m = matchList.find(m => m.id === r.match_id);
-    if (!m) { detail.push({ date: r.match_date, goals, oppAvg: null, weight: 1, qualityGoals: goals }); totalQualityGoals += goals; return; }
+    const m = matchList.find(mx => mx.id === r.match_id);
+    if (!m) {
+      detail.push({ date: r.match_date, goals, oppConceded: null, weight: 1, qualityGoals: goals });
+      totalQualityGoals += goals;
+      return;
+    }
 
-    // Opposition = the other team's players
-    const oppPlayers = r.team === 'A' ? m.teamB : m.teamA;
-    // Defensive strength of opposition = avg goals their team concedes per game
-    const oppStrengths = oppPlayers
-      .map(op => playerDefStrength[op.player])
-      .filter(v => v != null);
-    const oppAvgConceded = oppStrengths.length
-      ? oppStrengths.reduce((s,v)=>s+v,0) / oppStrengths.length
-      : leagueAvg;
+    // Defensive strength = how many goals the striker's team conceded that game
+    // Low conceded = strong opposition defence = harder to score against = higher weight
+    const oppConceded = r.team === 'A' ? m.goalsB : m.goalsA;
 
-    // Quality multiplier: scoring against a stingy team (low concede avg) = higher weight
-    // Clamp to [0.4, 2.5] to prevent extreme outliers
-    const weight = Math.min(2.5, Math.max(0.4, leagueAvg / Math.max(oppAvgConceded, 0.5)));
+    // Weight: leagueAvg / actual conceded. Clamp to [0.3, 3.0]
+    const weight = Math.min(3.0, Math.max(0.3, leagueAvg / Math.max(oppConceded, 0.5)));
     const qualityGoals = goals * weight;
     totalQualityGoals += qualityGoals;
-    detail.push({ date: r.match_date, goals, oppAvgConceded: parseFloat(oppAvgConceded.toFixed(1)), weight: parseFloat(weight.toFixed(2)), qualityGoals: parseFloat(qualityGoals.toFixed(2)) });
+
+    detail.push({
+      date: r.match_date,
+      goals,
+      oppConceded,
+      weight: parseFloat(weight.toFixed(2)),
+      qualityGoals: parseFloat(qualityGoals.toFixed(2)),
+    });
   });
 
   const avgQualityGoals = totalQualityGoals / sorted.length;
 
-  // Scale: use a cached group-wide 85th-percentile ceiling so all players are rated
-  // on the same consistent scale regardless of call order.
-  // Cache is invalidated alongside _tagCache.
+  // Cached group-wide 85th-percentile scale — same formula, invalidated with _tagCache
   if (!window._strikerRatingScale) {
     const allQG = [];
     Object.values(playerStats).forEach(opp => {
       if (!opp.matches?.length) return;
-      // Build opp defensive strength the same way
-      const oppDefStr = {};
-      Object.values(playerStats).forEach(p2 => {
-        const c2 = p2.matches
-          .filter(r => r.half === 'FULL')
-          .map(r => { const m2 = matchList.find(m => m.id === r.match_id); if (!m2) return null; return r.team === 'A' ? m2.goalsB : m2.goalsA; })
-          .filter(v => v != null && v >= 0);
-        if (c2.length) oppDefStr[p2.player] = c2.reduce((s,v)=>s+v,0) / c2.length;
-      });
-      const lAvg2 = Object.values(oppDefStr).length
-        ? Object.values(oppDefStr).reduce((s,v)=>s+v,0) / Object.values(oppDefStr).length : 4;
-
       const ms = [...opp.matches]
         .filter(r => r.half === 'FULL' && r.match_date)
         .sort((a,b) => (b.match_date||'').localeCompare(a.match_date||''))
@@ -8325,26 +8291,24 @@ function computeStrikerRating(playerName) {
       if (!ms.length) return;
       let tq = 0;
       ms.forEach(r => {
-        const goals = n(r.goals);
-        const m2 = matchList.find(m => m.id === r.match_id);
-        if (!m2) { tq += goals; return; }
-        const oppPs = r.team === 'A' ? m2.teamB : m2.teamA;
-        const oppStr2 = oppPs.map(op => oppDefStr[op.player]).filter(v => v != null);
-        const oAC = oppStr2.length ? oppStr2.reduce((s,v)=>s+v,0)/oppStr2.length : lAvg2;
-        const w = Math.min(2.5, Math.max(0.4, lAvg2 / Math.max(oAC, 0.5)));
-        tq += goals * w;
+        const g = n(r.goals);
+        const m2 = matchList.find(mx => mx.id === r.match_id);
+        if (!m2) { tq += g; return; }
+        const oc = r.team === 'A' ? m2.goalsB : m2.goalsA;
+        const w = Math.min(3.0, Math.max(0.3, leagueAvg / Math.max(oc, 0.5)));
+        tq += g * w;
       });
       allQG.push(tq / ms.length);
     });
     allQG.sort((a,b) => a - b);
     const p85idx = Math.min(allQG.length - 1, Math.floor(allQG.length * 0.85));
-    // Use 85th percentile as 10-rating ceiling; fallback to leagueAvg * 1.5
-    window._strikerRatingScale = allQG.length >= 4 ? Math.max(allQG[p85idx], 0.5) : leagueAvg * 1.5;
+    window._strikerRatingScale = allQG.length >= 4
+      ? Math.max(allQG[p85idx], 0.5)
+      : leagueAvg * 1.5;
   }
   const scale = window._strikerRatingScale;
 
   const rating = Math.min(10, parseFloat((avgQualityGoals / scale * 10).toFixed(1)));
-
   const label = rating >= 8.5 ? 'World Class' : rating >= 7 ? 'Elite' : rating >= 5.5 ? 'Sharp' : rating >= 4 ? 'Decent' : rating >= 2.5 ? 'Developing' : 'Low';
 
   return { rating, label, games: sorted.length, avgQualityGoals: parseFloat(avgQualityGoals.toFixed(2)), leagueAvg: parseFloat(leagueAvg.toFixed(1)), scale: parseFloat(scale.toFixed(2)), detail };
