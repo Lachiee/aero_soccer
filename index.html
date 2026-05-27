@@ -11837,9 +11837,8 @@ function getPlayerEventStats(playerName) {
     if (!ps) return;
     matchesWithData++;
 
-    // GK time — use event log to attribute saves correctly per spell
-    if (ps.gkTimeSecs > 0) {
-      totalGkSecs += ps.gkTimeSecs;
+    // GK time — recompute from spells using halfDur to fix any stale stored values
+    if (ps.gkTimeSecs > 0 || (ps.gkSpells || []).length > 0) {
       totalGkGoalsConceded += ps.gkGoalsConceded || 0;
       gkMatches++;
 
@@ -11850,25 +11849,35 @@ function getPlayerEventStats(playerName) {
       totalGkSaves += myGkSaves;
 
       // Build spell history for profile display
+      // Use halfDur from the log to cap toSecs correctly — old stored data may have wrong values
+      const halfDur = log.timeStats?.halfDur || {};
+      const halfEnd = {
+        '1H': halfDur['1H'] || null,
+        '2H': halfDur['2H'] || null,
+      };
+
       (ps.gkSpells || []).forEach(spell => {
+        // Recompute toSecs from halfDur — always use the last recorded stat in that half
+        // as the match end, regardless of what was baked in at import time
+        const correctEnd = halfEnd[spell.half];
+        const toSecs = correctEnd != null
+          ? Math.min(spell.toSecs > correctEnd ? correctEnd : spell.toSecs, correctEnd)
+          : spell.toSecs;
+        const durSecs = Math.max(0, toSecs - spell.fromSecs);
+
         const spellSaves = (log.events || []).filter(e =>
           e.event === 'GK Saves' && e.player === playerName &&
           e.half === spell.half &&
-          e.tsSecsRaw >= spell.fromSecs && e.tsSecsRaw <= spell.toSecs
-        ).length;
-        const spellConceded = (log.events || []).filter(e =>
-          e.event === 'Goals' && e.half === spell.half &&
-          e.tsSecsRaw >= spell.fromSecs && e.tsSecsRaw <= spell.toSecs
-          // conceded = goal scored against playerName's team
-          // We don't have team context here easily, use gkGoalsConceded total
+          e.tsSecsRaw >= spell.fromSecs && e.tsSecsRaw <= toSecs
         ).length;
         gkSpellHistory.push({
           matchId, date: log.date, half: spell.half,
           fromMins: Math.round(spell.fromSecs / 60 * 10) / 10,
-          toMins:   Math.round(spell.toSecs   / 60 * 10) / 10,
-          durMins:  Math.round(spell.durSecs  / 60 * 10) / 10,
+          toMins:   Math.round(toSecs   / 60 * 10) / 10,
+          durMins:  Math.round(durSecs   / 60 * 10) / 10,
           saves: spellSaves,
         });
+        totalGkSecs += durSecs; // accumulate from corrected duration
       });
     }
 
