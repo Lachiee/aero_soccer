@@ -2831,7 +2831,7 @@ const TAG_DEFS = {
 // =====================================================================
 // TAG SYSTEM — global auction: each tag goes to exactly one player
 // =====================================================================
-let _tagCache = null; // { playerName: [{label,cls,tip},...] }
+let _tagCache = null; window._strikerRatingScale = null; // { playerName: [{label,cls,tip},...] }
 
 function buildTagAuction() {
   // Use filtered stats (respects L10 / season / all toggle)
@@ -5649,7 +5649,7 @@ function setGlobalFilter(f) {
 
 // Build filtered player stats based on globalFilter
 function computeFilteredStats() {
-  _tagCache = null; // Clear tag cache — filters changed
+  _tagCache = null; window._strikerRatingScale = null; // Clear tag cache — filters changed
   const allFull = allRows.filter(r => r.half === 'FULL' && r.team !== 'DNP');
   const allHalf = allRows.filter(r => (r.half === '1H' || r.half === '2H') && r.team !== 'DNP');
 
@@ -7449,7 +7449,7 @@ function renderProfile(name) {
       return `<div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:18px;margin-bottom:14px">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px">
           <div style="font-family:'Barlow Condensed',sans-serif;font-size:.7rem;letter-spacing:2px;text-transform:uppercase;color:var(--muted)">⚽ Striker Rating</div>
-          <div style="font-size:.68rem;color:var(--muted)" data-tip="Quality-adjusted goals per game over the last ${sr.games} game${sr.games!==1?'s':''} — weighted by how stingy the opposition defence was. League avg conceded: ${sr.leagueAvg}g/game">Last ${sr.games} game${sr.games!==1?'s':''} · league avg ${sr.leagueAvg}g/game</div>
+          <div style="font-size:.68rem;color:var(--muted)" data-tip="Quality-adjusted goals per game over the last ${sr.games} game${sr.games!==1?'s':''} — weighted by how stingy the opposition defence was. League avg conceded: ${sr.leagueAvg}g/game. Group 85th percentile (= 10): ${sr.scale} adj goals/game">Last ${sr.games} game${sr.games!==1?'s':''} · scale: ${sr.scale} = 10</div>
         </div>
         <div style="display:flex;align-items:center;gap:16px;margin-bottom:14px">
           <div>
@@ -8299,41 +8299,55 @@ function computeStrikerRating(playerName) {
 
   const avgQualityGoals = totalQualityGoals / sorted.length;
 
-  // Scale dynamically to the group — compute all players' avg quality goals
-  // and use the 85th percentile as the ceiling (= rating 10).
-  // This means the best strikers in the group score ~9-10, not everyone hits the cap.
-  const allPlayerQG = Object.values(playerStats)
-    .map(opp => {
-      const oppSorted = [...opp.matches]
+  // Scale: use a cached group-wide 85th-percentile ceiling so all players are rated
+  // on the same consistent scale regardless of call order.
+  // Cache is invalidated alongside _tagCache.
+  if (!window._strikerRatingScale) {
+    const allQG = [];
+    Object.values(playerStats).forEach(opp => {
+      if (!opp.matches?.length) return;
+      // Build opp defensive strength the same way
+      const oppDefStr = {};
+      Object.values(playerStats).forEach(p2 => {
+        const c2 = p2.matches
+          .filter(r => r.half === 'FULL')
+          .map(r => { const m2 = matchList.find(m => m.id === r.match_id); if (!m2) return null; return r.team === 'A' ? m2.goalsB : m2.goalsA; })
+          .filter(v => v != null && v >= 0);
+        if (c2.length) oppDefStr[p2.player] = c2.reduce((s,v)=>s+v,0) / c2.length;
+      });
+      const lAvg2 = Object.values(oppDefStr).length
+        ? Object.values(oppDefStr).reduce((s,v)=>s+v,0) / Object.values(oppDefStr).length : 4;
+
+      const ms = [...opp.matches]
         .filter(r => r.half === 'FULL' && r.match_date)
         .sort((a,b) => (b.match_date||'').localeCompare(a.match_date||''))
         .slice(0, 5);
-      if (!oppSorted.length) return 0;
+      if (!ms.length) return;
       let tq = 0;
-      oppSorted.forEach(r => {
+      ms.forEach(r => {
         const goals = n(r.goals);
         const m2 = matchList.find(m => m.id === r.match_id);
         if (!m2) { tq += goals; return; }
         const oppPs = r.team === 'A' ? m2.teamB : m2.teamA;
-        const oppStr = oppPs.map(op => playerDefStrength[op.player]).filter(v => v != null);
-        const oAC = oppStr.length ? oppStr.reduce((s,v)=>s+v,0)/oppStr.length : leagueAvg;
-        const w = Math.min(2.5, Math.max(0.4, leagueAvg / Math.max(oAC, 0.5)));
+        const oppStr2 = oppPs.map(op => oppDefStr[op.player]).filter(v => v != null);
+        const oAC = oppStr2.length ? oppStr2.reduce((s,v)=>s+v,0)/oppStr2.length : lAvg2;
+        const w = Math.min(2.5, Math.max(0.4, lAvg2 / Math.max(oAC, 0.5)));
         tq += goals * w;
       });
-      return tq / oppSorted.length;
-    })
-    .filter(v => v > 0)
-    .sort((a,b) => a - b);
-
-  // 85th percentile = the ceiling for a 10 rating
-  const p85idx = Math.min(allPlayerQG.length - 1, Math.floor(allPlayerQG.length * 0.85));
-  const scale = allPlayerQG.length >= 5 ? Math.max(allPlayerQG[p85idx], 0.5) : 5.0;
+      allQG.push(tq / ms.length);
+    });
+    allQG.sort((a,b) => a - b);
+    const p85idx = Math.min(allQG.length - 1, Math.floor(allQG.length * 0.85));
+    // Use 85th percentile as 10-rating ceiling; fallback to leagueAvg * 1.5
+    window._strikerRatingScale = allQG.length >= 4 ? Math.max(allQG[p85idx], 0.5) : leagueAvg * 1.5;
+  }
+  const scale = window._strikerRatingScale;
 
   const rating = Math.min(10, parseFloat((avgQualityGoals / scale * 10).toFixed(1)));
 
   const label = rating >= 8.5 ? 'World Class' : rating >= 7 ? 'Elite' : rating >= 5.5 ? 'Sharp' : rating >= 4 ? 'Decent' : rating >= 2.5 ? 'Developing' : 'Low';
 
-  return { rating, label, games: sorted.length, avgQualityGoals: parseFloat(avgQualityGoals.toFixed(2)), leagueAvg: parseFloat(leagueAvg.toFixed(1)), detail };
+  return { rating, label, games: sorted.length, avgQualityGoals: parseFloat(avgQualityGoals.toFixed(2)), leagueAvg: parseFloat(leagueAvg.toFixed(1)), scale: parseFloat(scale.toFixed(2)), detail };
 }
 
 // ── Striker Rating vs specific GK ────────────────────────────────────────────
@@ -12566,7 +12580,7 @@ function appendToAppData() {
     renderMatches();
     saveExtraRows();
     updateDraftBanner();
-    _tagCache = null;
+    _tagCache = null; window._strikerRatingScale = null;
 
     // Import combos if from new format
     if (window._weeklyPendingCombos && window._weeklyMatchId) {
@@ -13328,7 +13342,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       } catch(e) {}
       goalCombos = loaded;
-      _tagCache = null; // force tag rebuild with fresh combo data
+      _tagCache = null; window._strikerRatingScale = null; // force tag rebuild with fresh combo data
       // Rerender profile if open so highlights appear
       if (currentPage === 'profile' && currentProfileName) {
         renderAll();
