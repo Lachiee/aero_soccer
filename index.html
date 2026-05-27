@@ -2636,22 +2636,15 @@ function computeRating(s, cs) {
     ? staminaComputed.score
     : (cs ? n(cs.stamina) : 0);
 
-  // Outfield scaling: if a player spends time in goal, their per-game outfield
-  // stats are understated. Scale them up by 1/outfieldPct so a player who spent
-  // half their time in goal gets their outfield stats doubled (per outfield minute).
-  const tsRating = getPlayerEventStats(s.player);
-  const outScale = (tsRating?.outfieldPct > 0 && tsRating?.outfieldPct < 0.99)
-    ? Math.min(1 / tsRating.outfieldPct, 2.5) // cap at 2.5× to prevent outliers
-    : 1.0;
   const base = (
-    (s.goals / g) * 4.5 * outScale +
-    (s.assists / g) * 3 * outScale +
-    (s.total_shots / g) * 0.25 * outScale +
-    ((s.interceptions + s.tackles) / g) * 0.4 * outScale +
-    (s.total_saves / g) * 0.3 +        // saves already include GK saves — no outScale
-    (s.nutmegs / g) * 0.5 * outScale +
-    (s.key_passes / g) * 0.35 * outScale +
-    (s.blocks / g) * 0.3 * outScale +
+    (s.goals / g) * 4.5 +
+    (s.assists / g) * 3 +
+    (s.total_shots / g) * 0.25 +
+    ((s.interceptions + s.tackles) / g) * 0.4 +
+    (s.total_saves / g) * 0.3 +
+    (s.nutmegs / g) * 0.5 +
+    (s.key_passes / g) * 0.35 +
+    (s.blocks / g) * 0.3 +
     enforcer * 0.5 +
     stamina  * 0.4
   );
@@ -6063,15 +6056,22 @@ function renderMatches() {
 
     // Build swap-aware team rows for the inline table
     const buildInlineTeamRows = (teamLetter) => {
-      const swappedNames = new Set((m.swappedPlayers||[]).map(s=>s.player));
+      const swapped = m.swappedPlayers || [];
+      const swappedNames = new Set(swapped.map(s => s.player));
       const regularRows = (teamLetter==='A'?m.teamA:m.teamB).filter(r => !swappedNames.has(r.player));
-      const swapRows = (m.swappedPlayers||[]).map(swap => {
+      const swapRows = swapped.map(swap => {
         const half = swap.from === teamLetter ? '1H' : swap.to === teamLetter ? '2H' : null;
         if (!half) return null;
         const halfRow = m.rows.find(r => r.player === swap.player && r.half === half);
         return halfRow ? { ...halfRow, _swapHalf: half } : null;
       }).filter(Boolean);
-      return [...regularRows, ...swapRows];
+      const seen = new Set();
+      return [...regularRows, ...swapRows].filter(r => {
+        const key = r.player + '|' + (r._swapHalf || 'FULL');
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
     };
     const rowStyle = r => {
       const idx = m.mvpList ? m.mvpList.findIndex(e => e.player === r.player) : -1;
@@ -10856,17 +10856,32 @@ function printMatchCard(matchId) {
 
   // Build augmented team rows — swapped players appear on both teams with their half-specific stats
   const buildTeamRows = (teamLetter) => {
-    // Start with FULL rows for players who played the whole match on this team
-    const swappedNames = new Set((m.swappedPlayers||[]).map(s=>s.player));
-    const regularRows = (teamLetter==='A'?m.teamA:m.teamB).filter(r => !swappedNames.has(r.player));
-    // Add swapped players with their half-specific row for this team
-    const swapRows = (m.swappedPlayers||[]).map(swap => {
+    // For each player who appeared on this team in either half, find their stats
+    // Use FULL row for players who stayed on the same team all game
+    // Use 1H or 2H row for swapped players
+    const swapped = m.swappedPlayers || [];
+    const swappedNames = new Set(swapped.map(s => s.player));
+
+    // Regular players: FULL row, confirmed on this team for the whole match
+    const regularRows = (teamLetter === 'A' ? m.teamA : m.teamB)
+      .filter(r => !swappedNames.has(r.player));
+
+    // Swapped players: use their half-specific row for this team only
+    const swapRows = swapped.map(swap => {
       const half = swap.from === teamLetter ? '1H' : swap.to === teamLetter ? '2H' : null;
       if (!half) return null;
       const halfRow = m.rows.find(r => r.player === swap.player && r.half === half);
       return halfRow ? { ...halfRow, _swapHalf: half, _swapNote: half } : null;
     }).filter(Boolean);
-    return [...regularRows, ...swapRows];
+
+    // Deduplicate — in case a swapped player's FULL row also ended up in teamA/teamB
+    const seen = new Set();
+    return [...regularRows, ...swapRows].filter(r => {
+      const key = r.player + '|' + (r._swapHalf || 'FULL');
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
   };
 
   const teamSection = (teamLetter, teamLabel, goalCount, nameColor) => {
