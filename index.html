@@ -4060,7 +4060,7 @@ function drawWormCanvas(canvasId, matchId) {
   const canvas = document.getElementById(canvasId);
   const data = window._wormData[matchId];
   if (!canvas || !data) return;
-  const { rows, fA, fB, matchDur, ytId } = data;
+  const { rows, fA, fB, matchDur, htSecs, ytId } = data;
 
   const dpr = window.devicePixelRatio || 1;
   const W = canvas.offsetWidth || canvas.parentElement?.offsetWidth || 700;
@@ -4095,11 +4095,15 @@ function drawWormCanvas(canvasId, matchId) {
     ctx.fillText((g > 0 ? '+' : '') + g, pad.left - 5, y + 4);
   }
 
-  // Halftime dashed line
-  const htX = toX(matchDur / 2);
+  // Half-time dashed line — use actual 1H end time if known, else midpoint
+  const htTimeSecs = htSecs || (matchDur / 2);
+  const htX = toX(htTimeSecs);
   ctx.strokeStyle = 'rgba(255,255,255,.3)'; ctx.lineWidth = 1.5; ctx.setLineDash([5,5]);
   ctx.beginPath(); ctx.moveTo(htX, pad.top); ctx.lineTo(htX, pad.top+cH); ctx.stroke();
   ctx.setLineDash([]);
+  // HT label
+  ctx.font = '9px Barlow Condensed, sans-serif'; ctx.fillStyle = 'rgba(255,255,255,.35)'; ctx.textAlign = 'center';
+  ctx.fillText('HT ' + Math.round(htTimeSecs/60) + "'", htX, pad.top - 4);
 
   // X axis time labels + vertical guides
   const totalMins = Math.round(matchDur / 60);
@@ -4166,7 +4170,7 @@ function drawWormCanvas(canvasId, matchId) {
   // Store pts and rows on canvas for hover
   canvas._wormPts  = pts;
   canvas._wormRows = rows;
-  canvas._wormMeta = { pad, cW, cH, matchDur, toX, toY, fA, fB, W, H, maxLead, yRange };
+  canvas._wormMeta = { pad, cW, cH, matchDur, htSecs: htTimeSecs, toX, toY, fA, fB, W, H, maxLead, yRange };
 
   // Goal dots — drawn + stored for hover
   const dotData = [];
@@ -4215,6 +4219,7 @@ function drawWormCanvas(canvasId, matchId) {
       const cx = (ev.clientX - r.left) * scaleX;
       const cy = (ev.clientY - r.top)  * scaleY;
       const { pad: p, cW: cw, matchDur: dur, toX: tx, toY: ty, fA: fa, fB: fb } = canvas._wormMeta;
+      const htTimeSecs2 = canvas._wormMeta.htSecs || dur / 2;
 
       // Only show inside the chart area
       if (cx < p.left - 4 || cx > p.left + cw + 4) { ttEl.style.opacity = '0'; return; }
@@ -4253,7 +4258,7 @@ function drawWormCanvas(canvasId, matchId) {
       // Build tooltip content
       const mins = Math.floor(curSecs / 60), secs2 = Math.round(curSecs % 60);
       const timeStr = mins + "'" + (secs2 ? String(secs2).padStart(2,'0') + '"' : '');
-      const half = curSecs <= dur/2 ? '1st half' : '2nd half';
+      const half = curSecs <= htTimeSecs2 ? '1st half' : '2nd half';
       const lead = sA > sB ? '<span style="color:#4ade80">A leading</span>' :
                    sB > sA ? '<span style="color:#60a5fa">B leading</span>' :
                    '<span style="color:rgba(255,255,255,.5)">Level</span>';
@@ -6082,11 +6087,26 @@ function renderMatches() {
           const comboPairs=Object.values(pH).filter(p=>p.times.length>=2);
 
           // Store data globally for drawing when panel opens
+          // Pull real half-time and match duration from event log if available
           const mid = m.id;
           const ytId = matchVideos[mid]||'';
           const canvasId = 'timeline-'+mid.replace(/[#,]/g,'_');
           window._wormData = window._wormData||{};
-          window._wormData[mid] = {rows, fA, fB, matchDur, ytId};
+
+          let htSecs = null, totalDurSecs = null;
+          try {
+            const logs = JSON.parse(localStorage.getItem('aero_event_logs') || '{}');
+            const log = logs[mid];
+            if (log?.timeStats?.halfDur) {
+              htSecs       = log.timeStats.halfDur['1H'] || null;   // actual 1H end in raw secs
+              const h2End  = log.timeStats.halfDur['2H'] || null;   // actual 2H end in raw secs
+              if (htSecs && h2End) totalDurSecs = h2End;
+              else if (htSecs) totalDurSecs = htSecs * 2;           // rough estimate
+            }
+          } catch(e) {}
+
+          const matchDurFinal = totalDurSecs || Math.max(...all.map(p=>toSecs(p.time)), 50*60) + 60;
+          window._wormData[mid] = { rows, fA, fB, matchDur: matchDurFinal, htSecs, ytId };
 
           const insights=[];
           runs.forEach(r=>insights.push({col:'var(--amber)',text:'⚡ Team '+r.team+' scored '+r.cnt+' in '+r.span+' mins ('+r.from+'–'+r.to+')'}));
