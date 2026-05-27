@@ -2299,9 +2299,10 @@ function removeMatchVideo(matchId) {
 
 function seekYtVideo(matchKey, ytId, seconds) {
   if (!ytId) return;
+  const buffered = Math.max(0, seconds - 5); // 5s buffer to show the lead-up
   // Always open YouTube at the exact timestamp in a new tab
   // This is more reliable than trying to control an embedded iframe
-  window.open('https://www.youtube.com/watch?v=' + ytId + '&t=' + Math.round(seconds) + 's', '_blank');
+  window.open('https://www.youtube.com/watch?v=' + ytId + '&t=' + Math.round(buffered) + 's', '_blank');
 }
 
 function openYtSyncModal() {
