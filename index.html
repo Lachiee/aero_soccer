@@ -2631,20 +2631,27 @@ function computeWinLoss(playerMap, matches) {
 function computeRating(s, cs) {
   const g = Math.max(s.games, 1);
   const enforcer = cs ? n(cs.enforcer) : 0;
-  // Stamina: use computed value from event log if ≥2 matches, else manual override
   const staminaComputed = computeStaminaFromEvents(s.player);
   const stamina = staminaComputed?.matches >= 2
-    ? staminaComputed.score   // 0–10 from event log
-    : (cs ? n(cs.stamina) : 0); // manual 0–10
+    ? staminaComputed.score
+    : (cs ? n(cs.stamina) : 0);
+
+  // Outfield scaling: if a player spends time in goal, their per-game outfield
+  // stats are understated. Scale them up by 1/outfieldPct so a player who spent
+  // half their time in goal gets their outfield stats doubled (per outfield minute).
+  const tsRating = getPlayerEventStats(s.player);
+  const outScale = (tsRating?.outfieldPct > 0 && tsRating?.outfieldPct < 0.99)
+    ? Math.min(1 / tsRating.outfieldPct, 2.5) // cap at 2.5× to prevent outliers
+    : 1.0;
   const base = (
-    (s.goals / g) * 4.5 +
-    (s.assists / g) * 3 +
-    (s.total_shots / g) * 0.25 +
-    ((s.interceptions + s.tackles) / g) * 0.4 +
-    (s.total_saves / g) * 0.3 +
-    (s.nutmegs / g) * 0.5 +
-    (s.key_passes / g) * 0.35 +
-    (s.blocks / g) * 0.3 +
+    (s.goals / g) * 4.5 * outScale +
+    (s.assists / g) * 3 * outScale +
+    (s.total_shots / g) * 0.25 * outScale +
+    ((s.interceptions + s.tackles) / g) * 0.4 * outScale +
+    (s.total_saves / g) * 0.3 +        // saves already include GK saves — no outScale
+    (s.nutmegs / g) * 0.5 * outScale +
+    (s.key_passes / g) * 0.35 * outScale +
+    (s.blocks / g) * 0.3 * outScale +
     enforcer * 0.5 +
     stamina  * 0.4
   );
@@ -3994,13 +4001,14 @@ function renderSeasonSummary() {
     { label:'📈 Most Improved (MIP)',     desc:'Performance score: early season vs late season',           fn: mipScore,          fmt: v => (v>0?'+':'')+v.toFixed(1)+' pts/g', min: 8 },
     { label:'⚽ Golden Boot Race',        desc:'Goals per game',                                           fn: gpgScore,          fmt: v => v.toFixed(2)+' gpg' },
     { label:'🎯 Playmaker Race',          desc:'Assists + key passes per game',                            fn: creatorScore,      fmt: v => v.toFixed(2)+'/g' },
-    { label:'🧤 Best Goalkeeper Race',    desc:'Saves per 55 min in goal (from event log) or saves per game',
+    { label:'🧤 Best Goalkeeper Race',    desc:'Saves per 55 min in goal — only players with event log GK data',
       fn: p => {
         const ts = getPlayerEventStats(p.player);
-        if (ts?.gkSavesPer90 != null && ts.gkMinutes >= 20) return ts.gkSavesPer90;
-        return gkScore(p); // fallback to saves per game
+        // Only rank players who have actually been tracked in goal
+        if (ts?.gkSavesPer90 != null && ts.gkMinutes >= 10) return ts.gkSavesPer90;
+        return -Infinity; // exclude players without GK time data
       },
-      fmt: v => v.toFixed(2)+'/55' },
+      fmt: v => v.toFixed(1)+' saves/55', min: 1 },
     { label:'🤝 Team Player Race',        desc:'Win rate %',                                               fn: winRateScore,      fmt: v => Math.round(v)+'%' },
     { label:'⏱ Clutch Player Race',       desc:'Late goals (47+ min) — winning/decisive goals weighted more', fn: clutchPlayerScore, fmt: v => v.toFixed(1)+' pts' },
     { label:'💨 Iron Lungs Race',         desc:'Avg stat activity in 2H vs 1H — who gets stronger as the game goes on (needs event log data)', fn: ironLungsScore,    fmt: v => (v>=0?'+':'')+v.toFixed(1)+' /win', min: 2 },
@@ -6627,6 +6635,18 @@ function renderProfileTimeStats(name) {
   if (ts.pressureOpps > 0 || ts.pressureAvg > 0) {
     pills.push(statPill('After conceding', ts.pressureAvg.toFixed(1), 'avg stats in 90s',
       'Average number of actions in the 90 seconds after the team conceded a goal — measures reactive intensity'));
+  }
+
+  // Outfield time pill — only shown when player has spent time in goal
+  if (ts.outfieldPct != null && ts.outfieldPct < 0.99 && ts.gkMatches > 0) {
+    const pct = Math.round(ts.outfieldPct * 100);
+    const col = pct >= 80 ? 'var(--lime)' : pct >= 60 ? 'var(--amber,#f59e0b)' : 'rgba(248,113,113,.8)';
+    pills.push(`<div style="background:var(--card2);border:1px solid var(--border);border-radius:8px;padding:8px 10px;text-align:center;cursor:default"
+      data-tip="Proportion of tracked match time spent outfield vs in goal. Outfield stats are scaled up by this factor in the rating system to fairly compare with players who never go in goal.">
+      <div style="font-size:.6rem;letter-spacing:1.2px;text-transform:uppercase;color:var(--muted);margin-bottom:3px">⚽ Outfield Time</div>
+      <div style="font-family:'Bebas Neue',sans-serif;font-size:1.3rem;color:${col};line-height:1">${pct}%</div>
+      <div style="font-size:.6rem;color:var(--muted);margin-top:2px">of tracked match time</div>
+    </div>`);
   }
 
   // Computed stamina
@@ -11830,6 +11850,7 @@ function getPlayerEventStats(playerName) {
   if (!matches.length) return null;
 
   let totalGkSecs = 0, totalGkGoalsConceded = 0, totalGkSaves = 0, gkMatches = 0;
+  let totalMatchSecs = 0; // total time the player was available (on the pitch)
   let totalClutch1H = 0, totalClutch2H = 0, clutchMatches = 0;
   let pressureTotal = 0, pressureOpps = 0;
   const peakWindows = [];
@@ -11861,6 +11882,14 @@ function getPlayerEventStats(playerName) {
         '1H': halfDur['1H'] || null,
         '2H': halfDur['2H'] || null,
       };
+
+      // Accumulate total match time this player was on the pitch
+      const matchSecs = (halfDur['1H'] || 0) + (halfDur['2H'] > (halfDur['1H'] || 0) ? halfDur['2H'] - (halfDur['1H'] || 0) : halfDur['2H'] || 0);
+      // Simpler: just sum both half durations independently from their start
+      // 1H runs 0→halfDur['1H'], 2H runs halfDur['1H']→halfDur['2H'] (absolute)
+      const h1Dur = halfDur['1H'] || 0;
+      const h2Dur = halfDur['2H'] ? Math.max(0, halfDur['2H'] - (halfDur['1H'] || 0)) : 0;
+      totalMatchSecs += h1Dur + h2Dur;
 
       (ps.gkSpells || []).forEach(spell => {
         // Recompute toSecs from halfDur — always use the last recorded stat in that half
@@ -11921,12 +11950,19 @@ function getPlayerEventStats(playerName) {
   const avgH2 = fatigueAll.length ? fatigueAll.reduce((s,f)=>s+f.h2Avg,0)/fatigueAll.length : 0;
 
   const gkMinutes = totalGkSecs / 60;
-  // Per-90 stats (only meaningful with enough time in goal)
-  const GAME_LENGTH = 55; // minutes — our games run 47–55 min, use 55 as normalisation
-  const gkSavesPer90      = gkMinutes > 0 ? (totalGkSaves        / gkMinutes * GAME_LENGTH) : null;
-  const gkConcededPer90   = gkMinutes > 0 ? (totalGkGoalsConceded / gkMinutes * GAME_LENGTH) : null;
-  const gkSaveRate        = (totalGkSaves + totalGkGoalsConceded) > 0
+  const GAME_LENGTH = 55;
+  const gkSavesPer55      = gkMinutes > 0 ? (totalGkSaves        / gkMinutes * GAME_LENGTH) : null;
+  const gkConcededPer55   = gkMinutes > 0 ? (totalGkGoalsConceded / gkMinutes * GAME_LENGTH) : null;
+  // Keep old name for backward compat with all existing references
+  const gkSavesPer90    = gkSavesPer55;
+  const gkConcededPer90 = gkConcededPer55;
+  const gkSaveRate = (totalGkSaves + totalGkGoalsConceded) > 0
     ? totalGkSaves / (totalGkSaves + totalGkGoalsConceded) : null;
+
+  // Outfield time: what fraction of total match time was spent outfield (not in goal)
+  const outfieldSecs = Math.max(0, totalMatchSecs - totalGkSecs);
+  const outfieldPct  = totalMatchSecs > 0 ? outfieldSecs / totalMatchSecs : 1.0;
+  // outfieldPct = 1.0 means never went in goal, 0.5 means half the time in goal
 
   const leadTotal = leadStats.leading + leadStats.trailing + leadStats.level;
   return {
@@ -11935,6 +11971,9 @@ function getPlayerEventStats(playerName) {
     gkMatches, gkMinutes: Math.round(gkMinutes), gkGoalsConceded: totalGkGoalsConceded,
     gkSaves: totalGkSaves, gkSavesPer90, gkConcededPer90, gkSaveRate,
     gkSpellHistory: gkSpellHistory.sort((a,b) => (a.date||'').localeCompare(b.date||'')),
+    // Outfield time scaling
+    totalMatchMins: Math.round(totalMatchSecs / 60),
+    outfieldPct: parseFloat(outfieldPct.toFixed(3)),
     // General time stats
     clutchTotal: totalClutch1H + totalClutch2H,
     clutchPerMatch: clutchMatches > 0 ? (totalClutch1H + totalClutch2H) / clutchMatches : 0,
