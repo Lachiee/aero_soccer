@@ -11891,11 +11891,20 @@ function getPlayerEventStats(playerName) {
     pressureTotal += ps.pressureResponse?.total || 0;
     pressureOpps  += ps.pressureResponse?.opps  || 0;
 
-    // Defensive chains
-    if (ps.defensiveChains?.chains > 0) {
-      totalDefChains += ps.defensiveChains.chains;
-      totalDefChainMatches++;
-    }
+    // Defensive chains — computed live from raw events so existing data works
+    const rawEvents  = log.events || [];
+    const goalEvts   = rawEvents.filter(e => e.event === 'Goals');
+    const defEvts    = rawEvents.filter(e =>
+      (e.event === 'Tackles' || e.event === 'Interceptions') && e.player === playerName
+    );
+    defEvts.forEach(def => {
+      const chainGoal = goalEvts.find(g =>
+        g.team === def.team && g.half === def.half &&
+        g.tsSecsRaw > def.tsSecsRaw && g.tsSecsRaw <= def.tsSecsRaw + 30
+      );
+      if (chainGoal) totalDefChains++;
+    });
+    if (defEvts.length > 0) totalDefChainMatches++;
 
     if (ps.peakWindow?.count > 0) peakWindows.push({ ...ps.peakWindow, matchId, date: log.date });
 
