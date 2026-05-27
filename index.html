@@ -8243,7 +8243,7 @@ function computeStrikerRating(playerName) {
   const sorted = [...ps.matches]
     .filter(r => r.half === 'FULL' && r.match_date)
     .sort((a,b) => (b.match_date||'').localeCompare(a.match_date||''))
-    .slice(0, 5);
+    .slice(0, 10);
 
   if (!sorted.length) return null;
 
@@ -8287,7 +8287,7 @@ function computeStrikerRating(playerName) {
       const ms = [...opp.matches]
         .filter(r => r.half === 'FULL' && r.match_date)
         .sort((a,b) => (b.match_date||'').localeCompare(a.match_date||''))
-        .slice(0, 5);
+        .slice(0, 10);
       if (!ms.length) return;
       let tq = 0;
       ms.forEach(r => {
