@@ -11005,10 +11005,20 @@ function parseNewFormatCSV(text) {
     if (!player || !event || !ts) continue;
 
     const tsSecsRaw = (() => {
-      const clean = ts.replace(/['"]/g, '');
+      const clean = ts.replace(/['"]/g, '').trim();
       const parts = clean.split(':');
-      if (parts.length === 2) return parseInt(parts[0]) * 60 + parseFloat(parts[1]);
-      if (parts.length === 3) return parseInt(parts[0]) * 3600 + parseInt(parts[1]) * 60 + parseFloat(parts[2]);
+      if (parts.length === 3) {
+        // Format is MM:SS:cc (centiseconds) — NOT HH:MM:SS
+        // The match never exceeds 90 mins so a first part > 90 would be hours (not our case)
+        const mm = parseInt(parts[0]), ss = parseInt(parts[1]), cc = parseFloat(parts[2]);
+        return mm * 60 + ss + (isNaN(cc) ? 0 : cc / 100);
+      }
+      if (parts.length === 2) {
+        // Could be MM:SS or MM:SS.deciseconds
+        const mm = parseInt(parts[0]);
+        const ss = parseFloat(parts[1]); // handles "26.2" → 26.2
+        return mm * 60 + ss;
+      }
       return 0;
     })();
 
