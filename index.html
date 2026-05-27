@@ -2808,8 +2808,8 @@ const TAG_DEFS = {
   'Never Say Die':     { cls:'tag-workhorse', tip:'A higher proportion of their output comes while the team is trailing than any other player — keeps fighting when it\'s hardest' },
   'Pressure Cooker':   { cls:'tag-engine',    tip:'Responds to conceding goals with more immediate activity than anyone — galvanises after setbacks' },
   'Iron Man':          { cls:'tag-enforcer',  tip:'Has spent the most time in goal across the season — the reliable last line when keepers rotate' },
-  'Brick Wall':        { cls:'tag-enforcer',  tip:'Concedes fewer goals per 90 minutes in goal than any other rotation keeper — the hardest to score against' },
-  'Shot Stopper':      { cls:'tag-enforcer',  tip:'Makes more saves per 90 minutes in goal than anyone — the busiest and most reliable keeper in rotation' },
+  'Brick Wall':        { cls:'tag-enforcer',  tip:'Concedes fewer goals per 55 minutes in goal than any other rotation keeper — the hardest to score against' },
+  'Shot Stopper':      { cls:'tag-enforcer',  tip:'Makes more saves per 55 minutes in goal than anyone — the busiest and most reliable keeper in rotation' },
   'Clutch':            { cls:'tag-engine',    tip:'More active in the final 5 minutes of each half than anyone — consistently raises their output when the game is tightest' },
   'Second Half':       { cls:'tag-engine',    tip:'Significantly more active in the second half than the first across multiple games — grows into every match' },
   'Pressure Player':   { cls:'tag-workhorse', tip:'Most active in the 90 seconds after the team concedes — consistently responds to goals against with increased intensity' },
@@ -3994,13 +3994,13 @@ function renderSeasonSummary() {
     { label:'📈 Most Improved (MIP)',     desc:'Performance score: early season vs late season',           fn: mipScore,          fmt: v => (v>0?'+':'')+v.toFixed(1)+' pts/g', min: 8 },
     { label:'⚽ Golden Boot Race',        desc:'Goals per game',                                           fn: gpgScore,          fmt: v => v.toFixed(2)+' gpg' },
     { label:'🎯 Playmaker Race',          desc:'Assists + key passes per game',                            fn: creatorScore,      fmt: v => v.toFixed(2)+'/g' },
-    { label:'🧤 Best Goalkeeper Race',    desc:'Saves per 90 min in goal (from event log) or saves per game',
+    { label:'🧤 Best Goalkeeper Race',    desc:'Saves per 55 min in goal (from event log) or saves per game',
       fn: p => {
         const ts = getPlayerEventStats(p.player);
         if (ts?.gkSavesPer90 != null && ts.gkMinutes >= 20) return ts.gkSavesPer90;
         return gkScore(p); // fallback to saves per game
       },
-      fmt: v => v.toFixed(2)+'/90' },
+      fmt: v => v.toFixed(2)+'/55' },
     { label:'🤝 Team Player Race',        desc:'Win rate %',                                               fn: winRateScore,      fmt: v => Math.round(v)+'%' },
     { label:'⏱ Clutch Player Race',       desc:'Late goals (47+ min) — winning/decisive goals weighted more', fn: clutchPlayerScore, fmt: v => v.toFixed(1)+' pts' },
     { label:'💨 Iron Lungs Race',         desc:'Avg stat activity in 2H vs 1H — who gets stronger as the game goes on (needs event log data)', fn: ironLungsScore,    fmt: v => (v>=0?'+':'')+v.toFixed(1)+' /win', min: 2 },
@@ -6652,14 +6652,14 @@ function renderProfileTimeStats(name) {
     <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
       <div style="font-family:'Barlow Condensed',sans-serif;font-size:.68rem;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-bottom:8px">🧤 Goalkeeper Record</div>
       <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px;margin-bottom:10px">
-        ${statPill('Time in goal', `${Math.round(ts.gkMinutes)}'`,
+        ${statPill('Avg Time in Goal', `${Math.round(ts.gkMinutes / Math.max(ts.gkMatches,1))}'`,
           `across ${ts.gkMatches} match${ts.gkMatches>1?'es':''}`,
-          'Total minutes played as goalkeeper across all imported matches — derived from GK On/Off rotation events')}
+          'Average minutes per match played as goalkeeper — derived from GK On/Off rotation events')}
         ${ts.gkSaves != null ? statPill('Saves', ts.gkSaves.toString(),
-          ts.gkSavesPer90 != null ? `${ts.gkSavesPer90.toFixed(1)} per 90 min` : '',
+          ts.gkSavesPer90 != null ? `${ts.gkSavesPer90.toFixed(1)} per 55 min` : '',
           'Saves made while in goal — attributed by timestamp to the correct keeper, not split evenly across the match') : ''}
         ${adminMode ? statPill('Goals conceded', ts.gkGoalsConceded.toString(),
-          ts.gkConcededPer90 != null ? `${ts.gkConcededPer90.toFixed(1)} per 90 min` : '',
+          ts.gkConcededPer90 != null ? `${ts.gkConcededPer90.toFixed(1)} per 55 min` : '',
           'Goals conceded while this player was in goal — matched by timestamp to their specific rotation spell') : ''}
         ${ts.gkSaveRate != null ? statPill('Save rate',
           `${Math.round(ts.gkSaveRate * 100)}%`,
@@ -8299,10 +8299,38 @@ function computeStrikerRating(playerName) {
 
   const avgQualityGoals = totalQualityGoals / sorted.length;
 
-  // Scale to 0–10: 2.5 quality-adjusted goals/game ≈ 10
-  const rating = Math.min(10, parseFloat((avgQualityGoals / 2.5 * 10).toFixed(1)));
+  // Scale dynamically to the group — compute all players' avg quality goals
+  // and use the 85th percentile as the ceiling (= rating 10).
+  // This means the best strikers in the group score ~9-10, not everyone hits the cap.
+  const allPlayerQG = Object.values(playerStats)
+    .map(opp => {
+      const oppSorted = [...opp.matches]
+        .filter(r => r.half === 'FULL' && r.match_date)
+        .sort((a,b) => (b.match_date||'').localeCompare(a.match_date||''))
+        .slice(0, 5);
+      if (!oppSorted.length) return 0;
+      let tq = 0;
+      oppSorted.forEach(r => {
+        const goals = n(r.goals);
+        const m2 = matchList.find(m => m.id === r.match_id);
+        if (!m2) { tq += goals; return; }
+        const oppPs = r.team === 'A' ? m2.teamB : m2.teamA;
+        const oppStr = oppPs.map(op => playerDefStrength[op.player]).filter(v => v != null);
+        const oAC = oppStr.length ? oppStr.reduce((s,v)=>s+v,0)/oppStr.length : leagueAvg;
+        const w = Math.min(2.5, Math.max(0.4, leagueAvg / Math.max(oAC, 0.5)));
+        tq += goals * w;
+      });
+      return tq / oppSorted.length;
+    })
+    .filter(v => v > 0)
+    .sort((a,b) => a - b);
 
-  // Label
+  // 85th percentile = the ceiling for a 10 rating
+  const p85idx = Math.min(allPlayerQG.length - 1, Math.floor(allPlayerQG.length * 0.85));
+  const scale = allPlayerQG.length >= 5 ? Math.max(allPlayerQG[p85idx], 0.5) : 5.0;
+
+  const rating = Math.min(10, parseFloat((avgQualityGoals / scale * 10).toFixed(1)));
+
   const label = rating >= 8.5 ? 'World Class' : rating >= 7 ? 'Elite' : rating >= 5.5 ? 'Sharp' : rating >= 4 ? 'Decent' : rating >= 2.5 ? 'Developing' : 'Low';
 
   return { rating, label, games: sorted.length, avgQualityGoals: parseFloat(avgQualityGoals.toFixed(2)), leagueAvg: parseFloat(leagueAvg.toFixed(1)), detail };
@@ -8927,7 +8955,7 @@ function renderTeamResult(tA, tB) {
       const bestGkA = gkRateA.sort((a,b)=>b.rate-a.rate)[0];
       const bestGkB = gkRateB.sort((a,b)=>b.rate-a.rate)[0];
       const gkRow = (bestGkA || bestGkB) ? `
-        <div style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:.75rem" data-tip="Best available keeper save rate — saves / (saves + goals conceded) per 90 min in goal">
+        <div style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:.75rem" data-tip="Best available keeper save rate — saves / (saves + goals conceded) per 55 min in goal">
           <span style="flex:1;color:var(--muted)">🧤 Best keeper (save rate)</span>
           <span style="color:${bestGkA?'var(--green)':'rgba(255,255,255,.3)'};min-width:52px;text-align:right">${bestGkA ? Math.round(bestGkA.rate*100)+'% '+bestGkA.player.split(' ')[0] : '—'}</span>
           <span style="color:var(--muted);font-size:.65rem;min-width:28px;text-align:center">${bestGkA&&bestGkB ? (bestGkA.rate>=bestGkB.rate?'A ›':'‹ B') : '='}</span>
@@ -11916,8 +11944,9 @@ function getPlayerEventStats(playerName) {
 
   const gkMinutes = totalGkSecs / 60;
   // Per-90 stats (only meaningful with enough time in goal)
-  const gkSavesPer90      = gkMinutes > 0 ? (totalGkSaves        / gkMinutes * 90) : null;
-  const gkConcededPer90   = gkMinutes > 0 ? (totalGkGoalsConceded / gkMinutes * 90) : null;
+  const GAME_LENGTH = 55; // minutes — our games run 47–55 min, use 55 as normalisation
+  const gkSavesPer90      = gkMinutes > 0 ? (totalGkSaves        / gkMinutes * GAME_LENGTH) : null;
+  const gkConcededPer90   = gkMinutes > 0 ? (totalGkGoalsConceded / gkMinutes * GAME_LENGTH) : null;
   const gkSaveRate        = (totalGkSaves + totalGkGoalsConceded) > 0
     ? totalGkSaves / (totalGkSaves + totalGkGoalsConceded) : null;
 
