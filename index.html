@@ -10872,13 +10872,14 @@ function printMatchCard(matchId) {
   const teamSection = (teamLetter, teamLabel, goalCount, nameColor) => {
     const rows = buildTeamRows(teamLetter);
     const sum = key => rows.reduce((s, r) => s + n(r[key]), 0);
-    const totalGoals = sum('goals');
     const totalShots = sum('total_shots');
-    const conv = totalShots > 0 ? (totalGoals / totalShots * 100).toFixed(0) + '%' : '0%';
+    // Use authoritative goalCount (from computeWinLoss) — correctly handles
+    // own goals and team swaps. sum('goals') from rows may differ.
+    const conv = totalShots > 0 ? (goalCount / totalShots * 100).toFixed(0) + '%' : '0%';
     const ttd = `padding:5px 5px;font-size:.65rem;text-align:center;font-weight:700;border-top:2px solid rgba(255,255,255,.12);background:rgba(0,0,0,.25);white-space:nowrap`;
     const totalsRow = `<tr>
       <td style="${ttd};text-align:left;color:${nameColor};padding-left:8px">TOTAL</td>
-      <td style="${ttd}">${totalGoals}</td>
+      <td style="${ttd}">${goalCount}</td>
       <td style="${ttd}">${sum('own_goals')||'–'}</td>
       <td style="${ttd}">${sum('assists')}</td>
       <td style="${ttd}">${sum('key_passes')}</td>
