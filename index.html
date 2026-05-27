@@ -2784,7 +2784,7 @@ const TAG_DEFS = {
   'Clutch':            { cls:'tag-workhorse', tip:'Records more stats in the final 5 minutes of halves than anyone — raises their game exactly when it matters most' },
   'Second Wind':       { cls:'tag-engine',    tip:'Statistically more active in the second half than the first, consistently — gets stronger as the game goes on' },
   'Never Say Die':     { cls:'tag-workhorse', tip:'A higher proportion of their output comes while the team is trailing than any other player — keeps fighting when it\'s hardest' },
-  'Pressure Cooker':   { cls:'tag-engine',    tip:'Responds to conceding goals with more immediate activity than anyone — galvanises after setbacks' },
+  'Spark Plug':        { cls:'tag-engine',    tip:'More of their tackles and interceptions lead directly to goals within 30 seconds than anyone else — winning the ball in the right place at the right time' },
   'Iron Man':          { cls:'tag-enforcer',  tip:'Has spent the most time in goal across the season — the reliable last line when keepers rotate' },
   'Brick Wall':        { cls:'tag-enforcer',  tip:'Concedes fewer goals per 55 minutes in goal than any other rotation keeper — the hardest to score against' },
   'Shot Stopper':      { cls:'tag-enforcer',  tip:'Makes more saves per 55 minutes in goal than anyone — the busiest and most reliable keeper in rotation' },
@@ -3046,6 +3046,7 @@ function buildTagAuction() {
           gkSaveRate:       ts.gkSaveRate      ?? null,
           trailScore:       mwd >= 2 ? (ts.trailPct / 100) * mwd : 0,
           neverSayDie:      mwd >= 2 ? ts.trailPct : 0,
+          defChainScore:    ts.defChains > 0 ? ts.defChainsPerMatch * mwd : 0,
           timeMatchesWithData: mwd,
           dominantTrend:    ts.dominantTrend || '→',
         };
@@ -3530,6 +3531,7 @@ function buildTagAuction() {
     'Second Wind':       m => m.secondHalfScore || 0,
     'Never Say Die':     m => m.trailScore      || 0,
     'Pressure Cooker':   m => m.pressureScore   || 0,
+    'Spark Plug':        m => (m.defChainScore   || 0),
     'Iron Man':          m => m.gkMinutes       || 0,
     'Brick Wall':        m => m.gkConcededPer90 != null && m.gkMinutes >= 30 ? 90 - m.gkConcededPer90 * 10 : 0,
     'Shot Stopper':      m => m.gkSavesPer90    != null && m.gkMinutes >= 30 ? m.gkSavesPer90 : 0,
@@ -3945,7 +3947,12 @@ function renderSeasonSummary() {
     return score;
   };
 
-  // Iron Lungs: best sustained 2H output (avg 2H stats/window vs 1H)
+  // Catalyst: most defensive chains (tackle/interception → goal within 30s) per game
+  const catalystScore = p => {
+    const ts = getPlayerEventStats(p.player);
+    if (!ts || ts.defChainMatches < 1) return -Infinity;
+    return ts.defChainsPerMatch;
+  };
   const ironLungsScore = p => {
     const ts = getPlayerEventStats(p.player);
     if (!ts || ts.matchesWithData < 2) return -Infinity;
@@ -3982,7 +3989,7 @@ function renderSeasonSummary() {
       fmt: v => v.toFixed(1)+' saves/55', min: 1 },
     { label:'🤝 Team Player Race',        desc:'Win rate %',                                               fn: winRateScore,      fmt: v => Math.round(v)+'%' },
     { label:'⏱ Clutch Player Race',       desc:'Late goals (47+ min) — winning/decisive goals weighted more', fn: clutchPlayerScore, fmt: v => v.toFixed(1)+' pts' },
-    { label:'💨 Iron Lungs Race',         desc:'Avg stat activity in 2H vs 1H — who gets stronger as the game goes on (needs event log data)', fn: ironLungsScore,    fmt: v => (v>=0?'+':'')+v.toFixed(1)+' /win', min: 2 },
+    { label:'⚡ Catalyst Race',           desc:'Tackles/interceptions that led to a goal within 30 seconds — defensive contributions that directly triggered goals (needs event log data)', fn: catalystScore,     fmt: v => v.toFixed(1)+'/game', min: 1 },
     { label:'🔥 Firefighter Race',        desc:'Avg stats in 90s after team concedes — who steps up when the team is under pressure (needs event log data)', fn: firefighterScore,  fmt: v => v.toFixed(1)+' stats/opp', min: 2 },
     { label:'💪 Never Say Die Race',      desc:'% of total output produced while the team is trailing — who fights hardest when chasing (needs event log data)', fn: neverSayDieScore,  fmt: v => Math.round(v)+'% trailing', min: 2 },
   ];
@@ -6600,8 +6607,12 @@ function renderProfileTimeStats(name) {
       'Average number of actions in the 90 seconds after the team conceded a goal — measures reactive intensity'));
   }
 
-  // Outfield time pill — only shown when player has spent time in goal
-  if (ts.outfieldPct != null && ts.outfieldPct < 0.99 && ts.gkMatches > 0) {
+  // Defensive chains — tackle/interception leading to a goal within 30s
+  if (ts.defChains > 0) {
+    pills.push(statPill('Defensive Sparks', ts.defChains.toString(),
+      `${ts.defChainsPerMatch.toFixed(1)}/game · ${ts.defChainMatches} match${ts.defChainMatches !== 1 ? 'es' : ''}`,
+      'Times this player won the ball (tackle or interception) and their team scored within 30 seconds — a direct defensive contribution to a goal'));
+  }  if (ts.outfieldPct != null && ts.outfieldPct < 0.99 && ts.gkMatches > 0) {
     const pct = Math.round(ts.outfieldPct * 100);
     const col = pct >= 80 ? 'var(--lime)' : pct >= 60 ? 'var(--amber,#f59e0b)' : 'rgba(248,113,113,.8)';
     pills.push(`<div style="background:var(--card2);border:1px solid var(--border);border-radius:8px;padding:8px 10px;text-align:center;cursor:default"
@@ -11767,6 +11778,7 @@ function computeTimeStats(eventRows, goalEvents, gkRotation, h2OffsetSecs) {
       shotTiming:       computeShotTiming(events, halfDur),
       firstAction:      events.reduce((min, e) => Math.min(min, e.t), Infinity),
       pressureResponse: computePressureResponse(events, goalEvents, player),
+      defensiveChains:  computeDefensiveChains(events, goalEvents, 30),
       gkTimeSecs:       gkTime[player] || 0,
       gkSpells:         gkSpells[player] || [],
       gkGoalsConceded:  gkGoalsConceded[player] || 0,
@@ -11783,6 +11795,7 @@ function computeTimeStats(eventRows, goalEvents, gkRotation, h2OffsetSecs) {
         leadStats: { leading: 0, trailing: 0, level: 0 },
         shotTiming: {}, firstAction: Infinity,
         pressureResponse: { total: 0, goals: 0, opps: 0 },
+        defensiveChains:  { chains: 0, tackles: 0, interceptions: 0, chainGoals: [] },
         gkTimeSecs: gkTime[player],
         gkSpells: gkSpells[player] || [],
         gkGoalsConceded: gkGoalsConceded[player] || 0,
@@ -11806,6 +11819,7 @@ function getPlayerEventStats(playerName) {
 
   let totalGkSecs = 0, totalGkGoalsConceded = 0, totalGkSaves = 0, gkMatches = 0;
   let totalMatchSecs = 0; // total time the player was available (on the pitch)
+  let totalDefChains = 0, totalDefChainMatches = 0;
   let totalClutch1H = 0, totalClutch2H = 0, clutchMatches = 0;
   let pressureTotal = 0, pressureOpps = 0;
   const peakWindows = [];
@@ -11877,6 +11891,12 @@ function getPlayerEventStats(playerName) {
     pressureTotal += ps.pressureResponse?.total || 0;
     pressureOpps  += ps.pressureResponse?.opps  || 0;
 
+    // Defensive chains
+    if (ps.defensiveChains?.chains > 0) {
+      totalDefChains += ps.defensiveChains.chains;
+      totalDefChainMatches++;
+    }
+
     if (ps.peakWindow?.count > 0) peakWindows.push({ ...ps.peakWindow, matchId, date: log.date });
 
     const f = ps.fatigue;
@@ -11934,6 +11954,10 @@ function getPlayerEventStats(playerName) {
     clutchPerMatch: clutchMatches > 0 ? (totalClutch1H + totalClutch2H) / clutchMatches : 0,
     pressureAvg: pressureOpps > 0 ? pressureTotal / pressureOpps : 0,
     pressureOpps,
+    // Defensive chains
+    defChains: totalDefChains,
+    defChainsPerMatch: totalDefChainMatches > 0 ? totalDefChains / totalDefChainMatches : 0,
+    defChainMatches: totalDefChainMatches,
     bestPeak, dominantTrend, avgH1, avgH2,
     leadStats, leadTotal,
     leadPct:  leadTotal ? Math.round(leadStats.leading  / leadTotal * 100) : 0,
@@ -12060,6 +12084,47 @@ function computeShotTiming(events, halfDur) {
     buckets[key] = (buckets[key] || 0) + 1;
   });
   return buckets;
+}
+
+// ── Defensive Chain Detection ─────────────────────────────────────────────────
+// Finds tackles and interceptions by this player that were followed by a goal
+// from the same team within CHAIN_WINDOW seconds.
+// Returns { chains, tackles, interceptions, chainGoals: [{scorer, secs, type}] }
+function computeDefensiveChains(playerEvents, goalEvents, CHAIN_WINDOW) {
+  CHAIN_WINDOW = CHAIN_WINDOW || 30;
+  const defEvents = playerEvents.filter(e =>
+    e.event === 'Tackles' || e.event === 'Interceptions'
+  );
+  const chains = [];
+
+  defEvents.forEach(def => {
+    const defT = def.tsSecsRaw;
+    const defTeam = def.team;
+    // Look for a same-team goal within CHAIN_WINDOW seconds AFTER the defensive action
+    const chainGoal = goalEvents.find(g =>
+      g.team === defTeam &&
+      g.half === def.half &&
+      g.tsSecsRaw > defT &&
+      g.tsSecsRaw <= defT + CHAIN_WINDOW
+    );
+    if (chainGoal) {
+      chains.push({
+        type: def.event,        // 'Tackles' or 'Interceptions'
+        defSecs: defT,
+        goalSecs: chainGoal.tsSecsRaw,
+        lag: Math.round(chainGoal.tsSecsRaw - defT),
+        scorer: chainGoal.player,
+        half: def.half,
+      });
+    }
+  });
+
+  return {
+    chains: chains.length,
+    tackles:      defEvents.filter(e => e.event === 'Tackles').length,
+    interceptions: defEvents.filter(e => e.event === 'Interceptions').length,
+    chainGoals: chains,
+  };
 }
 
 function computePressureResponse(events, goalEvents, player) {
@@ -12415,6 +12480,15 @@ function showTimelinePreview(timeStats, allPlayers) {
     const top = trailPerformers[0], l = playerStats[top].leadStats;
     const total = l.leading + l.trailing + l.level;
     if (total > 0) insights.push({ icon:'⚡', label:'Strongest when chasing', text:`${top} — ${l.trailing} stats while trailing (${Math.round(l.trailing/total*100)}% of output)`});
+  }
+
+  // Defensive spark — tackle/interception leading to a goal within 30s
+  const chainRanked = allPlayers
+    .filter(p => playerStats[p]?.defensiveChains?.chains > 0)
+    .sort((a,b) => (playerStats[b].defensiveChains?.chains||0) - (playerStats[a].defensiveChains?.chains||0));
+  if (chainRanked.length) {
+    const top = chainRanked[0], dc = playerStats[top].defensiveChains;
+    insights.push({ icon:'⚡', label:'Defensive spark', text:`${top} — ${dc.chains} tackle/interception${dc.chains !== 1 ? 's' : ''} led to a goal within 30 seconds` });
   }
 
   // Derive display structure from actual fatigue buckets
