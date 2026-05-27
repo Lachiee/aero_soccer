@@ -591,6 +591,10 @@ canvas.spider{display:block;margin:0 auto}
       <option value="games">Sort: Games</option>
       <option value="enforcer" id="sort-enforcer">Sort: Enforcer</option>
       <option value="stamina" id="sort-stamina">Sort: Stamina</option>
+      <option value="clutch_event" id="sort-clutch-event">Sort: Clutch (final 5 min)</option>
+      <option value="second_half" id="sort-second-half">Sort: 2H Surge</option>
+      <option value="pressure_resp" id="sort-pressure-resp">Sort: Under Pressure</option>
+      <option value="trail_pct" id="sort-trail-pct">Sort: Never Say Die</option>
     </select>
   </div>
   <div class="player-grid" id="player-grid"></div>
@@ -2574,7 +2578,11 @@ function computeWinLoss(playerMap, matches) {
 function computeRating(s, cs) {
   const g = Math.max(s.games, 1);
   const enforcer = cs ? n(cs.enforcer) : 0;
-  const stamina = cs ? n(cs.stamina) : 0;
+  // Stamina: use computed value from event log if ≥2 matches, else manual override
+  const staminaComputed = computeStaminaFromEvents(s.player);
+  const stamina = staminaComputed?.matches >= 2
+    ? staminaComputed.score   // 0–10 from event log
+    : (cs ? n(cs.stamina) : 0); // manual 0–10
   const base = (
     (s.goals / g) * 4.5 +
     (s.assists / g) * 3 +
@@ -2585,9 +2593,19 @@ function computeRating(s, cs) {
     (s.key_passes / g) * 0.35 +
     (s.blocks / g) * 0.3 +
     enforcer * 0.5 +
-    stamina * 0.4
+    stamina  * 0.4
   );
-  return parseFloat(base.toFixed(2));
+  // Time-based bonus (up to ~5% of base): reward players who consistently
+  // improve in 2H or perform well under pressure — data from event logs
+  const ts = getPlayerEventStats(s.player);
+  let timeBonus = 0;
+  if (ts && ts.matchesWithData >= 2) {
+    if (ts.dominantTrend === '↗') timeBonus += (ts.avgH2 - ts.avgH1) * 0.015; // 2H surge
+    if (ts.pressureAvg > 0)       timeBonus += ts.pressureAvg * 0.01;          // under pressure
+    if (ts.clutchPerMatch > 0)     timeBonus += ts.clutchPerMatch * 0.02;       // clutch actions
+    timeBonus = Math.min(timeBonus, base * 0.05); // cap at 5% of base
+  }
+  return parseFloat((base + timeBonus).toFixed(2));
 }
 
 // =====================================================================
@@ -2732,6 +2750,13 @@ const TAG_DEFS = {
   'Deep Creator':      { cls:'tag-engine',    tip:'Assists from deeper than anyone — builds attacks from further out, covering more of the pitch when setting up goals' },
   'Through Ball King': { cls:'tag-wizard',    tip:'Plays the longest average assist pass of anyone — the master of splitting defences with through balls and switches' },
   'Box Architect':     { cls:'tag-striker',   tip:'Creates from closest to goal — cutbacks, layoffs and dangerous passes from inside the box to set up teammates' },
+  'Clutch':            { cls:'tag-workhorse', tip:'Records more stats in the final 5 minutes of halves than anyone — raises their game exactly when it matters most' },
+  'Second Wind':       { cls:'tag-engine',    tip:'Statistically more active in the second half than the first, consistently — gets stronger as the game goes on' },
+  'Never Say Die':     { cls:'tag-workhorse', tip:'A higher proportion of their output comes while the team is trailing than any other player — keeps fighting when it\'s hardest' },
+  'Pressure Cooker':   { cls:'tag-engine',    tip:'Responds to conceding goals with more immediate activity than anyone — galvanises after setbacks' },
+  'Iron Man':          { cls:'tag-enforcer',  tip:'Has spent the most time in goal across the season — the reliable last line when keepers rotate' },
+  'Brick Wall':        { cls:'tag-enforcer',  tip:'Concedes fewer goals per 90 minutes in goal than any other rotation keeper — the hardest to score against' },
+  'Shot Stopper':      { cls:'tag-enforcer',  tip:'Makes more saves per 90 minutes in goal than anyone — the busiest and most reliable keeper in rotation' },
   'Clutch':            { cls:'tag-engine',    tip:'More active in the final 5 minutes of each half than anyone — consistently raises their output when the game is tightest' },
   'Second Half':       { cls:'tag-engine',    tip:'Significantly more active in the second half than the first across multiple games — grows into every match' },
   'Pressure Player':   { cls:'tag-workhorse', tip:'Most active in the 90 seconds after the team concedes — consistently responds to goals against with increased intensity' },
@@ -2965,11 +2990,19 @@ function buildTagAuction() {
       ...(() => {
         const ts = getPlayerEventStats(ps.player);
         if (!ts) return {};
+        const mwd = ts.matchesWithData || 0;
         return {
-          clutchScore:     ts.clutchPerMatch,
-          secondHalfScore: ts.dominantTrend === '↗' ? (ts.avgH2 - ts.avgH1) * ts.matchesWithData : 0,
-          pressureScore:   ts.pressureAvg * ts.matchesWithData,
-          gkMinutes:       ts.gkMinutes || 0,
+          clutchScore:      ts.clutchPerMatch,
+          secondHalfScore:  ts.dominantTrend === '↗' ? (ts.avgH2 - ts.avgH1) * mwd : 0,
+          pressureScore:    ts.pressureAvg * mwd,
+          gkMinutes:        ts.gkMinutes || 0,
+          gkSavesPer90:     ts.gkSavesPer90   ?? null,
+          gkConcededPer90:  ts.gkConcededPer90 ?? null,
+          gkSaveRate:       ts.gkSaveRate      ?? null,
+          trailScore:       mwd >= 2 ? (ts.trailPct / 100) * mwd : 0,
+          neverSayDie:      mwd >= 2 ? ts.trailPct : 0,
+          timeMatchesWithData: mwd,
+          dominantTrend:    ts.dominantTrend || '→',
         };
       })(),
       openers: myGoalEvents.filter(e=>e.isOpener).length,
@@ -3449,9 +3482,12 @@ function buildTagAuction() {
     'Box Architect':     m => m.boxArchitectScore,
     // Time-based tags — require event log data
     'Clutch':            m => m.clutchScore    || 0,
-    'Second Half':       m => m.secondHalfScore || 0,
-    'Pressure Player':   m => m.pressureScore  || 0,
-    'Iron Man':          m => m.gkMinutes      || 0,
+    'Second Wind':       m => m.secondHalfScore || 0,
+    'Never Say Die':     m => m.trailScore      || 0,
+    'Pressure Cooker':   m => m.pressureScore   || 0,
+    'Iron Man':          m => m.gkMinutes       || 0,
+    'Brick Wall':        m => m.gkConcededPer90 != null && m.gkMinutes >= 30 ? 90 - m.gkConcededPer90 * 10 : 0,
+    'Shot Stopper':      m => m.gkSavesPer90    != null && m.gkMinutes >= 30 ? m.gkSavesPer90 : 0,
   };
   Object.entries(shotTagFns).forEach(([label, fn]) => {
     let bestP = null, bestV = 0;
@@ -3864,15 +3900,45 @@ function renderSeasonSummary() {
     return score;
   };
 
+  // Iron Lungs: best sustained 2H output (avg 2H stats/window vs 1H)
+  const ironLungsScore = p => {
+    const ts = getPlayerEventStats(p.player);
+    if (!ts || ts.matchesWithData < 2) return -Infinity;
+    return ts.avgH2 - ts.avgH1; // positive = stronger in 2H
+  };
+
+  // Firefighter: best immediate response after conceding (avg stats in 90s after goal conceded)
+  const firefighterScore = p => {
+    const ts = getPlayerEventStats(p.player);
+    if (!ts || ts.matchesWithData < 2 || ts.pressureAvg == null) return -Infinity;
+    return ts.pressureAvg;
+  };
+
+  // Never Say Die: highest proportion of output while trailing
+  const neverSayDieScore = p => {
+    const ts = getPlayerEventStats(p.player);
+    if (!ts || ts.matchesWithData < 2 || ts.leadTotal < 10) return -Infinity;
+    return ts.trailPct;
+  };
+
   const awardRaces = [
     { label:'🏆 MVP Race',               desc:'Goals × 4, assists × 3, key passes × 0.5, win rate × 3', fn: mvpScore,          fmt: v => v.toFixed(1)+' pts' },
     { label:'🛡 Defensive Player (DPOY)', desc:'Tackles + ints + blocks per game, saves × 0.5',          fn: dpoyScore,         fmt: v => v.toFixed(1)+'/g' },
     { label:'📈 Most Improved (MIP)',     desc:'Performance score: early season vs late season',           fn: mipScore,          fmt: v => (v>0?'+':'')+v.toFixed(1)+' pts/g', min: 8 },
     { label:'⚽ Golden Boot Race',        desc:'Goals per game',                                           fn: gpgScore,          fmt: v => v.toFixed(2)+' gpg' },
     { label:'🎯 Playmaker Race',          desc:'Assists + key passes per game',                            fn: creatorScore,      fmt: v => v.toFixed(2)+'/g' },
-    { label:'🧤 Best Goalkeeper Race',    desc:'Saves per game',                                           fn: gkScore,           fmt: v => v.toFixed(2)+'/g' },
+    { label:'🧤 Best Goalkeeper Race',    desc:'Saves per 90 min in goal (from event log) or saves per game',
+      fn: p => {
+        const ts = getPlayerEventStats(p.player);
+        if (ts?.gkSavesPer90 != null && ts.gkMinutes >= 20) return ts.gkSavesPer90;
+        return gkScore(p); // fallback to saves per game
+      },
+      fmt: v => v.toFixed(2)+'/90' },
     { label:'🤝 Team Player Race',        desc:'Win rate %',                                               fn: winRateScore,      fmt: v => Math.round(v)+'%' },
     { label:'⏱ Clutch Player Race',       desc:'Late goals (47+ min) — winning/decisive goals weighted more', fn: clutchPlayerScore, fmt: v => v.toFixed(1)+' pts' },
+    { label:'💨 Iron Lungs Race',         desc:'Avg stat activity in 2H vs 1H — who gets stronger as the game goes on (needs event log data)', fn: ironLungsScore,    fmt: v => (v>=0?'+':'')+v.toFixed(1)+' /win', min: 2 },
+    { label:'🔥 Firefighter Race',        desc:'Avg stats in 90s after team concedes — who steps up when the team is under pressure (needs event log data)', fn: firefighterScore,  fmt: v => v.toFixed(1)+' stats/opp', min: 2 },
+    { label:'💪 Never Say Die Race',      desc:'% of total output produced while the team is trailing — who fights hardest when chasing (needs event log data)', fn: neverSayDieScore,  fmt: v => Math.round(v)+'% trailing', min: 2 },
   ];
 
   const filtered = awards.filter(a => a.player && a.player !== '–');
@@ -6324,10 +6390,25 @@ function renderPlayers() {
     const cs = customStats[p.player];
     p.rating = computeRating(p, cs);
     p._tags = getFifaTags(p, cs);
+    // Pre-compute time sort values (expensive — cached on p)
+    if (['clutch_event','second_half','pressure_resp','trail_pct'].includes(sort)) {
+      if (p._timeSortCached !== sort) {
+        const ts = getPlayerEventStats(p.player);
+        p._clutchEvent    = ts?.clutchPerMatch  ?? -1;
+        p._secondHalf     = ts ? (ts.dominantTrend === '↗' ? ts.avgH2 - ts.avgH1 : 0) : -1;
+        p._pressureResp   = ts?.pressureAvg     ?? -1;
+        p._trailPct       = ts?.matchesWithData >= 2 ? (ts.trailPct ?? -1) : -1;
+        p._timeSortCached = sort;
+      }
+    }
   });
   list.sort((a, b) => {
-    if (sort === 'enforcer') return n(customStats[b.player]?.enforcer) - n(customStats[a.player]?.enforcer);
-    if (sort === 'stamina') return n(customStats[b.player]?.stamina) - n(customStats[a.player]?.stamina);
+    if (sort === 'enforcer')     return n(customStats[b.player]?.enforcer) - n(customStats[a.player]?.enforcer);
+    if (sort === 'stamina')      return n(customStats[b.player]?.stamina)  - n(customStats[a.player]?.stamina);
+    if (sort === 'clutch_event') return (b._clutchEvent  ?? -1) - (a._clutchEvent  ?? -1);
+    if (sort === 'second_half')  return (b._secondHalf   ?? -1) - (a._secondHalf   ?? -1);
+    if (sort === 'pressure_resp')return (b._pressureResp ?? -1) - (a._pressureResp ?? -1);
+    if (sort === 'trail_pct')    return (b._trailPct     ?? -1) - (a._trailPct     ?? -1);
     return (b[sort] ?? 0) - (a[sort] ?? 0);
   });
   document.getElementById('player-count').textContent = list.length + ' players' + (globalFilter==='last10'?' · Last 10 games':'');
@@ -6362,6 +6443,17 @@ function renderPlayers() {
         ${trendHtml ? `<div>${trendHtml}</div>` : ''}
         ${momHtml ? `<div>${momHtml}</div>` : ''}
       </div>` : '';
+
+    // Time-based badge — show 2H trend if event log data exists
+    const timeHtml = (() => {
+      const ts = getPlayerEventStats(p.player);
+      if (!ts || ts.matchesWithData < 2) return '';
+      const trend2h = ts.dominantTrend;
+      const diff = (ts.avgH2 - ts.avgH1).toFixed(1);
+      if (trend2h === '↗') return `<span data-tip="Gets stronger in 2H — avg ${diff} more stats/window in 2nd half vs 1st (${ts.matchesWithData} games)" style="font-size:.7rem;color:var(--green);cursor:help">📈 2H +${diff}</span>`;
+      if (trend2h === '↘') return `<span data-tip="Fades in 2H — avg ${Math.abs(diff)} fewer stats/window in 2nd half vs 1st (${ts.matchesWithData} games)" style="font-size:.7rem;color:var(--amber);cursor:help">📉 2H ${diff}</span>`;
+      return '';
+    })();
     return `<div class="pcard" onclick="nav('profile','${p.player}')">
       <div style="display:flex;align-items:baseline;gap:6px;flex-wrap:wrap">
         <div class="pcard-name">${p.player}</div>
@@ -6373,6 +6465,7 @@ function renderPlayers() {
       <div class="stat-row"><span class="stat-lbl">Assists/G</span><span class="stat-val">${(p.assists/Math.max(p.games,1)).toFixed(2)}</span></div>
       <div class="stat-row"><span class="stat-lbl">Shots/G</span><span class="stat-val">${(p.total_shots/Math.max(p.games,1)).toFixed(1)}</span></div>
       <div class="stat-row"><span class="stat-lbl">Tackles/G</span><span class="stat-val">${(p.tackles/Math.max(p.games,1)).toFixed(1)}</span></div>
+      ${timeHtml ? `<div style="margin-top:4px">${timeHtml}</div>` : ''}
       ${adminMode ? `
       <div class="stat-row"><span class="stat-lbl">Enforcer</span><span class="stat-val" style="color:var(--purple)">${n(cs.enforcer)}/10</span></div>
       <div class="stat-row"><span class="stat-lbl">Stamina</span><span class="stat-val" style="color:var(--amber)">${n(cs.stamina)}/10</span></div>
@@ -6443,6 +6536,18 @@ function renderProfileTimeStats(name) {
       'Average number of actions in the 90 seconds after the team conceded a goal — measures reactive intensity'));
   }
 
+  // Computed stamina
+  const stam = computeStaminaFromEvents(name);
+  if (stam && stam.matches >= 2) {
+    const stamCol = stam.score >= 7 ? 'var(--green)' : stam.score >= 5 ? 'var(--lime)' : stam.score >= 3 ? 'var(--amber,#f59e0b)' : 'rgba(248,113,113,.8)';
+    pills.push(`<div style="background:var(--card2);border:1px solid var(--border);border-radius:8px;padding:8px 10px;text-align:center;cursor:default"
+      data-tip="Computed stamina — how well this player maintains output in late 2H vs early 1H. Sustained: ${stam.sustained}% of early activity. Consistency: ${stam.consistency}%. From ${stam.matches} matches.">
+      <div style="font-size:.6rem;letter-spacing:1.2px;text-transform:uppercase;color:var(--muted);margin-bottom:3px">💪 Stamina</div>
+      <div style="font-family:'Bebas Neue',sans-serif;font-size:1.3rem;color:${stamCol};line-height:1">${stam.score}<span style="font-size:.7rem;opacity:.6">/10</span></div>
+      <div style="font-size:.6rem;color:${stamCol};margin-top:2px">${stam.label}</div>
+    </div>`);
+  }
+
   // Lead/trail breakdown
   if (ts.leadTotal > 0) {
     pills.push(statPill('When leading', `${ts.leadPct}%`, `of output · ${ts.trailPct}% when trailing`,
@@ -6452,15 +6557,36 @@ function renderProfileTimeStats(name) {
   // GK section (only shown if they've played in goal)
   const gkSection = ts.gkMatches > 0 ? `
     <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
-      <div style="font-family:'Barlow Condensed',sans-serif;font-size:.68rem;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-bottom:8px">🧤 Goalkeeper Time</div>
-      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px">
-        ${statPill('Time in goal', `${Math.round(ts.gkMinutes)}'`, `across ${ts.gkMatches} match${ts.gkMatches>1?'es':''}`,
-          'Total minutes played as goalkeeper across all imported matches')}
-        ${statPill('Goals conceded', ts.gkGoalsConceded.toString(), `${ts.gkConcededPer90 != null ? ts.gkConcededPer90.toFixed(1)+' per 90' : ''}`,
-          'Goals conceded while this player was in goal, based on GK rotation timestamps')}
-        ${ts.gkMinutes > 0 ? statPill('Save rate', ts.gkGoalsConceded === 0 ? '100%' : `${Math.max(0,100-Math.round(ts.gkGoalsConceded/(ts.gkGoalsConceded+0.1)*10))}%`, 'approx',
-          'Approximate proportion of shots kept out — based on goals conceded vs saves recorded while in goal') : ''}
+      <div style="font-family:'Barlow Condensed',sans-serif;font-size:.68rem;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-bottom:8px">🧤 Goalkeeper Record</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px;margin-bottom:10px">
+        ${statPill('Time in goal', `${Math.round(ts.gkMinutes)}'`,
+          `across ${ts.gkMatches} match${ts.gkMatches>1?'es':''}`,
+          'Total minutes played as goalkeeper across all imported matches — derived from GK On/Off rotation events')}
+        ${ts.gkSaves != null ? statPill('Saves', ts.gkSaves.toString(),
+          ts.gkSavesPer90 != null ? `${ts.gkSavesPer90.toFixed(1)} per 90 min` : '',
+          'Saves made while in goal — attributed by timestamp to the correct keeper, not split evenly across the match') : ''}
+        ${adminMode ? statPill('Goals conceded', ts.gkGoalsConceded.toString(),
+          ts.gkConcededPer90 != null ? `${ts.gkConcededPer90.toFixed(1)} per 90 min` : '',
+          'Goals conceded while this player was in goal — matched by timestamp to their specific rotation spell') : ''}
+        ${ts.gkSaveRate != null ? statPill('Save rate',
+          `${Math.round(ts.gkSaveRate * 100)}%`,
+          `${ts.gkSaves} saves${adminMode ? ' · '+ts.gkGoalsConceded+' let in' : ''}`,
+          'Proportion of shot attempts kept out — saves / (saves + goals conceded) while in goal') : ''}
       </div>
+      ${ts.gkSpellHistory?.length ? `
+        <div style="font-size:.68rem;color:var(--muted);margin-bottom:6px;letter-spacing:.5px">ROTATION HISTORY</div>
+        <div style="display:flex;flex-direction:column;gap:3px">
+          ${ts.gkSpellHistory.map(sp => {
+            const saveRateRaw = (sp.saves + (sp.conceded||0)) > 0 ? sp.saves / (sp.saves + (sp.conceded||0)) : null;
+            const srCol = saveRateRaw == null ? 'var(--muted)' : saveRateRaw >= 0.8 ? 'var(--green)' : saveRateRaw >= 0.6 ? 'var(--lime)' : 'var(--amber,#f59e0b)';
+            return `<div style="display:flex;align-items:center;gap:8px;padding:4px 8px;background:var(--card2);border-radius:5px;font-size:.72rem">
+              <span style="color:var(--muted);min-width:72px">${sp.date || ''}</span>
+              <span style="color:var(--muted);min-width:18px">${sp.half}</span>
+              <span style="color:var(--text2)">${sp.fromMins}'–${sp.toMins}' <span style="color:var(--muted)">(${sp.durMins} min)</span></span>
+              <span style="margin-left:auto;color:var(--green)">${sp.saves} saves</span>
+            </div>`;
+          }).join('')}
+        </div>` : ''}
     </div>` : '';
 
   el.innerHTML = pills.length || gkSection ? `
@@ -7211,6 +7337,86 @@ function renderProfile(name) {
 
     </div>
 
+    <!-- Striker Rating -->
+    ${(() => {
+      const sr = computeStrikerRating(name);
+      if (!sr || sr.games < 1) return '';
+      const ratingCol = sr.rating >= 8 ? 'var(--green)' : sr.rating >= 6 ? 'var(--lime)' : sr.rating >= 4 ? 'var(--amber,#f59e0b)' : 'var(--muted)';
+      const barW = Math.round(sr.rating / 10 * 100);
+      const gameRows = sr.detail.map(d => {
+        const wCol = d.weight >= 1.2 ? 'var(--green)' : d.weight >= 0.9 ? 'var(--lime)' : d.weight >= 0.6 ? 'var(--amber,#f59e0b)' : 'var(--muted)';
+        return `<div style="display:flex;align-items:center;gap:8px;padding:3px 0;font-size:.72rem;border-bottom:1px solid rgba(255,255,255,.04)">
+          <span style="color:var(--muted);min-width:70px">${d.date||'—'}</span>
+          <span style="color:var(--text);min-width:14px;font-weight:600">${d.goals}</span>
+          <span style="color:var(--muted);font-size:.65rem;flex:1">vs avg ${d.oppAvgConceded != null ? d.oppAvgConceded+'g/game' : '—'} defence</span>
+          <span style="color:${wCol};min-width:28px;text-align:right;font-size:.7rem" data-tip="Quality multiplier — league avg ${sr.leagueAvg} ÷ opp avg ${d.oppAvgConceded}">${d.weight != null ? '×'+d.weight : ''}</span>
+          <span style="color:var(--lime);min-width:32px;text-align:right;font-weight:600">${d.qualityGoals}</span>
+        </div>`;
+      }).join('');
+      return `<div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:18px;margin-bottom:14px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px">
+          <div style="font-family:'Barlow Condensed',sans-serif;font-size:.7rem;letter-spacing:2px;text-transform:uppercase;color:var(--muted)">⚽ Striker Rating</div>
+          <div style="font-size:.68rem;color:var(--muted)" data-tip="Quality-adjusted goals per game over the last ${sr.games} game${sr.games!==1?'s':''} — weighted by how stingy the opposition defence was. League avg conceded: ${sr.leagueAvg}g/game">Last ${sr.games} game${sr.games!==1?'s':''} · league avg ${sr.leagueAvg}g/game</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:16px;margin-bottom:14px">
+          <div>
+            <div style="font-family:'Bebas Neue',sans-serif;font-size:3rem;color:${ratingCol};line-height:1">${sr.rating}</div>
+            <div style="font-size:.72rem;color:${ratingCol};letter-spacing:.5px;margin-top:2px">${sr.label}</div>
+          </div>
+          <div style="flex:1">
+            <div style="height:6px;background:var(--card2);border-radius:3px;overflow:hidden;margin-bottom:6px">
+              <div style="height:100%;width:${barW}%;background:${ratingCol};border-radius:3px;transition:width .4s"></div>
+            </div>
+            <div style="font-size:.7rem;color:var(--muted)">${sr.avgQualityGoals.toFixed(2)} quality-adjusted goals/game</div>
+            <div style="font-size:.65rem;color:var(--muted);margin-top:2px">Scoring against stronger defences scores higher · max 10</div>
+          </div>
+        </div>
+        ${adminMode ? `<div>
+          <div style="display:flex;font-size:.63rem;color:var(--muted);margin-bottom:3px;padding:0 0 3px;border-bottom:1px solid var(--border)">
+            <span style="min-width:70px">Date</span>
+            <span style="min-width:14px">G</span>
+            <span style="flex:1">Opposition</span>
+            <span style="min-width:28px;text-align:right">×wt</span>
+            <span style="min-width:32px;text-align:right">Adj</span>
+          </div>
+          ${gameRows}
+        </div>` : ''}
+        ${(() => {
+          // GK head-to-head — find all keepers this striker has faced via event log
+          let logs;
+          try { logs = JSON.parse(localStorage.getItem('aero_event_logs') || '{}'); } catch(e) { return ''; }
+          // Collect unique keeper names from all matches
+          const gkNames = new Set();
+          Object.values(logs).forEach(log => {
+            Object.values(log.gkRotation || {}).forEach(segs => segs.forEach(seg => gkNames.add(seg.player)));
+          });
+          const h2h = [...gkNames]
+            .map(gk => ({ gk, ...computeStrikerRatingVsGK(name, gk) }))
+            .filter(r => r && r.attempts > 0)
+            .sort((a,b) => b.attempts - a.attempts);
+          if (!h2h.length) return '';
+          return `<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border)">
+            <div style="font-family:'Barlow Condensed',sans-serif;font-size:.65rem;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-bottom:8px">Head to Head vs Keepers</div>
+            <div style="display:flex;flex-direction:column;gap:4px">
+              ${h2h.map(r => {
+                const pctCol = r.pct >= 50 ? 'var(--green)' : r.pct >= 30 ? 'var(--lime)' : r.pct >= 15 ? 'var(--amber,#f59e0b)' : 'rgba(248,113,113,.8)';
+                const barW2 = r.pct;
+                return `<div style="display:flex;align-items:center;gap:8px;padding:5px 8px;background:var(--card2);border-radius:6px"
+                  data-tip="${r.goals} goal${r.goals!==1?'s':''} in ${r.attempts} attempt${r.attempts!==1?'s':''} vs ${r.gk} · ${r.saves} save${r.saves!==1?'s':''} made against">
+                  <span style="flex:1;font-size:.78rem;font-weight:500">${r.gk}</span>
+                  <div style="width:60px;height:4px;background:rgba(255,255,255,.08);border-radius:2px;overflow:hidden">
+                    <div style="height:100%;width:${barW2}%;background:${pctCol};border-radius:2px"></div>
+                  </div>
+                  <span style="font-size:.72rem;color:${pctCol};min-width:36px;text-align:right;font-weight:600">${r.goals}/${r.attempts}</span>
+                  <span style="font-size:.68rem;color:var(--muted);min-width:30px;text-align:right">${r.pct}%</span>
+                </div>`;
+              }).join('')}
+            </div>
+          </div>`;
+        })()}
+      </div>`;
+    })()}
+
     <!-- Career Highs -->
     <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:18px;margin-bottom:14px">
       <div style="font-family:'Barlow Condensed',sans-serif;font-size:.7rem;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-bottom:14px">Career Highs</div>
@@ -7922,6 +8128,213 @@ function clearTeams() {
 
 // ---- Player role profile for skillset balancing ----
 // ---- Compute weighted rating from last 10 games (last 5 at 1.5x weight) ----
+// ── Striker Rating ───────────────────────────────────────────────────────────
+// Quality-adjusted goals over the last 5 games. Each goal is weighted by how
+// defensively strong the opposition was — scoring against a team that concedes
+// 2/game is worth more than scoring against one that concedes 8/game.
+// Returns { rating, label, games, detail } or null if insufficient data.
+function computeStrikerRating(playerName) {
+  const ps = playerStats[playerName];
+  if (!ps || !ps.matches?.length) return null;
+
+  // Build a map of avg goals conceded per game per "team identity"
+  // We identify teams by the set of players on them — approximate with match history
+  // More practically: for each match, compute goals scored against each team
+  const teamGoalsConceded = {}; // matchId → { A: goalsAgainst, B: goalsAgainst }
+  matchList.forEach(m => {
+    teamGoalsConceded[m.id] = { A: m.goalsB, B: m.goalsA }; // A concedes what B scores
+  });
+
+  // Per-player, build a defensive strength score:
+  // avg goals conceded per game across all matches for players on a given team
+  // We approximate "team quality" by looking at all matches where each player appeared
+  // and computing what their team conceded. This is imperfect but sensible.
+  const playerDefStrength = {}; // playerName → avg goals their team conceded/game
+  Object.values(playerStats).forEach(opp => {
+    const conceded = opp.matches
+      .filter(r => r.half === 'FULL')
+      .map(r => {
+        const m = matchList.find(m => m.id === r.match_id);
+        if (!m) return null;
+        return r.team === 'A' ? m.goalsB : m.goalsA; // goals conceded by their team
+      })
+      .filter(v => v != null && v >= 0);
+    if (conceded.length) {
+      playerDefStrength[opp.player] = conceded.reduce((s,v)=>s+v,0) / conceded.length;
+    }
+  });
+
+  // League-wide avg goals per game (baseline for normalisation)
+  const allConceded = Object.values(playerDefStrength);
+  const leagueAvg = allConceded.length
+    ? allConceded.reduce((s,v)=>s+v,0) / allConceded.length
+    : 4; // sensible default
+
+  // Get this player's last 5 FULL-row matches with goals recorded
+  const sorted = [...ps.matches]
+    .filter(r => r.half === 'FULL' && r.match_date)
+    .sort((a,b) => (b.match_date||'').localeCompare(a.match_date||''))
+    .slice(0, 5);
+
+  if (!sorted.length) return null;
+
+  const detail = [];
+  let totalQualityGoals = 0;
+
+  sorted.forEach(r => {
+    const goals = n(r.goals);
+    const m = matchList.find(m => m.id === r.match_id);
+    if (!m) { detail.push({ date: r.match_date, goals, oppAvg: null, weight: 1, qualityGoals: goals }); totalQualityGoals += goals; return; }
+
+    // Opposition = the other team's players
+    const oppPlayers = r.team === 'A' ? m.teamB : m.teamA;
+    // Defensive strength of opposition = avg goals their team concedes per game
+    const oppStrengths = oppPlayers
+      .map(op => playerDefStrength[op.player])
+      .filter(v => v != null);
+    const oppAvgConceded = oppStrengths.length
+      ? oppStrengths.reduce((s,v)=>s+v,0) / oppStrengths.length
+      : leagueAvg;
+
+    // Quality multiplier: scoring against a stingy team (low concede avg) = higher weight
+    // Clamp to [0.4, 2.5] to prevent extreme outliers
+    const weight = Math.min(2.5, Math.max(0.4, leagueAvg / Math.max(oppAvgConceded, 0.5)));
+    const qualityGoals = goals * weight;
+    totalQualityGoals += qualityGoals;
+    detail.push({ date: r.match_date, goals, oppAvgConceded: parseFloat(oppAvgConceded.toFixed(1)), weight: parseFloat(weight.toFixed(2)), qualityGoals: parseFloat(qualityGoals.toFixed(2)) });
+  });
+
+  const avgQualityGoals = totalQualityGoals / sorted.length;
+
+  // Scale to 0–10: 2.5 quality-adjusted goals/game ≈ 10
+  const rating = Math.min(10, parseFloat((avgQualityGoals / 2.5 * 10).toFixed(1)));
+
+  // Label
+  const label = rating >= 8.5 ? 'World Class' : rating >= 7 ? 'Elite' : rating >= 5.5 ? 'Sharp' : rating >= 4 ? 'Decent' : rating >= 2.5 ? 'Developing' : 'Low';
+
+  return { rating, label, games: sorted.length, avgQualityGoals: parseFloat(avgQualityGoals.toFixed(2)), leagueAvg: parseFloat(leagueAvg.toFixed(1)), detail };
+}
+
+// ── Striker Rating vs specific GK ────────────────────────────────────────────
+// Looks up the event log to find every goal the striker scored while a
+// specific keeper was in goal, and every save that keeper made against them.
+// Returns { goals, saves, attempts, rate, quality } or null if no data.
+function computeStrikerRatingVsGK(strikerName, gkName) {
+  let logs;
+  try { logs = JSON.parse(localStorage.getItem('aero_event_logs') || '{}'); }
+  catch(e) { return null; }
+
+  let totalGoals = 0, totalSaves = 0;
+
+  Object.values(logs).forEach(log => {
+    const { events = [], gkRotation = {}, timeStats } = log;
+
+    // Goals scored by striker where gkName was in goal for the conceding team
+    const goalEvents = events.filter(e => e.event === 'Goals' && e.player === strikerName && !e.isOG);
+    goalEvents.forEach(g => {
+      const concedingTeam = g.team === 'A' ? 'B' : 'A';
+      const seg = (gkRotation[g.half] || []).find(s =>
+        s.player === gkName && s.team === concedingTeam &&
+        s.fromSecs <= g.tsSecsRaw && (s.toSecs === 9999 || s.toSecs >= g.tsSecsRaw)
+      );
+      if (seg) totalGoals++;
+    });
+
+    // GK saves made by gkName against strikerName's team
+    // We approximate: saves by gkName while the striker's team was attacking
+    // (all saves by gkName in spells where the striker was on the other team)
+    const saveEvents = events.filter(e => e.event === 'GK Saves' && e.player === gkName);
+    saveEvents.forEach(s => {
+      // Find the GK spell
+      const seg = (gkRotation[s.half] || []).find(seg =>
+        seg.player === gkName &&
+        seg.fromSecs <= s.tsSecsRaw && (seg.toSecs === 9999 || seg.toSecs >= s.tsSecsRaw)
+      );
+      if (!seg) return;
+      // Check if striker was playing for the attacking team in this match
+      const strikerTeam = events.find(e => e.player === strikerName && e.half === s.half)?.team;
+      if (strikerTeam && strikerTeam !== seg.team) totalSaves++;
+    });
+  });
+
+  const attempts = totalGoals + totalSaves;
+  if (attempts === 0) return null;
+  const rate = parseFloat((totalGoals / attempts).toFixed(3));
+  return { goals: totalGoals, saves: totalSaves, attempts, rate, pct: Math.round(rate * 100) };
+}
+
+// ── Computed Stamina from event log ──────────────────────────────────────────
+// Stamina = how well a player maintains their activity level late in the game
+// vs how they start. Uses the fatigue bucket data across all matches.
+//
+// Formula:
+//   sustained = avg(late 2H thirds) / avg(early 1H thirds)   [0-1+]
+//   consistency = 1 - (std dev of all buckets / mean)         [0-1]
+//   stamina = (sustained × 0.7 + consistency × 0.3) × 10     [0-10]
+//
+// Requires ≥ 3 matches of event log data to be meaningful.
+// Returns { score, label, sustained, consistency, matches } or null.
+function computeStaminaFromEvents(playerName) {
+  let logs;
+  try { logs = JSON.parse(localStorage.getItem('aero_event_logs') || '{}'); }
+  catch(e) { return null; }
+
+  const matchData = [];
+
+  Object.values(logs).forEach(log => {
+    const ps = log.timeStats?.playerStats?.[playerName];
+    if (!ps?.fatigue?.buckets?.length) return;
+    const { buckets, htBucket } = ps.fatigue;
+    if (!htBucket || htBucket < 2) return;
+
+    // Split into 1H and 2H buckets
+    const h1 = buckets.slice(0, htBucket);
+    const h2 = buckets.slice(htBucket);
+    if (!h1.length || !h2.length) return;
+
+    // Early = first third of 1H, Late = last third of 2H
+    const h1Early = h1.slice(0, Math.max(1, Math.floor(h1.length / 3)));
+    const h2Late  = h2.slice(-Math.max(1, Math.floor(h2.length / 3)));
+
+    const avgEarly = h1Early.reduce((s,v)=>s+v,0) / h1Early.length;
+    const avgLate  = h2Late .reduce((s,v)=>s+v,0) / h2Late.length;
+    if (avgEarly < 0.5) return; // player barely active — skip
+
+    const sustained = avgLate / avgEarly; // 1.0 = same level, 0.5 = half as active
+
+    // Consistency: std dev / mean of all buckets (coefficient of variation, inverted)
+    const allActive = buckets.filter(v => v > 0);
+    if (allActive.length < 3) return;
+    const mean = allActive.reduce((s,v)=>s+v,0) / allActive.length;
+    const variance = allActive.reduce((s,v)=>s+(v-mean)**2,0) / allActive.length;
+    const cv = mean > 0 ? Math.sqrt(variance) / mean : 1;
+    const consistency = Math.max(0, 1 - cv); // 1 = perfectly steady, 0 = wildly variable
+
+    matchData.push({ sustained, consistency });
+  });
+
+  if (matchData.length < 2) return null;
+
+  const avgSustained    = matchData.reduce((s,d)=>s+d.sustained,0)   / matchData.length;
+  const avgConsistency  = matchData.reduce((s,d)=>s+d.consistency,0) / matchData.length;
+
+  // Clamp sustained to [0, 1.3] — anything above 130% is already exceptional
+  const sustainedClamped = Math.min(1.3, Math.max(0, avgSustained));
+
+  const rawScore = sustainedClamped * 0.7 + avgConsistency * 0.3;
+  const score = Math.min(10, parseFloat((rawScore / 1.0 * 10).toFixed(1)));
+
+  const label = score >= 8.5 ? 'Iron Lungs' : score >= 7 ? 'Strong' : score >= 5.5 ? 'Solid' : score >= 4 ? 'Average' : score >= 2.5 ? 'Fades' : 'Tires Fast';
+
+  return {
+    score,
+    label,
+    matches: matchData.length,
+    sustained: parseFloat((avgSustained * 100).toFixed(0)),    // % of early output maintained late
+    consistency: parseFloat((avgConsistency * 100).toFixed(0)), // % consistency score
+  };
+}
+
 function computeWeightedRating(playerName) {
   const p = playerStats[playerName];
   const cs = customStats[playerName] || {};
@@ -7957,7 +8370,13 @@ function computeWeightedRating(playerName) {
   });
 
   const weightedBase = totalWeight > 0 ? weightedSum / totalWeight : 0;
-  return parseFloat(weightedBase.toFixed(2));
+
+  // Striker rating buff — quality-adjusted goals over last 5 games
+  // Adds up to 8% on top of base rating for elite strikers, 0% for non-scorers
+  const sr = computeStrikerRating(playerName);
+  const strikerBuff = sr ? (sr.rating / 10) * weightedBase * 0.08 : 0;
+
+  return parseFloat((weightedBase + strikerBuff).toFixed(2));
 }
 
 function getPlayerRole(p) {
@@ -8389,9 +8808,63 @@ function renderTeamResult(tA, tB) {
       <div class="bal-a" style="width:${pctA}%"></div>
       <div class="bal-b" style="width:${pctB}%"></div>
     </div>
-    <div style="display:flex;justify-content:space-between;font-size:.75rem;color:var(--muted);margin-bottom:14px">
+    <div style="display:flex;justify-content:space-between;font-size:.75rem;color:var(--muted);margin-bottom:10px">
       ${adminMode ? `<span style="color:var(--green)">Team A ${pctA}%</span><span style="color:var(--blue)">Team B ${pctB}%</span>` : '<span></span><span></span>'}
-    </div>`;
+    </div>
+    ${(() => {
+      // Time-based balance: compare clutch, 2H trend and pressure across teams
+      const getTimeVal = (team, key) => {
+        const vals = team.map(p => {
+          const ts = getPlayerEventStats(p.player);
+          if (!ts || ts.matchesWithData < 1) return null;
+          if (key === 'clutch')   return ts.clutchPerMatch;
+          if (key === 'secondH')  return ts.dominantTrend === '↗' ? (ts.avgH2 - ts.avgH1) : 0;
+          if (key === 'pressure') return ts.pressureAvg;
+        }).filter(v => v != null);
+        return vals.length ? vals.reduce((s,v)=>s+v,0)/vals.length : null;
+      };
+      const metrics2 = [
+        { label: '⏱ Clutch (final 5 min)',   key: 'clutch',   fmt: v => v.toFixed(1)+'/g', tip: 'Avg stats in the final 5 minutes of halves' },
+        { label: '📈 2H Performance',         key: 'secondH',  fmt: v => (v>=0?'+':'')+v.toFixed(1)+'/win', tip: 'Avg extra stats in 2H vs 1H per 5-min window' },
+        { label: '💪 Under Pressure',         key: 'pressure', fmt: v => v.toFixed(1)+'/opp', tip: 'Avg stats in 90s after conceding a goal' },
+      ];
+      // GK save rate comparison — most meaningful keeper stat
+      const gkRateA = tA.map(p => { const ts = getPlayerEventStats(p.player); return ts?.gkSaveRate != null && ts.gkMinutes >= 10 ? { player: p.player, rate: ts.gkSaveRate, mins: ts.gkMinutes } : null; }).filter(Boolean);
+      const gkRateB = tB.map(p => { const ts = getPlayerEventStats(p.player); return ts?.gkSaveRate != null && ts.gkMinutes >= 10 ? { player: p.player, rate: ts.gkSaveRate, mins: ts.gkMinutes } : null; }).filter(Boolean);
+      const bestGkA = gkRateA.sort((a,b)=>b.rate-a.rate)[0];
+      const bestGkB = gkRateB.sort((a,b)=>b.rate-a.rate)[0];
+      const gkRow = (bestGkA || bestGkB) ? `
+        <div style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:.75rem" data-tip="Best available keeper save rate — saves / (saves + goals conceded) per 90 min in goal">
+          <span style="flex:1;color:var(--muted)">🧤 Best keeper (save rate)</span>
+          <span style="color:${bestGkA?'var(--green)':'rgba(255,255,255,.3)'};min-width:52px;text-align:right">${bestGkA ? Math.round(bestGkA.rate*100)+'% '+bestGkA.player.split(' ')[0] : '—'}</span>
+          <span style="color:var(--muted);font-size:.65rem;min-width:28px;text-align:center">${bestGkA&&bestGkB ? (bestGkA.rate>=bestGkB.rate?'A ›':'‹ B') : '='}</span>
+          <span style="color:${bestGkB?'var(--blue)':'rgba(255,255,255,.3)'};min-width:52px">${bestGkB ? Math.round(bestGkB.rate*100)+'% '+bestGkB.player.split(' ')[0] : '—'}</span>
+        </div>` : '';
+      const rows = metrics2.map(({ label, key, fmt, tip }) => {
+        const a = getTimeVal(tA, key), b = getTimeVal(tB, key);
+        if (a == null && b == null) return '';
+        const av = a ?? 0, bv = b ?? 0;
+        const diff2 = Math.abs(av - bv);
+        const aWins = av >= bv;
+        const aCol = av > bv ? 'var(--green)' : av < bv ? 'rgba(255,255,255,.3)' : 'var(--muted)';
+        const bCol = bv > av ? 'var(--blue)'  : bv < av ? 'rgba(255,255,255,.3)' : 'var(--muted)';
+        return `<div style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:.75rem" data-tip="${tip}">
+          <span style="flex:1;color:var(--muted)">${label}</span>
+          <span style="color:${aCol};min-width:52px;text-align:right">${a != null ? fmt(av) : '—'}</span>
+          <span style="color:var(--muted);font-size:.65rem;min-width:28px;text-align:center">${diff2 > 0.05 ? (aWins ? 'A ›' : '‹ B') : '='}</span>
+          <span style="color:${bCol};min-width:52px">${b != null ? fmt(bv) : '—'}</span>
+        </div>`;
+      }).filter(Boolean).join('');
+      if (!rows && !gkRow) return '';
+      return `<div style="background:var(--card2);border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:10px">
+        <div style="font-family:'Barlow Condensed',sans-serif;font-size:.68rem;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:6px">⏱ Time-Based Balance <span style="font-size:.6rem;opacity:.6">· from event logs</span></div>
+        <div style="display:flex;font-size:.65rem;color:var(--muted);margin-bottom:4px">
+          <span style="flex:1"></span><span style="min-width:52px;text-align:right;color:var(--green)">Team A</span>
+          <span style="min-width:28px"></span><span style="min-width:52px;color:var(--blue)">Team B</span>
+        </div>
+        ${rows}${gkRow}
+      </div>`;
+    })()}`;
 
   const roleIcon = { scorer:'⚽', creator:'🎯', defender:'🛡️', goalkeeper:'🧤', flair:'🪄', allrounder:'⭐' };
   const roleLabel = { scorer:'Scorer', creator:'Creator', defender:'Defender', goalkeeper:'Goalkeeper', flair:'Flair', allrounder:'All-Rounder' };
@@ -8422,6 +8895,18 @@ function renderTeamResult(tA, tB) {
         const penLabel = pen > 0 ? ` (${Math.round((1-pen)*100)}% fit)` : '';
         return `<span class="tp-note" style="font-size:.7rem" title="${note}">⚠ ${note.slice(0,30)}${note.length>30?'…':''}${penLabel}</span>`;
       })() : ''}
+      ${(() => {
+        const sr = computeStrikerRating(p.player);
+        if (!sr || sr.rating < 3) return '';
+        const col = sr.rating >= 8 ? 'var(--green)' : sr.rating >= 6 ? 'var(--lime)' : 'var(--amber,#f59e0b)';
+        return `<span style="font-size:.65rem;color:${col}" data-tip="Striker rating ${sr.rating}/10 (${sr.label}) — quality-adjusted goals vs opposition defence over last ${sr.games} games. Adds ${((sr.rating/10)*0.08*100).toFixed(0)}% buff to rating.">⚽ ${sr.rating}</span>`;
+      })()}
+      ${(() => {
+        const stam = computeStaminaFromEvents(p.player);
+        if (!stam || stam.matches < 2) return '';
+        const col = stam.score >= 7 ? 'var(--green)' : stam.score >= 5 ? 'var(--lime)' : stam.score >= 3 ? 'var(--amber,#f59e0b)' : 'rgba(248,113,113,.8)';
+        return `<span style="font-size:.65rem;color:${col}" data-tip="Stamina ${stam.score}/10 (${stam.label}) — ${stam.sustained}% of early-game output maintained in late 2H. Feeds into rating automatically.">💪 ${stam.score}</span>`;
+      })()}
       <span class="tp-rating">${adminMode ? (() => {
         const base = p.weightedRating.toFixed(1);
         const eff = p.effectiveRating.toFixed(1);
@@ -11242,16 +11727,16 @@ function getPlayerEventStats(playerName) {
   try { logs = JSON.parse(localStorage.getItem('aero_event_logs') || '{}'); }
   catch(e) { return null; }
 
-  const matches = Object.entries(logs); // [matchId, { events, gkRotation, timeStats, date }]
+  const matches = Object.entries(logs);
   if (!matches.length) return null;
 
-  // Aggregate across all matches
-  let totalGkSecs = 0, totalGkGoalsConceded = 0, gkMatches = 0;
+  let totalGkSecs = 0, totalGkGoalsConceded = 0, totalGkSaves = 0, gkMatches = 0;
   let totalClutch1H = 0, totalClutch2H = 0, clutchMatches = 0;
   let pressureTotal = 0, pressureOpps = 0;
-  const peakWindows = []; // { count, startSecs, half, matchId, date }
-  const fatigueAll = []; // { trend, h1Avg, h2Avg }
+  const peakWindows = [];
+  const fatigueAll = [];
   const leadStats = { leading: 0, trailing: 0, level: 0 };
+  const gkSpellHistory = []; // { matchId, date, half, fromMins, toMins, saves, conceded }
   let matchesWithData = 0;
 
   matches.forEach(([matchId, log]) => {
@@ -11259,38 +11744,58 @@ function getPlayerEventStats(playerName) {
     if (!ps) return;
     matchesWithData++;
 
-    // GK time
+    // GK time — use event log to attribute saves correctly per spell
     if (ps.gkTimeSecs > 0) {
       totalGkSecs += ps.gkTimeSecs;
       totalGkGoalsConceded += ps.gkGoalsConceded || 0;
       gkMatches++;
+
+      // Count saves from raw events attributed to this player's GK spells
+      const myGkSaves = (log.events || []).filter(e =>
+        e.event === 'GK Saves' && e.player === playerName
+      ).length;
+      totalGkSaves += myGkSaves;
+
+      // Build spell history for profile display
+      (ps.gkSpells || []).forEach(spell => {
+        const spellSaves = (log.events || []).filter(e =>
+          e.event === 'GK Saves' && e.player === playerName &&
+          e.half === spell.half &&
+          e.tsSecsRaw >= spell.fromSecs && e.tsSecsRaw <= spell.toSecs
+        ).length;
+        const spellConceded = (log.events || []).filter(e =>
+          e.event === 'Goals' && e.half === spell.half &&
+          e.tsSecsRaw >= spell.fromSecs && e.tsSecsRaw <= spell.toSecs
+          // conceded = goal scored against playerName's team
+          // We don't have team context here easily, use gkGoalsConceded total
+        ).length;
+        gkSpellHistory.push({
+          matchId, date: log.date, half: spell.half,
+          fromMins: Math.round(spell.fromSecs / 60 * 10) / 10,
+          toMins:   Math.round(spell.toSecs   / 60 * 10) / 10,
+          durMins:  Math.round(spell.durSecs  / 60 * 10) / 10,
+          saves: spellSaves,
+        });
+      });
     }
 
-    // Clutch
     const c1 = ps.clutch?.['1H'] || 0, c2 = ps.clutch?.['2H'] || 0;
     if (c1 + c2 > 0) { totalClutch1H += c1; totalClutch2H += c2; clutchMatches++; }
 
-    // Pressure response
     pressureTotal += ps.pressureResponse?.total || 0;
     pressureOpps  += ps.pressureResponse?.opps  || 0;
 
-    // Peak window
-    if (ps.peakWindow?.count > 0) {
-      peakWindows.push({ ...ps.peakWindow, matchId, date: log.date });
-    }
+    if (ps.peakWindow?.count > 0) peakWindows.push({ ...ps.peakWindow, matchId, date: log.date });
 
-    // Fatigue trend
     const f = ps.fatigue;
     if (f?.buckets?.length) {
       const htB = f.htBucket ?? Math.floor(f.buckets.length / 2);
-      const h1v = f.buckets.slice(0, htB);
-      const h2v = f.buckets.slice(htB);
-      const a1 = h1v.length ? h1v.reduce((s,v)=>s+v,0)/h1v.length : 0;
-      const a2 = h2v.length ? h2v.reduce((s,v)=>s+v,0)/h2v.length : 0;
+      const h1v = f.buckets.slice(0, htB), h2v = f.buckets.slice(htB);
+      const a1  = h1v.length ? h1v.reduce((s,v)=>s+v,0)/h1v.length : 0;
+      const a2  = h2v.length ? h2v.reduce((s,v)=>s+v,0)/h2v.length : 0;
       fatigueAll.push({ trend: f.trend, h1Avg: a1, h2Avg: a2 });
     }
 
-    // Lead/trail
     if (ps.leadStats) {
       leadStats.leading  += ps.leadStats.leading  || 0;
       leadStats.trailing += ps.leadStats.trailing || 0;
@@ -11300,30 +11805,36 @@ function getPlayerEventStats(playerName) {
 
   if (!matchesWithData) return null;
 
-  // Best ever peak window
   const bestPeak = peakWindows.sort((a,b) => b.count - a.count)[0] || null;
-
-  // Dominant fatigue trend (most common direction)
   const trendCounts = { '↗': 0, '↘': 0, '→': 0 };
   fatigueAll.forEach(f => trendCounts[f.trend]++);
   const dominantTrend = Object.entries(trendCounts).sort((a,b)=>b[1]-a[1])[0]?.[0] || '→';
   const avgH1 = fatigueAll.length ? fatigueAll.reduce((s,f)=>s+f.h1Avg,0)/fatigueAll.length : 0;
   const avgH2 = fatigueAll.length ? fatigueAll.reduce((s,f)=>s+f.h2Avg,0)/fatigueAll.length : 0;
 
-  // GK stats per 90
   const gkMinutes = totalGkSecs / 60;
-  const gkConcededPer90 = gkMatches > 0 ? (totalGkGoalsConceded / gkMinutes * 90) : null;
+  // Per-90 stats (only meaningful with enough time in goal)
+  const gkSavesPer90      = gkMinutes > 0 ? (totalGkSaves        / gkMinutes * 90) : null;
+  const gkConcededPer90   = gkMinutes > 0 ? (totalGkGoalsConceded / gkMinutes * 90) : null;
+  const gkSaveRate        = (totalGkSaves + totalGkGoalsConceded) > 0
+    ? totalGkSaves / (totalGkSaves + totalGkGoalsConceded) : null;
 
   const leadTotal = leadStats.leading + leadStats.trailing + leadStats.level;
   return {
     matchesWithData,
-    gkMatches, gkMinutes: Math.round(gkMinutes), gkGoalsConceded: totalGkGoalsConceded, gkConcededPer90,
-    clutchTotal: totalClutch1H + totalClutch2H, clutchPerMatch: clutchMatches > 0 ? (totalClutch1H + totalClutch2H) / clutchMatches : 0,
+    // GK
+    gkMatches, gkMinutes: Math.round(gkMinutes), gkGoalsConceded: totalGkGoalsConceded,
+    gkSaves: totalGkSaves, gkSavesPer90, gkConcededPer90, gkSaveRate,
+    gkSpellHistory: gkSpellHistory.sort((a,b) => (a.date||'').localeCompare(b.date||'')),
+    // General time stats
+    clutchTotal: totalClutch1H + totalClutch2H,
+    clutchPerMatch: clutchMatches > 0 ? (totalClutch1H + totalClutch2H) / clutchMatches : 0,
     pressureAvg: pressureOpps > 0 ? pressureTotal / pressureOpps : 0,
+    pressureOpps,
     bestPeak, dominantTrend, avgH1, avgH2,
     leadStats, leadTotal,
-    leadPct:   leadTotal ? Math.round(leadStats.leading  / leadTotal * 100) : 0,
-    trailPct:  leadTotal ? Math.round(leadStats.trailing / leadTotal * 100) : 0,
+    leadPct:  leadTotal ? Math.round(leadStats.leading  / leadTotal * 100) : 0,
+    trailPct: leadTotal ? Math.round(leadStats.trailing / leadTotal * 100) : 0,
   };
 }
 
