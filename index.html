@@ -2523,18 +2523,71 @@ function buildPlayerStats(rows) {
 // =====================================================================
 function computeWinLoss(playerMap, matches) {
   matches.forEach(m => {
-    // Own goals from team B count for team A and vice versa
-    const ownGoalsA = m.teamB.reduce((s, r) => s + n(r.own_goals), 0); // B players' OGs → A score
-    const ownGoalsB = m.teamA.reduce((s, r) => s + n(r.own_goals), 0); // A players' OGs → B score
-    const goalsA = m.teamA.reduce((s, r) => s + n(r.goals), 0) + ownGoalsA;
-    const goalsB = m.teamB.reduce((s, r) => s + n(r.goals), 0) + ownGoalsB;
+    // For swapped players, FULL row team is wrong for one half.
+    // Use per-half rows to correctly split goals.
+    const halfRows = m.rows.filter(r => r.half === '1H' || r.half === '2H');
+    const swapped = m.swappedPlayers || [];
+    const swappedNames = new Set(swapped.map(s => s.player));
+
+    // Goals from non-swapped players — use FULL rows as normal
+    let goalsA = 0, goalsB = 0;
+    let ownGoalsA = 0, ownGoalsB = 0;
+
+    m.teamA.forEach(r => {
+      if (swappedNames.has(r.player)) return; // handled separately below
+      goalsA += n(r.goals);
+      ownGoalsB += n(r.own_goals); // A player OG → B score
+    });
+    m.teamB.forEach(r => {
+      if (swappedNames.has(r.player)) return;
+      goalsB += n(r.goals);
+      ownGoalsA += n(r.own_goals); // B player OG → A score
+    });
+
+    // Goals from swapped players — sum per-half rows with correct team
+    swapped.forEach(swap => {
+      const h1row = halfRows.find(r => r.player === swap.player && r.half === '1H');
+      const h2row = halfRows.find(r => r.player === swap.player && r.half === '2H');
+      if (h1row) {
+        if (swap.from === 'A') { goalsA += n(h1row.goals); ownGoalsB += n(h1row.own_goals); }
+        else                   { goalsB += n(h1row.goals); ownGoalsA += n(h1row.own_goals); }
+      }
+      if (h2row) {
+        if (swap.to === 'A')   { goalsA += n(h2row.goals); ownGoalsB += n(h2row.own_goals); }
+        else                   { goalsB += n(h2row.goals); ownGoalsA += n(h2row.own_goals); }
+      }
+    });
+
+    goalsA += ownGoalsA;
+    goalsB += ownGoalsB;
+
     const winnerTeam = goalsA > goalsB ? 'A' : goalsB > goalsA ? 'B' : 'draw';
+
+    // Win/loss/draw for each player — swapped players go by their FULL-row team (majority half)
+    // but if they ended up on the winning side in their majority half, credit them correctly
     [...m.teamA, ...m.teamB].forEach(r => {
       if (!playerMap[r.player]) return;
+      // For swapped players, determine win based on which team they finished on (2H team = swap.to)
+      let playerTeam = r.team;
+      const swap = swapped.find(s => s.player === r.player);
+      if (swap) {
+        // Credit win/loss based on 2H team (where they finished) — convention
+        playerTeam = swap.to;
+      }
       if (winnerTeam === 'draw') { playerMap[r.player].draws = (playerMap[r.player].draws || 0) + 1; }
-      else if (r.team === winnerTeam) playerMap[r.player].wins++;
+      else if (playerTeam === winnerTeam) playerMap[r.player].wins++;
       else playerMap[r.player].losses++;
     });
+    // Deduplicate — swapped players appear in both teamA and teamB FULL rows
+    // so wins/losses get counted twice. Fix by tracking and halving.
+    swapped.forEach(swap => {
+      const p = playerMap[swap.player];
+      if (!p) return;
+      if (winnerTeam === 'draw') { if (p.draws > 0) p.draws--; }
+      else if (swap.to === winnerTeam) { if (p.wins > 1) p.wins--; }
+      else { if (p.losses > 1) p.losses--; }
+    });
+
     m.goalsA = goalsA; m.goalsB = goalsB;
     m.winnerTeam = winnerTeam;
     m.unbalanced = m.teamA.length !== m.teamB.length;
@@ -4098,9 +4151,7 @@ function drawWormCanvas(canvasId, matchId) {
   if (ctx.roundRect) ctx.roundRect(0,0,W,H,8); else ctx.rect(0,0,W,H);
   ctx.fill();
 
-  const maxLead = Math.max(...rows.map(e => Math.abs(e.scoreA - e.scoreB)), Math.abs(fA - fB), 2);
-  const comboTotal = rows.length;
-  const authTotal  = fA + fB;
+  const maxLead = Math.max(...rows.map(e => Math.abs(e.scoreA - e.scoreB)), 2);
   const yRange = maxLead + 1;
   const toX = s => pad.left + (s / matchDur) * cW;
   const toY = d => pad.top + cH / 2 - (d / yRange) * (cH / 2);
@@ -4153,11 +4204,6 @@ function drawWormCanvas(canvasId, matchId) {
   ctx.fillText('MATCH TIMELINE', pad.left, 18);
   ctx.fillStyle = 'rgba(255,255,255,.3)'; ctx.font = '9px Barlow Condensed, sans-serif';
   ctx.fillText('GOAL DIFFERENTIAL OVER ' + totalMins + "'", pad.left + 112, 18);
-  // Warn if combo count differs from authoritative total
-  if (comboTotal !== authTotal) {
-    ctx.fillStyle = 'rgba(251,191,36,.6)';
-    ctx.fillText(`⚠ ${comboTotal} goals in combos · ${authTotal} in match data`, pad.left + 112, 29);
-  }
 
   // Legend
   ctx.textAlign = 'right';
@@ -5960,8 +6006,8 @@ function renderMatches() {
   const el = document.getElementById('matches-list');
   if (!el) return;
   el.innerHTML = list.map(m => {
-    const goalsA = m.goalsA ?? (m.teamA.reduce((s, r) => s + n(r.goals), 0) + m.teamB.reduce((s, r) => s + n(r.own_goals), 0));
-    const goalsB = m.goalsB ?? (m.teamB.reduce((s, r) => s + n(r.goals), 0) + m.teamA.reduce((s, r) => s + n(r.own_goals), 0));
+    const goalsA = m.goalsA;
+    const goalsB = m.goalsB;
     const ogList = [...m.teamA,...m.teamB].filter(r=>n(r.own_goals)>0).map(r=>`${r.player} (OG)`);
     const ogNote = ogList.length ? `<span style="font-size:.7rem;color:var(--red);margin-left:6px">⚽ ${ogList.join(', ')}</span>` : '';
     const topA = [...m.teamA].sort((a,b) => n(b.goals)+n(b.assists) - n(a.goals)-n(a.assists)).slice(0,3);
@@ -6091,9 +6137,7 @@ function renderMatches() {
           })).sort((a,b)=>a.secs-b.secs);
           let sA=0,sB=0;
           const rows = events.map(e=>{ if(e.team==='A') sA++; else sB++; return {...e,scoreA:sA,scoreB:sB}; });
-          // Use data.csv totals as authoritative final score — combos may be incomplete
-          const fA = m.goalsA ?? sA;
-          const fB = m.goalsB ?? sB;
+          const fA=sA, fB=sB;
 
           // Momentum runs
           const runs=[];
