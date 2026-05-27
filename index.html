@@ -2832,17 +2832,25 @@ function buildTagAuction() {
       const match=matchList.find(m=>m.id===mid); if(!match) return;
       const scorerTeam={};
       [...match.teamA,...match.teamB].forEach(r=>{ scorerTeam[r.player]=r.team; });
+      const swapped = match.swappedPlayers || [];
 
       // Build full sorted goal list — all goals across both halves by absolute time
       const toSecs=t=>{ if(!t) return 0; const[a,b]=t.split(':').map(Number); return a*60+(b||0); };
       const allGoals=[
-        ...(data.h1||[]).map(g=>({...g})),
-        ...(data.h2||[]).map(g=>({...g}))
+        ...(data.h1||[]).map(g=>({...g,half:'1H'})),
+        ...(data.h2||[]).map(g=>({...g,half:'2H'}))
       ].filter(g=>g.time&&!g.isOG&&g.scorer).sort((a,b)=>toSecs(a.time)-toSecs(b.time));
+
+      // Half-aware team lookup for swapped players
+      const getTeamHalf = (player, half) => {
+        const swap = swapped.find(s => s.player === player);
+        if (swap) return half === '1H' ? swap.from : swap.to;
+        return scorerTeam[player];
+      };
 
       let tA=0,tB=0;
       allGoals.forEach((goal,idx)=>{
-        const gteam=scorerTeam[goal.scorer];
+        const gteam=getTeamHalf(goal.scorer, goal.half);
         const sA=tA,sB=tB;
         if(gteam==='A') tA++; else if(gteam==='B') tB++;
 
@@ -2887,12 +2895,18 @@ function buildTagAuction() {
       const match=matchList.find(m=>m.id===mid); if(!match) return;
       const scorerTeam={};
       [...match.teamA,...match.teamB].forEach(r=>{ scorerTeam[r.player]=r.team; });
+      const swapped2 = match.swappedPlayers || [];
+      const getTeamHalf2 = (player, half) => {
+        const swap = swapped2.find(s => s.player === player);
+        if (swap) return half === '1H' ? swap.from : swap.to;
+        return scorerTeam[player];
+      };
       const toSecs=t=>{ if(!t) return 0; const[a,b]=t.split(':').map(Number); return a*60+(b||0); };
-      const allGoalsFull=[...(data.h1||[]).map(g=>({...g})),...(data.h2||[]).map(g=>({...g}))]
+      const allGoalsFull=[...(data.h1||[]).map(g=>({...g,half:'1H'})),...(data.h2||[]).map(g=>({...g,half:'2H'}))]
         .filter(g=>g.time&&!g.isOG&&g.scorer).sort((a,b)=>toSecs(a.time)-toSecs(b.time));
       let tA2=0,tB2=0;
       allGoalsFull.forEach(goal=>{
-        const gt2=scorerTeam[goal.scorer];
+        const gt2=getTeamHalf2(goal.scorer, goal.half);
         const sA2=tA2,sB2=tB2;
         if(gt2==='A') tA2++; else if(gt2==='B') tB2++;
         if(goal.assister===ps.player&&gt2){
@@ -4040,18 +4054,24 @@ function renderSeasonSummary() {
 // =====================================================================
 // Global store for worm data — populated when match cards render, drawn when panel opens
 // Resolve which team gets credit for a goal (handles OGs and "Own Goal" scorer names)
-function resolveGoalTeam(p, scorerTeam) {
-  if (!p.isOG) return scorerTeam[p.scorer] || 'A';
+function resolveGoalTeam(p, scorerTeam, swappedPlayers, half) {
+  // Build a half-aware team lookup — swapped players have different teams per half
+  const getTeam = (player) => {
+    if (swappedPlayers && half) {
+      const swap = swappedPlayers.find(s => s.player === player);
+      if (swap) return half === '1H' ? swap.from : swap.to;
+    }
+    return scorerTeam[player];
+  };
+
+  if (!p.isOG) return getTeam(p.scorer) || scorerTeam[p.scorer] || 'A';
   // OG: goal goes to OPPOSITE team of the scorer
-  const scorerKnown = scorerTeam[p.scorer];
+  const scorerKnown = getTeam(p.scorer);
   if (scorerKnown) return scorerKnown === 'A' ? 'B' : 'A';
-  // Scorer is "Own Goal" or unknown — use assister to determine direction
-  // The assister field on an OG = the player who "helped" — they're on the team that CONCEDED
-  // So the goal goes to the OPPOSITE of the assister's team
-  if (p.assister && scorerTeam[p.assister]) {
-    return scorerTeam[p.assister] === 'A' ? 'B' : 'A';
+  if (p.assister && getTeam(p.assister)) {
+    return getTeam(p.assister) === 'A' ? 'B' : 'A';
   }
-  return 'B'; // fallback — rare edge case
+  return 'B';
 }
 
 window._wormData = window._wormData || {};
@@ -4912,7 +4932,7 @@ function getSeasonComboHighlights() {
     const toSecs = t => { const [min,sec]=t.split(':').map(Number); return min*60+(sec||0); };
     const scorerTeam = {};
     [...m.teamA,...m.teamB].forEach(r=>{ scorerTeam[r.player]=r.team; });
-    const events = all.map(p=>({...p,secs:toSecs(p.time),team:resolveGoalTeam(p,scorerTeam)})).sort((a,b)=>a.secs-b.secs);
+    const events = all.map(p=>({...p,secs:toSecs(p.time),team:resolveGoalTeam(p,scorerTeam,m.swappedPlayers,p.half)})).sort((a,b)=>a.secs-b.secs);
 
     let sA=0,sB=0,maxDA=0,maxDB=0;
     events.forEach(e=>{ if(e.team==='A') sA++; else sB++; maxDA=Math.max(maxDA,sB-sA); maxDB=Math.max(maxDB,sA-sB); });
@@ -6060,7 +6080,7 @@ function renderMatches() {
           const scorerTeam = {};
           [...m.teamA,...m.teamB].forEach(r=>{ scorerTeam[r.player]=r.team; });
           const events = all.map(p=>({
-            ...p, secs:toSecs(p.time), team:resolveGoalTeam(p,scorerTeam)
+            ...p, secs:toSecs(p.time), team:resolveGoalTeam(p,scorerTeam,m.swappedPlayers,p.half)
           })).sort((a,b)=>a.secs-b.secs);
           let sA=0,sB=0;
           const rows = events.map(e=>{ if(e.team==='A') sA++; else sB++; return {...e,scoreA:sA,scoreB:sB}; });
@@ -11350,9 +11370,7 @@ function generateMatchReport(matchId) {
       const toSecs = t => { const [min,sec]=t.split(':').map(Number); return min*60+(sec||0); };
       const scorerTeam = {};
       [...m.teamA,...m.teamB].forEach(r=>{ scorerTeam[r.player]=r.team; });
-      const events = all.map(p=>({...p,secs:toSecs(p.time),team:resolveGoalTeam(p,scorerTeam)})).sort((a,b)=>a.secs-b.secs);
-      let sA=0,sB=0,maxDA=0,maxDB=0;
-      const rows=events.map(e=>{ if(e.team==='A')sA++;else sB++; maxDA=Math.max(maxDA,sB-sA); maxDB=Math.max(maxDB,sA-sB); return{...e,scoreA:sA,scoreB:sB}; });
+      const events = all.map(p=>({...p,secs:toSecs(p.time),team:resolveGoalTeam(p,scorerTeam,m.swappedPlayers,p.half)})).sort((a,b)=>a.secs-b.secs);
 
       const insights=[];
       // Momentum runs
