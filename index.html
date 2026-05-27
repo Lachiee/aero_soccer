@@ -11145,6 +11145,7 @@ function computeTimeStats(eventRows, goalEvents, gkRotation, h2OffsetSecs) {
   const maxSecs = { '1H': 0, '2H': 0 };
   eventRows.forEach(r => {
     const t = r.tsSecsNorm ?? r.tsSecsRaw;
+    if (t == null || isNaN(t) || t < 0 || t > 7200) return; // ignore malformed
     if (r.half === '1H' && t > maxSecs['1H']) maxSecs['1H'] = t;
     if (r.half === '2H' && t > maxSecs['2H']) maxSecs['2H'] = t;
   });
@@ -11348,16 +11349,23 @@ function computePeakWindow(events, windowSecs) {
 
 function computeFatigueTrids(events, halfDur) {
   const BUCKET_SECS = 300; // 5 minutes per column
-  const times = events.map(e => e.tsSecsRaw).filter(t => t != null && !isNaN(t) && t >= 0);
-  if (!times.length) return { buckets: [], labels: [], htBucket: null, trend: '→', '1H': [0,0,0], '2H': [0,0,0] };
 
-  const matchEndSecs = Math.max(...times);
+  // Use e.t (normalised) which is what byPlayer stores; fall back to tsSecsRaw
+  // Filter out any NaN / negative / absurdly large timestamps (> 2 hours)
+  const validEvents = events.filter(e => {
+    const t = e.t ?? e.tsSecsRaw;
+    return t != null && !isNaN(t) && t >= 0 && t < 7200;
+  });
+
+  if (!validEvents.length) return { buckets: [], labels: [], htBucket: null, trend: '→', '1H': [0,0,0], '2H': [0,0,0] };
+
+  // Match end = max timestamp across all valid events
+  const matchEndSecs = Math.max(...validEvents.map(e => e.t ?? e.tsSecsRaw));
   const numBuckets = Math.ceil(matchEndSecs / BUCKET_SECS) + 1;
   const buckets = new Array(numBuckets).fill(0);
 
-  events.forEach(e => {
-    const t = e.tsSecsRaw;
-    if (t == null || isNaN(t) || t < 0) return;
+  validEvents.forEach(e => {
+    const t = e.t ?? e.tsSecsRaw;
     const idx = Math.min(Math.floor(t / BUCKET_SECS), numBuckets - 1);
     buckets[idx]++;
   });
@@ -11368,9 +11376,9 @@ function computeFatigueTrids(events, halfDur) {
   const trimmed = buckets.slice(0, last + 1);
   const labels  = trimmed.map((_, i) => `${i*5}–${(i+1)*5}'`);
 
-  // Split at half-time using halfDur['1H']
-  const dur1H   = halfDur['1H'] || 0;
-  const htBucket = dur1H > 0 ? Math.floor(dur1H / BUCKET_SECS) : Math.floor(trimmed.length / 2);
+  // Half-time split: use halfDur['1H'] (actual 1H end in normalised seconds)
+  const dur1H    = halfDur['1H'] || 0;
+  const htBucket = dur1H > 0 ? Math.min(Math.floor(dur1H / BUCKET_SECS), trimmed.length) : Math.floor(trimmed.length / 2);
 
   const h1Vals = trimmed.slice(0, htBucket);
   const h2Vals = trimmed.slice(htBucket);
@@ -11378,19 +11386,16 @@ function computeFatigueTrids(events, halfDur) {
   const avg2 = h2Vals.length ? h2Vals.reduce((s,v)=>s+v,0) / h2Vals.length : 0;
   const trend = avg2 > avg1 * 1.15 ? '↗' : avg2 < avg1 * 0.85 ? '↘' : '→';
 
-  // Also compute per-half thirds for backward-compat with insight cards
-  const third1 = dur1H / 3;
-  const dur2H  = halfDur['2H'] || 0;
-  const third2 = dur2H / 3;
-  const h1Events = events.filter(e => e.half === '1H');
-  const h2Events = events.filter(e => e.half === '2H');
-  const thirds1H = [0,1,2].map(t => h1Events.filter(e => {
-    const ts = e.tsSecsRaw ?? 0;
-    return ts >= t*third1 && ts < (t+1)*third1;
-  }).length);
+  // Per-half thirds for insight cards — use half-specific events and their actual half timestamps
+  const h1Events = events.filter(e => e.half === '1H' && e.tsSecsRaw >= 0 && e.tsSecsRaw < 7200 && !isNaN(e.tsSecsRaw));
+  const h2Events = events.filter(e => e.half === '2H' && !isNaN(e.t ?? e.tsSecsRaw));
+  const dur2H    = halfDur['2H'] || 0;
+  const third1   = (halfDur['1H'] || 1800) / 3;
+  const third2   = (dur2H || 1800) / 3;
+
+  const thirds1H = [0,1,2].map(t => h1Events.filter(e => e.tsSecsRaw >= t*third1 && e.tsSecsRaw < (t+1)*third1).length);
   const thirds2H = [0,1,2].map(t => h2Events.filter(e => {
-    const ts = e.tsSecsRaw ?? 0;
-    return ts >= t*third2 && ts < (t+1)*third2;
+    const ts = e.t ?? e.tsSecsRaw; return ts >= t*third2 && ts < (t+1)*third2;
   }).length);
 
   return { buckets: trimmed, labels, htBucket, trend, '1H': thirds1H, '2H': thirds2H };
