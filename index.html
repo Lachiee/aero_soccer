@@ -11191,7 +11191,7 @@ function computeTimeStats(eventRows, goalEvents, gkRotation, h2OffsetSecs) {
   Object.entries(byPlayer).forEach(([player, events]) => {
     playerStats[player] = {
       peakWindow:       computePeakWindow(events, 300),
-      fatigue:          computeFatigueTrids(events, halfDur, h2OffsetSecs),
+      fatigue:          computeFatigueTrids(events, halfDur),
       clutch:           computeClutchStats(events, halfDur, 300),
       leadStats:        computeLeadStats(events, scoreTimeline, player),
       shotTiming:       computeShotTiming(events, halfDur),
@@ -11346,13 +11346,13 @@ function computePeakWindow(events, windowSecs) {
   return { count: best, startSecs: bestStart, half: bestHalf };
 }
 
-function computeFatigueTrids(events, halfDur, h2OffsetSecs) {
-  const BUCKET_SECS = 300; // 5 minutes
-  // Derive actual match end from last event — no arbitrary cap
+function computeFatigueTrids(events, halfDur) {
+  const BUCKET_SECS = 300; // 5 minutes per column
   const times = events.map(e => e.tsSecsRaw).filter(t => t != null && !isNaN(t) && t >= 0);
-  if (!times.length) return { buckets: [], labels: [], htBucket: null, trend: '→', '1H': [0], '2H': [0] };
+  if (!times.length) return { buckets: [], labels: [], htBucket: null, trend: '→', '1H': [0,0,0], '2H': [0,0,0] };
+
   const matchEndSecs = Math.max(...times);
-  const numBuckets = Math.ceil(matchEndSecs / BUCKET_SECS) + 1; // +1 so last event isn't trimmed
+  const numBuckets = Math.ceil(matchEndSecs / BUCKET_SECS) + 1;
   const buckets = new Array(numBuckets).fill(0);
 
   events.forEach(e => {
@@ -11368,15 +11368,32 @@ function computeFatigueTrids(events, halfDur, h2OffsetSecs) {
   const trimmed = buckets.slice(0, last + 1);
   const labels  = trimmed.map((_, i) => `${i*5}–${(i+1)*5}'`);
 
-  const htBucket = h2OffsetSecs != null ? Math.floor(h2OffsetSecs / BUCKET_SECS) : null;
-  const splitAt  = htBucket ?? Math.floor(trimmed.length / 2);
-  const h1Vals   = trimmed.slice(0, splitAt);
-  const h2Vals   = trimmed.slice(splitAt);
+  // Split at half-time using halfDur['1H']
+  const dur1H   = halfDur['1H'] || 0;
+  const htBucket = dur1H > 0 ? Math.floor(dur1H / BUCKET_SECS) : Math.floor(trimmed.length / 2);
+
+  const h1Vals = trimmed.slice(0, htBucket);
+  const h2Vals = trimmed.slice(htBucket);
   const avg1 = h1Vals.length ? h1Vals.reduce((s,v)=>s+v,0) / h1Vals.length : 0;
   const avg2 = h2Vals.length ? h2Vals.reduce((s,v)=>s+v,0) / h2Vals.length : 0;
   const trend = avg2 > avg1 * 1.15 ? '↗' : avg2 < avg1 * 0.85 ? '↘' : '→';
 
-  return { buckets: trimmed, labels, htBucket, trend, '1H': [events.filter(e=>e.half==='1H').length], '2H': [events.filter(e=>e.half==='2H').length] };
+  // Also compute per-half thirds for backward-compat with insight cards
+  const third1 = dur1H / 3;
+  const dur2H  = halfDur['2H'] || 0;
+  const third2 = dur2H / 3;
+  const h1Events = events.filter(e => e.half === '1H');
+  const h2Events = events.filter(e => e.half === '2H');
+  const thirds1H = [0,1,2].map(t => h1Events.filter(e => {
+    const ts = e.tsSecsRaw ?? 0;
+    return ts >= t*third1 && ts < (t+1)*third1;
+  }).length);
+  const thirds2H = [0,1,2].map(t => h2Events.filter(e => {
+    const ts = e.tsSecsRaw ?? 0;
+    return ts >= t*third2 && ts < (t+1)*third2;
+  }).length);
+
+  return { buckets: trimmed, labels, htBucket, trend, '1H': thirds1H, '2H': thirds2H };
 }
 
 function computeClutchStats(events, halfDur, finalSecs) {
