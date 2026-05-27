@@ -4098,7 +4098,9 @@ function drawWormCanvas(canvasId, matchId) {
   if (ctx.roundRect) ctx.roundRect(0,0,W,H,8); else ctx.rect(0,0,W,H);
   ctx.fill();
 
-  const maxLead = Math.max(...rows.map(e => Math.abs(e.scoreA - e.scoreB)), 2);
+  const maxLead = Math.max(...rows.map(e => Math.abs(e.scoreA - e.scoreB)), Math.abs(fA - fB), 2);
+  const comboTotal = rows.length;
+  const authTotal  = fA + fB;
   const yRange = maxLead + 1;
   const toX = s => pad.left + (s / matchDur) * cW;
   const toY = d => pad.top + cH / 2 - (d / yRange) * (cH / 2);
@@ -4151,6 +4153,11 @@ function drawWormCanvas(canvasId, matchId) {
   ctx.fillText('MATCH TIMELINE', pad.left, 18);
   ctx.fillStyle = 'rgba(255,255,255,.3)'; ctx.font = '9px Barlow Condensed, sans-serif';
   ctx.fillText('GOAL DIFFERENTIAL OVER ' + totalMins + "'", pad.left + 112, 18);
+  // Warn if combo count differs from authoritative total
+  if (comboTotal !== authTotal) {
+    ctx.fillStyle = 'rgba(251,191,36,.6)';
+    ctx.fillText(`⚠ ${comboTotal} goals in combos · ${authTotal} in match data`, pad.left + 112, 29);
+  }
 
   // Legend
   ctx.textAlign = 'right';
@@ -6084,7 +6091,9 @@ function renderMatches() {
           })).sort((a,b)=>a.secs-b.secs);
           let sA=0,sB=0;
           const rows = events.map(e=>{ if(e.team==='A') sA++; else sB++; return {...e,scoreA:sA,scoreB:sB}; });
-          const fA=sA, fB=sB;
+          // Use data.csv totals as authoritative final score — combos may be incomplete
+          const fA = m.goalsA ?? sA;
+          const fB = m.goalsB ?? sB;
 
           // Momentum runs
           const runs=[];
