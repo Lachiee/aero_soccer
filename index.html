@@ -2776,7 +2776,8 @@ const TAG_DEFS = {
 
   // ── Shot geometry ─────────────────────────────────────────────────────────
   'Long Ranger':       { cls:'tag-enforcer',  tip:'Scores goals from further out than anyone — based on mapped goal locations, their average scoring position is the deepest in the group' },
-  'Sharp Angle':       { cls:'tag-striker',   tip:'Scored from the sharpest angles of anyone in the group — finds the net from positions where others don\'t even attempt a shot' },
+  'Sharp Angle':       { cls:'tag-striker',   tip:'Scored from the sharpest average angle of anyone in the group — consistently finds the net from positions where others don\'t even attempt a shot' },
+  'Corner Pocket':     { cls:'tag-striker',   tip:'Scored the single most acute-angled goal in the group — one goal from a tighter angle than anyone else has ever managed' },
   'Sniper':            { cls:'tag-striker',   tip:'Scored the single longest goal in the group — one goal from further out than anyone else has ever managed' },
   'Wide Wizard':       { cls:'tag-wizard',    tip:'Creates from wider positions than any other assister — delivers from the flanks where others can\'t' },
   'Deep Creator':      { cls:'tag-engine',    tip:'Assists from deeper than anyone — builds attacks from further out, covering more of the pitch when setting up goals' },
@@ -3535,6 +3536,7 @@ function buildTagAuction() {
   const shotTagFns = {
     'Long Ranger':       m => m.longRangerScore,
     'Sharp Angle':       m => m.angleMerchantScore,
+    'Corner Pocket':     m => m.shotCount >= 1 ? m.maxShotAngle : 0,
     'Sniper':            m => m.shotCount >= 1 ? m.maxShotDist : 0,
     'Wide Wizard':       m => m.wideWizardScore,
     'Deep Creator':      m => m.deepCreatorScore,
