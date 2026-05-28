@@ -4118,7 +4118,15 @@ function copyMatchReport(matchIdRaw) {
     const team = resolveGoalTeam(g, scorerTeam, m.swappedPlayers, g.half);
     const scorer = g.isOG ? 'Own Goal' : g.scorer;
     const assist = g.assister ? ` (${g.assister})` : '';
-    const line = `${g.time} ${scorer}${assist}`;
+    // Clean timestamp: strip decimal seconds and centiseconds
+    // "30:26.2" → "30:26", "24:08:00" → "24:08", "1:32" → "1:32"
+    const rawTime = g.time || '';
+    const cleanTime = (() => {
+      const parts = rawTime.split(':');
+      if (parts.length === 3) return `${parts[0]}:${parts[1]}`; // MM:SS:cc → MM:SS
+      return parts[0] + ':' + (parts[1] || '00').replace(/\.\d+$/, '').padStart(2,'0'); // MM:SS.d → MM:SS
+    })();
+    const line = `${cleanTime} ${scorer}${assist}`;
     if (g.half === '1H') lines1H.push(line);
     else lines2H.push(line);
   });
@@ -13333,16 +13341,15 @@ document.addEventListener('DOMContentLoaded', () => {
       try {
         const stored = JSON.parse(localStorage.getItem('aero_event_logs') || '{}');
         let merged = 0;
+        // GitHub events.json is always authoritative — overwrite any localStorage entry it has
+        // Only keep localStorage entries for matches NOT in the GitHub file (e.g. just imported)
         Object.entries(data).forEach(([mid, log]) => {
-          const storedLog = stored[mid];
-          const storedEvents = storedLog?.events?.length || 0;
-          const newEvents    = log?.events?.length || 0;
-          // Always take whichever version has more raw events — GitHub is source of truth
-          if (!storedLog || newEvents > storedEvents) {
+          if (!stored[mid] || (log?.events?.length || 0) >= (stored[mid]?.events?.length || 0)) {
             stored[mid] = log;
             merged++;
           }
         });
+        localStorage.setItem('aero_event_logs', JSON.stringify(stored));
         if (merged) {
           localStorage.setItem('aero_event_logs', JSON.stringify(stored));
           console.log(`✅ Loaded events.json — ${merged} new match logs merged`);
