@@ -2775,9 +2775,9 @@ const TAG_DEFS = {
   'The Magician':      { cls:'tag-wizard',    tip:'One of the top nutmeg artists while also being a top-3 interceptor — beats people with skill then wins the ball back immediately' },
 
   // ── Shot geometry ─────────────────────────────────────────────────────────
-  'Long Ranger':       { cls:'tag-enforcer',  tip:'Scores from further out than anyone — maps show shots taken from deep, yet they still find the net with regularity' },
+  'Long Ranger':       { cls:'tag-enforcer',  tip:'Scores goals from further out than anyone — based on mapped goal locations, their average scoring position is the deepest in the group' },
   'Sharp Angle':       { cls:'tag-striker',   tip:'Scored from the sharpest angles of anyone in the group — finds the net from positions where others don\'t even attempt a shot' },
-  'Sniper':            { cls:'tag-striker',   tip:'Converts long-range shots at a higher rate than anyone — combines distance with clinical finishing for genuinely difficult goals' },
+  'Sniper':            { cls:'tag-striker',   tip:'Scored the single longest goal in the group — one goal from further out than anyone else has ever managed' },
   'Wide Wizard':       { cls:'tag-wizard',    tip:'Creates from wider positions than any other assister — delivers from the flanks where others can\'t' },
   'Deep Creator':      { cls:'tag-engine',    tip:'Assists from deeper than anyone — builds attacks from further out, covering more of the pitch when setting up goals' },
   'Through Ball King': { cls:'tag-wizard',    tip:'Plays the longest average assist pass of anyone — the master of splitting defences with through balls and switches' },
@@ -3535,7 +3535,7 @@ function buildTagAuction() {
   const shotTagFns = {
     'Long Ranger':       m => m.longRangerScore,
     'Sharp Angle':       m => m.angleMerchantScore,
-    'Sniper':            m => m.shotCount >= 3 ? m.conv * m.conv * m.avgShotDist * 20 : 0,
+    'Sniper':            m => m.shotCount >= 1 ? m.maxShotDist : 0,
     'Wide Wizard':       m => m.wideWizardScore,
     'Deep Creator':      m => m.deepCreatorScore,
     'Through Ball King': m => m.throughBallScore,
