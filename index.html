@@ -3755,7 +3755,7 @@ function renderSeasonSummary() {
 
   // Use _displayStats but with a lower threshold (3+ games in season)
   const ds = getDisplayStats();
-  const allP = Object.values(playerStats).filter(p => (seasonGames[p.player]?.size || 0) >= 4);
+  const allP = Object.values(playerStats).filter(p => (seasonGames[p.player]?.size || 0) >= 2);
   if (!allP.length) { content.innerHTML = '<p style="color:var(--muted)">Not enough data yet.</p>'; return; }
 
   const seasonLabel = seasonFilter !== 'all' ? seasonFilter : 'All Time';
