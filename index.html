@@ -4094,6 +4094,61 @@ function renderSeasonSummary() {
 // =====================================================================
 // Global store for worm data — populated when match cards render, drawn when panel opens
 // Resolve which team gets credit for a goal (handles OGs and "Own Goal" scorer names)
+function copyMatchReport(matchIdRaw) {
+  const mid = matchIdRaw.replace(/__/g, '#');
+  const m = matchList.find(mx => mx.id === mid);
+  const combos = goalCombos[mid];
+  if (!m || !combos) { alert('No goal data found for this match.'); return; }
+
+  const toSecs = t => { if (!t) return 0; const p = t.split(':').map(Number); return p[0]*60+(p[1]||0); };
+  const scorerTeam = {};
+  [...m.teamA, ...m.teamB].forEach(r => { scorerTeam[r.player] = r.team; });
+
+  // Build sorted goal list with half, time, scorer, assister, team
+  const allGoals = [
+    ...(combos.h1||[]).map(g => ({ ...g, half: '1H' })),
+    ...(combos.h2||[]).map(g => ({ ...g, half: '2H' })),
+  ].filter(g => g.time).sort((a, b) => {
+    if (a.half !== b.half) return a.half < b.half ? -1 : 1;
+    return toSecs(a.time) - toSecs(b.time);
+  });
+
+  const lines1H = [], lines2H = [];
+  allGoals.forEach(g => {
+    const team = resolveGoalTeam(g, scorerTeam, m.swappedPlayers, g.half);
+    const scorer = g.isOG ? 'Own Goal' : g.scorer;
+    const assist = g.assister ? ` (${g.assister})` : '';
+    const line = `${g.time} ${scorer}${assist}`;
+    if (g.half === '1H') lines1H.push(line);
+    else lines2H.push(line);
+  });
+
+  const report = [
+    '1st Half',
+    ...lines1H,
+    '',
+    '2nd Half',
+    ...lines2H,
+    '',
+    'Score:',
+    `Non-Bibs - ${m.goalsA}`,
+    `Bibs - ${m.goalsB}`,
+  ].join('\n');
+
+  navigator.clipboard.writeText(report).then(() => {
+    const btn = document.getElementById('report-btn-' + matchIdRaw);
+    if (btn) { btn.textContent = '✅ Copied!'; setTimeout(() => { btn.innerHTML = '📋 Copy Match Report'; }, 2000); }
+  }).catch(() => {
+    // Fallback for older browsers
+    const ta = document.createElement('textarea');
+    ta.value = report; ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.select(); document.execCommand('copy');
+    document.body.removeChild(ta);
+    const btn = document.getElementById('report-btn-' + matchIdRaw);
+    if (btn) { btn.textContent = '✅ Copied!'; setTimeout(() => { btn.innerHTML = '📋 Copy Match Report'; }, 2000); }
+  });
+}
+
 function resolveGoalTeam(p, scorerTeam, swappedPlayers, half) {
   // Build a half-aware team lookup — swapped players have different teams per half
   const getTeam = (player) => {
@@ -6096,6 +6151,14 @@ function renderMatches() {
         </div>
       </div>
       <div class="match-detail-panel" id="md-${m.id.replace(/[#]/g,'__')}" onclick="event.stopPropagation()">
+        ${adminMode ? `
+        <div style="display:flex;justify-content:flex-end;padding:10px 14px 0">
+          <button onclick="copyMatchReport('${m.id.replace(/[#]/g,'__')}')"
+            style="font-family:'Barlow Condensed',sans-serif;font-size:.78rem;letter-spacing:.5px;padding:5px 12px;border-radius:6px;border:1px solid var(--border);background:var(--card2);color:var(--muted);cursor:pointer;display:flex;align-items:center;gap:5px"
+            id="report-btn-${m.id.replace(/[#]/g,'__')}">
+            📋 Copy Match Report
+          </button>
+        </div>` : ''}
 
         <!-- Goal Timeline -->
         ${(() => {
