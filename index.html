@@ -2777,22 +2777,23 @@ const TAG_DEFS = {
   // ── Shot geometry ─────────────────────────────────────────────────────────
   'Long Ranger':       { cls:'tag-enforcer',  tip:'Scores from further out than anyone — maps show shots taken from deep, yet they still find the net with regularity' },
   'Sharp Angle':       { cls:'tag-striker',   tip:'Scored from the sharpest angles of anyone in the group — finds the net from positions where others don\'t even attempt a shot' },
-  'Dead Eye':          { cls:'tag-striker',   tip:'Converts from long range at a higher rate than anyone — combines distance with clinical finishing for low-percentage goals' },
+  'Sniper':            { cls:'tag-striker',   tip:'Converts long-range shots at a higher rate than anyone — combines distance with clinical finishing for genuinely difficult goals' },
   'Wide Wizard':       { cls:'tag-wizard',    tip:'Creates from wider positions than any other assister — delivers from the flanks where others can\'t' },
   'Deep Creator':      { cls:'tag-engine',    tip:'Assists from deeper than anyone — builds attacks from further out, covering more of the pitch when setting up goals' },
   'Through Ball King': { cls:'tag-wizard',    tip:'Plays the longest average assist pass of anyone — the master of splitting defences with through balls and switches' },
   'Box Architect':     { cls:'tag-striker',   tip:'Creates from closest to goal — cutbacks, layoffs and dangerous passes from inside the box to set up teammates' },
   'Clutch':            { cls:'tag-workhorse', tip:'Records more stats in the final 5 minutes of halves than anyone — raises their game exactly when it matters most' },
-  'Second Wind':       { cls:'tag-engine',    tip:'Statistically more active in the second half than the first, consistently — gets stronger as the game goes on' },
+  'Diesel':            { cls:'tag-engine',    tip:'Gets stronger as the game goes on — consistently more active in the second half than the first across multiple matches' },
   'Never Say Die':     { cls:'tag-workhorse', tip:'A higher proportion of their output comes while the team is trailing than any other player — keeps fighting when it\'s hardest' },
+  'Pressure Cooker':   { cls:'tag-engine',    tip:'Responds to conceding goals with more immediate activity than anyone — galvanises after setbacks' },
   'Spark Plug':        { cls:'tag-engine',    tip:'More of their tackles and interceptions lead directly to goals within 15 seconds than anyone else — winning the ball in the right place at the right time' },
   'Iron Man':          { cls:'tag-enforcer',  tip:'Has spent the most time in goal across the season — the reliable last line when keepers rotate' },
   'Brick Wall':        { cls:'tag-enforcer',  tip:'Concedes fewer goals per 55 minutes in goal than any other rotation keeper — the hardest to score against' },
   'Shot Stopper':      { cls:'tag-enforcer',  tip:'Makes more saves per 55 minutes in goal than anyone — the busiest and most reliable keeper in rotation' },
-  'Clutch':            { cls:'tag-engine',    tip:'More active in the final 5 minutes of each half than anyone — consistently raises their output when the game is tightest' },
-  'Second Half':       { cls:'tag-engine',    tip:'Significantly more active in the second half than the first across multiple games — grows into every match' },
-  'Pressure Player':   { cls:'tag-workhorse', tip:'Most active in the 90 seconds after the team concedes — consistently responds to goals against with increased intensity' },
-  'Iron Man':          { cls:'tag-enforcer',  tip:'Has spent more time as goalkeeper than any other outfield player — willing to rotate in goal without impacting overall output' },
+  'Kingmaker':         { cls:'tag-wizard',    tip:'Their team\'s win rate is significantly higher in matches where they score — their goals change games more than anyone else\'s' },
+  'Catalyst':          { cls:'tag-engine',    tip:'Defensive actions directly trigger goals more than anyone — a tackle or interception that immediately leads to their team scoring' },
+  'Stone Wall':        { cls:'tag-enforcer',  tip:'The only player who ranks in the top 3 for tackles, interceptions AND blocks simultaneously — a complete defensive force' },
+  'Ball Magnet':       { cls:'tag-workhorse', tip:'Highest combined shots and key passes per game — the player most involved in the attacking phase, regardless of the end result' },
 
   // ── Timestamp ─────────────────────────────────────────────────────────────
   'Icebreaker':        { cls:'tag-enforcer',  tip:'Scored the opening goal of a match in more games than anyone — breaks deadlocks and shifts momentum before others get going' },
@@ -3089,6 +3090,23 @@ function buildTagAuction() {
       hatTrickMatches, doubleMatches, braceAssistMatches, blitzMatches,
       reliabilityScore, stdDev, variance,
       asScorer, asAssister,
+      // Kingmaker: win rate in matches where this player scores vs where they don't
+      kingmakerScore: (() => {
+        const scoringMatches = matchList.filter(m => {
+          const r = [...m.teamA,...m.teamB].find(x=>x.player===ps.player);
+          return r && n(r.goals) > 0;
+        });
+        if (scoringMatches.length < 3) return 0;
+        const wins = scoringMatches.filter(m => {
+          const r = [...m.teamA,...m.teamB].find(x=>x.player===ps.player);
+          return r && r.team === m.winnerTeam;
+        }).length;
+        const winRate = wins / scoringMatches.length;
+        const baseline = ps.wins / Math.max(ps.wins + ps.losses + (ps.draws||0), 1);
+        return winRate - baseline >= 0.2 ? winRate * scoringMatches.length : 0;
+      })(),
+      // Ball Magnet: shots + key passes per game — raw attacking involvement
+      ballMagnetScore: spg * 0.6 + kppg * 0.8,
     };
   });
 
@@ -3153,17 +3171,13 @@ function buildTagAuction() {
   award('Rebound King',     m => m.postpg*3+m.gpg*0.5);
   award('Wave Maker',       m => (m.gpg+m.apg)*m.apg);
   award('Brace Builder',    m => m.braceAssistMatches>=2?m.braceAssistMatches:0);
-  award('Last Touch',       m => m.gpg*0.4+m.apg*0.6+m.conv*2);
   award('Clinical',         m => m.conv);
   award('Sharp',            m => m.conv*m.gpg*4);
   award('Shadow Striker',   m => m.spg<12&&m.gpg>0.8&&m.apg>0.8?(m.gpg+m.apg)*3:0);
-  award('Opportunist',      m => m.gpg/Math.max(m.spg,0.1));
   award('Impact Player',    m => m.gpg*1.5+m.apg*1.5+m.conv*3);
-  award('Ghost Runner',     m => m.gpg>0.5&&m.spg<12?m.gpg*4/Math.max(m.spg,1):0);
-  award('Poacher',          m => m.unassistedGoals>0?m.unassistedGoals/Math.max(m.ps.games,1):0);
-  award('Spark Plug',       m => (m.gpg+m.apg)*0.5+(m.gpg>0&&m.apg>0?2:0));
-  award('Finisher',         m => m.gpg*0.4+m.conv*0.6);
   award('Silent Assassin',  m => m.spg>0?m.gpg/m.spg*5:0);
+  award('Kingmaker',        m => m.kingmakerScore||0);
+  award('Catalyst',         m => m.defChainScore||0);
   // Rank-based: top 5 in goals AND top 5 in assists — true dual threat
   awardRank('Complete Forward', [m=>m.gpg, m=>m.apg], 5);
   // Rank-based: top 5 in goals AND top 5 in conversion — scores often AND efficiently
@@ -3175,12 +3189,11 @@ function buildTagAuction() {
   award('Deadeye',          m => m.acc);
   award('Trigger Finger',   m => m.sotpg);
   award('Net Magnet',       m => m.sotpg+m.postpg*2);
-  award('Front Foot',       m => m.sotpg+m.apg*0.3);
   award('Heat Check',       m => m.sotpg*1.5+m.gpg);
   award('Sledgehammer',     m => m.spg*0.7+m.postpg*2);
-  award('Volume Shooter',   m => m.spg*0.6+m.gkspg*0.4);
   award('Rapid Fire',       m => m.spg*m.conv);
   award('Pinball',          m => m.postpg*2+m.sotpg*0.3);
+  award('Ball Magnet',      m => m.ballMagnetScore);
   award('High Voltage',     m => m.gpg*0.5+m.tklpg*0.5+m.actpg*0.1);
   // Rank-based: top 5 shots AND top 5 shot accuracy — shoots a lot AND precisely
   awardRank('Laser Guided',    [m=>m.spg, m=>m.acc], 5);
@@ -3223,10 +3236,8 @@ function buildTagAuction() {
 
   // ── DEFENDING ───────────────────────────────────────────────────────────
   award('Ball Hawk',        m => m.intpg);
-  award('Steel Wall',       m => m.defpg);
   award('Cut Out',          m => m.intpg*1.8+m.blkpg*0.3);
   award('Press King',       m => m.tklpg*1.0+m.intpg*1.0);
-  award('Sweeper',          m => m.tklpg*0.6+m.intpg*0.6);
   award('Enforcer',         m => m.tklpg);
   award('Lockdown',         m => m.blkpg*2.5+m.intpg*0.2);
   award('Wall',             m => m.blkpg*2+m.tklpg*0.3);
@@ -3234,6 +3245,8 @@ function buildTagAuction() {
   award('Guardian',         m => m.gkspg*0.6+m.intpg*0.5+m.tklpg*0.4);
   award('The Shield',       m => m.blkpg*0.8+m.gkspg*0.6+m.tklpg*0.4);
   award('Grafter',          m => m.tklpg*0.5+m.intpg*0.3+m.kppg*0.5);
+  // Rank-based: must be top 5 in ALL THREE defensive stats simultaneously
+  awardRank('Stone Wall',      [m=>m.tklpg, m=>m.intpg, m=>m.blkpg], 3);
   // Rank-based: top 5 tackles AND top 5 interceptions AND top 5 blocks
   awardRank('Iron Curtain',    [m=>m.tklpg, m=>m.intpg, m=>m.blkpg], 5);
   // Rank-based: top 5 interceptions AND top 5 goals — wins ball then scores
@@ -3522,17 +3535,17 @@ function buildTagAuction() {
   const shotTagFns = {
     'Long Ranger':       m => m.longRangerScore,
     'Sharp Angle':       m => m.angleMerchantScore,
-    'Dead Eye':          m => m.shotCount >= 2 ? m.avgShotDist * m.conv : 0,
+    'Sniper':            m => m.shotCount >= 3 ? m.conv * m.conv * m.avgShotDist * 20 : 0,
     'Wide Wizard':       m => m.wideWizardScore,
     'Deep Creator':      m => m.deepCreatorScore,
     'Through Ball King': m => m.throughBallScore,
     'Box Architect':     m => m.boxArchitectScore,
     // Time-based tags — require event log data
     'Clutch':            m => m.clutchScore    || 0,
-    'Second Wind':       m => m.secondHalfScore || 0,
+    'Diesel':            m => m.secondHalfScore || 0,
     'Never Say Die':     m => m.trailScore      || 0,
     'Pressure Cooker':   m => m.pressureScore   || 0,
-    'Spark Plug':        m => (m.defChainScore   || 0),
+    'Spark Plug':        m => m.defChainScore   || 0,
     'Iron Man':          m => m.gkMinutes       || 0,
     'Brick Wall':        m => m.gkConcededPer90 != null && m.gkMinutes >= 30 ? 90 - m.gkConcededPer90 * 10 : 0,
     'Shot Stopper':      m => m.gkSavesPer90    != null && m.gkMinutes >= 30 ? m.gkSavesPer90 : 0,
@@ -3558,7 +3571,7 @@ function buildTagAuction() {
 
 // ── Shot geometry tag winners — separate from main auction pool ────────────
 // Built alongside buildTagAuction; accessed via _tagCache.shotTags
-const SHOT_TAGS = ['Long Ranger', 'Sharp Angle', 'Dead Eye'];
+const SHOT_TAGS = ['Long Ranger', 'Sharp Angle', 'Sniper'];
 
 
 function getFifaTags(s, cs) {
