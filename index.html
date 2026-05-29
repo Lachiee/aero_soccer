@@ -3571,13 +3571,18 @@ function buildTagAuction() {
   Object.entries(shotTagWinners).forEach(([label, p]) => { shotTags[p] = label; });
 
   // ── X-Factor identifier — separate from auction, one winner ─────────────
-  // stdDev × gpg: high variance AND high average = unpredictable match-winner
+  // Goal variance across games × goals per game: unpredictable match-winner
   let xFactorWinner = null;
   let xFactorBest = 0;
   players.forEach(p => {
     const m = metrics[p];
     if (!m || m.ps.games < 5) return;
-    const score = (m.stdDev || 0) * (m.gpg || 0) * 3;
+    const ps = m.ps;
+    const perGame = ps.matches.filter(r => r.half === 'FULL').map(r => n(r.goals));
+    if (perGame.length < 3) return;
+    const mean = perGame.reduce((s,v)=>s+v,0) / perGame.length;
+    const goalStdDev = Math.sqrt(perGame.reduce((s,v)=>s+(v-mean)**2,0) / perGame.length);
+    const score = goalStdDev * (m.gpg || 0) * 3;
     if (score > xFactorBest) { xFactorBest = score; xFactorWinner = p; }
   });
 
@@ -3987,15 +3992,20 @@ function renderSeasonSummary() {
     return score;
   };
 
-  // X-Factor: highest variance × output — unpredictable match-winner
+  // X-Factor: use same formula as buildTagAuction to guarantee consistency
   const xFactorRaceScore = p => {
+    if (!_tagCache) _tagCache = buildTagAuction();
+    const { xFactorWinner } = _tagCache;
+    // Build score the same way buildTagAuction does — via the metrics object
     const ps = playerStats[p.player];
     if (!ps || ps.games < 5) return -Infinity;
-    const perGame = ps.matches.filter(r=>r.half==='FULL').map(r=>n(r.goals));
+    const g = Math.max(ps.games, 1);
+    const gpg = ps.goals / g;
+    const perGame = ps.matches.filter(r => r.half === 'FULL').map(r => n(r.goals));
     if (perGame.length < 3) return -Infinity;
-    const mean = perGame.reduce((s,v)=>s+v,0)/perGame.length;
-    const stdDev = Math.sqrt(perGame.reduce((s,v)=>s+(v-mean)**2,0)/perGame.length);
-    return parseFloat((stdDev * mean * 3).toFixed(2));
+    const mean = perGame.reduce((s,v)=>s+v,0) / perGame.length;
+    const stdDev = Math.sqrt(perGame.reduce((s,v)=>s+(v-mean)**2,0) / perGame.length);
+    return parseFloat((stdDev * gpg * 3).toFixed(2));
   };
 
   // Catalyst: most defensive chains (tackle/interception → goal within 30s) per game
