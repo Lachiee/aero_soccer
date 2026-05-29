@@ -3999,7 +3999,6 @@ function renderSeasonSummary() {
 
   // X-Factor: use same formula as buildTagAuction to guarantee consistency
   const xFactorRaceScore = p => {
-    if (!_tagCache) _tagCache = buildTagAuction();
     const ps = playerStats[p.player];
     if (!ps || ps.games < 5) return -Infinity;
     const perGame = ps.matches.filter(r => r.half === 'FULL').map(r => n(r.goals));
@@ -6913,114 +6912,93 @@ function renderProfileHeatmap(name, hmapType) {
     showNumbers,
   });
 
-  // Interactive pills — hover shows goal info tooltip, click shows floating card
+  // Interactive pills — hover tooltip + click card
   heatCanvas.style.cursor = 'crosshair';
 
-  // Remove old listeners by replacing with clone
-  const newCanvas = heatCanvas.cloneNode(true);
-  heatCanvas.parentNode.replaceChild(newCanvas, heatCanvas);
-  // Re-get reference after clone
-  const hc = document.getElementById('profile-heatmap');
-  // Copy cluster data to new canvas
-  hc._hmapClusters = heatCanvas._hmapClusters;
-  hc._hmapW = heatCanvas._hmapW;
-  hc._hmapH = heatCanvas._hmapH;
+  // Store current shots on canvas for interaction (updated each render)
+  heatCanvas._currentShots = shots;
+  heatCanvas._hmapType = hmapType;
 
-  // Shared tooltip
-  let hmapTip = document.getElementById('hmap-pill-tip');
-  if (!hmapTip) {
-    hmapTip = document.createElement('div');
-    hmapTip.id = 'hmap-pill-tip';
-    hmapTip.style.cssText = 'position:fixed;z-index:9999;background:#0d1a0f;border:1px solid rgba(255,255,255,.15);border-radius:8px;padding:8px 12px;font-family:"Barlow Condensed",sans-serif;pointer-events:none;opacity:0;transition:opacity .1s;min-width:140px;box-shadow:0 4px 16px rgba(0,0,0,.6)';
-    document.body.appendChild(hmapTip);
-  }
+  // Bind listeners once only
+  if (!heatCanvas._hmapInteractive) {
+    heatCanvas._hmapInteractive = true;
 
-  const getHit = (ev) => {
-    const clusters = hc._hmapClusters;
-    if (!clusters?.length) return null;
-    const r = hc.getBoundingClientRect();
-    const scaleX = (hc._hmapW || hc.offsetWidth) / r.width;
-    const scaleY = (hc._hmapH || hc.offsetHeight) / r.height;
-    const cx = (ev.clientX - r.left) * scaleX;
-    const cy = (ev.clientY - r.top)  * scaleY;
-    const clusterR2 = Math.max(14, (hc._hmapW||300) * 0.06);
-    return clusters.find(cl => Math.hypot(cl.px - cx, cl.py - cy) < clusterR2) || null;
-  };
-
-  hc.addEventListener('mousemove', ev => {
-    const hit = getHit(ev);
-    if (!hit || !hit.shots?.length) {
-      hmapTip.style.opacity = '0';
-      hc.style.cursor = 'crosshair';
-      return;
+    let hmapTip = document.getElementById('hmap-pill-tip');
+    if (!hmapTip) {
+      hmapTip = document.createElement('div');
+      hmapTip.id = 'hmap-pill-tip';
+      hmapTip.style.cssText = 'position:fixed;z-index:9999;background:#0d1a0f;border:1px solid rgba(255,255,255,.15);border-radius:8px;padding:8px 12px;font-family:"Barlow Condensed",sans-serif;pointer-events:none;opacity:0;transition:opacity .1s;min-width:140px;box-shadow:0 4px 16px rgba(0,0,0,.6)';
+      document.body.appendChild(hmapTip);
     }
-    hc.style.cursor = 'pointer';
-    const isAssist = hmapType === 'assist';
-    const lines = hit.shots.map(s => {
-      const m = matchList.find(mx => mx.id === s.mid);
-      const dateStr = m?.date || s.mid.split('#')[0] || '';
-      if (isAssist) return `<div style="padding:2px 0;border-bottom:1px solid rgba(255,255,255,.06);font-size:.78rem"><span style="color:var(--amber,#f59e0b)">${s.time||''}</span> <span style="color:var(--text)">${s.scorer}</span> <span style="color:var(--muted);font-size:.68rem">· ${dateStr}</span></div>`;
-      return `<div style="padding:2px 0;border-bottom:1px solid rgba(255,255,255,.06);font-size:.78rem"><span style="color:var(--lime)">${s.time||''}</span> <span style="color:var(--text)">${s.scorer}${s.assister?' <span style="color:var(--muted)">← '+s.assister+'</span>':''}</span> <span style="color:var(--muted);font-size:.68rem">· ${dateStr}</span></div>`;
-    }).join('');
-    hmapTip.innerHTML = `
-      <div style="font-size:.62rem;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:6px">${hit.shots.length} ${isAssist ? 'assist' : 'goal'}${hit.shots.length !== 1 ? 's' : ''} · click to view</div>
-      ${lines}`;
-    const tx = ev.clientX + 14, ty = ev.clientY - 10;
-    const ow = hmapTip.offsetWidth || 160, oh = hmapTip.offsetHeight || 60;
-    hmapTip.style.left = (tx + ow > window.innerWidth  ? ev.clientX - ow - 8 : tx) + 'px';
-    hmapTip.style.top  = (ty + oh > window.innerHeight ? ev.clientY - oh - 5 : ty) + 'px';
-    hmapTip.style.opacity = '1';
-  });
 
-  hc.addEventListener('mouseleave', () => { hmapTip.style.opacity = '0'; hc.style.cursor = 'crosshair'; });
+    const getHit = (ev) => {
+      const clusters = heatCanvas._hmapClusters;
+      if (!clusters?.length) return null;
+      const r = heatCanvas.getBoundingClientRect();
+      const scaleX = (heatCanvas._hmapW || heatCanvas.offsetWidth) / r.width;
+      const scaleY = (heatCanvas._hmapH || heatCanvas.offsetHeight) / r.height;
+      const cx = (ev.clientX - r.left) * scaleX;
+      const cy = (ev.clientY - r.top)  * scaleY;
+      const clusterR2 = Math.max(14, (heatCanvas._hmapW||300) * 0.06);
+      return clusters.find(cl => Math.hypot(cl.px - cx, cl.py - cy) < clusterR2) || null;
+    };
 
-  hc.addEventListener('click', ev => {
-    const hit = getHit(ev);
-    if (!hit || !hit.shots?.length) return;
-    // Remove any existing card
-    document.getElementById('hmap-goal-card')?.remove();
-    hmapTip.style.opacity = '0';
-    const isAssist = hmapType === 'assist';
-    const card = document.createElement('div');
-    card.id = 'hmap-goal-card';
-    card.style.cssText = 'position:fixed;z-index:9998;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;font-family:"Barlow Condensed",sans-serif;box-shadow:0 8px 32px rgba(0,0,0,.7);min-width:200px;max-width:280px';
-    const rows = hit.shots.map(s => {
-      const m = matchList.find(mx => mx.id === s.mid);
-      const dateStr = m?.date || '';
-      const scoreStr = m ? `${m.goalsA}–${m.goalsB}` : '';
-      const midKey = s.mid.replace(/[#]/g,'__');
-      return `<div style="padding:6px 0;border-bottom:1px solid rgba(255,255,255,.06)">
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
-          <div>
-            <span style="color:${isAssist?'var(--amber,#f59e0b)':'var(--lime)'};font-size:.82rem;font-weight:600">${s.time||s.half||'?'}</span>
-            <span style="color:var(--text);font-size:.82rem;margin-left:6px">${isAssist ? `${s.scorer}` : `${s.scorer}${s.assister?' ← '+s.assister:''}`}</span>
+    heatCanvas.addEventListener('mousemove', ev => {
+      const hit = getHit(ev);
+      if (!hit?.shots?.length) { hmapTip.style.opacity = '0'; heatCanvas.style.cursor = 'crosshair'; return; }
+      heatCanvas.style.cursor = 'pointer';
+      const isAssist = heatCanvas._hmapType === 'assist';
+      const lines = hit.shots.map(s => {
+        const m = matchList.find(mx => mx.id === s.mid);
+        const dateStr = m?.date || '';
+        const col = isAssist ? 'var(--amber,#f59e0b)' : 'var(--lime)';
+        const label = isAssist ? s.scorer : `${s.scorer}${s.assister?' ← '+s.assister:''}`;
+        return `<div style="padding:2px 0;border-bottom:1px solid rgba(255,255,255,.06);font-size:.78rem"><span style="color:${col}">${s.time||''}</span> <span style="color:var(--text)">${label}</span> <span style="color:var(--muted);font-size:.65rem">· ${dateStr}</span></div>`;
+      }).join('');
+      hmapTip.innerHTML = `<div style="font-size:.62rem;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:5px">${hit.shots.length} ${isAssist?'assist':'goal'}${hit.shots.length!==1?'s':''} · click for details</div>${lines}`;
+      const ow = hmapTip.offsetWidth||160, oh = hmapTip.offsetHeight||60;
+      hmapTip.style.left = (ev.clientX+14+ow>window.innerWidth ? ev.clientX-ow-8 : ev.clientX+14)+'px';
+      hmapTip.style.top  = (ev.clientY-10+oh>window.innerHeight ? ev.clientY-oh-5 : ev.clientY-10)+'px';
+      hmapTip.style.opacity = '1';
+    });
+
+    heatCanvas.addEventListener('mouseleave', () => { hmapTip.style.opacity='0'; heatCanvas.style.cursor='crosshair'; });
+
+    heatCanvas.addEventListener('click', ev => {
+      const hit = getHit(ev);
+      if (!hit?.shots?.length) return;
+      document.getElementById('hmap-goal-card')?.remove();
+      hmapTip.style.opacity = '0';
+      const isAssist = heatCanvas._hmapType === 'assist';
+      const card = document.createElement('div');
+      card.id = 'hmap-goal-card';
+      card.style.cssText = 'position:fixed;z-index:9998;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;font-family:"Barlow Condensed",sans-serif;box-shadow:0 8px 32px rgba(0,0,0,.7);min-width:200px;max-width:280px';
+      const rows = hit.shots.map(s => {
+        const m = matchList.find(mx => mx.id === s.mid);
+        const dateStr = m?.date||''; const scoreStr = m?`${m.goalsA}–${m.goalsB}`:'';
+        const midKey = s.mid.replace(/[#]/g,'__');
+        const label = isAssist ? s.scorer : `${s.scorer}${s.assister?' ← '+s.assister:''}`;
+        const col = isAssist ? 'var(--amber,#f59e0b)' : 'var(--lime)';
+        return `<div style="padding:6px 0;border-bottom:1px solid rgba(255,255,255,.06)">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+            <div><span style="color:${col};font-size:.82rem;font-weight:600">${s.time||s.half||'?'}</span>
+            <span style="color:var(--text);font-size:.82rem;margin-left:6px">${label}</span></div>
+            <div style="text-align:right;flex-shrink:0"><div style="font-size:.7rem;color:var(--muted)">${dateStr}</div><div style="font-size:.68rem;color:var(--muted)">${scoreStr}</div></div>
           </div>
-          <div style="text-align:right">
-            <div style="font-size:.7rem;color:var(--muted)">${dateStr}</div>
-            <div style="font-size:.68rem;color:var(--muted)">${scoreStr}</div>
-          </div>
-        </div>
-        <button onclick="document.getElementById('hmap-goal-card')?.remove();openMatchPanel('${midKey}')"
-          style="margin-top:4px;font-size:.68rem;padding:3px 8px;border-radius:4px;border:1px solid var(--border);background:var(--card2);color:var(--muted);cursor:pointer;font-family:'Barlow Condensed',sans-serif">
-          View match →
-        </button>
-      </div>`;
-    }).join('');
-    card.innerHTML = `
-      <div style="font-size:.65rem;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:8px">${hit.shots.length} ${isAssist?'assist':'goal'}${hit.shots.length!==1?'s':''} from this zone</div>
-      ${rows}
-      <button onclick="document.getElementById('hmap-goal-card')?.remove()" style="margin-top:8px;width:100%;font-size:.7rem;padding:4px;border-radius:4px;border:1px solid var(--border);background:none;color:var(--muted);cursor:pointer;font-family:'Barlow Condensed',sans-serif">Close</button>`;
-    const r = hc.getBoundingClientRect();
-    const cx = ev.clientX, cy = ev.clientY;
-    document.body.appendChild(card);
-    const cw = card.offsetWidth, ch = card.offsetHeight;
-    card.style.left = (cx + cw + 16 > window.innerWidth  ? cx - cw - 8 : cx + 10) + 'px';
-    card.style.top  = (cy + ch + 10 > window.innerHeight ? cy - ch     : cy) + 'px';
-    // Close on outside click
-    setTimeout(() => document.addEventListener('click', function h(e) {
-      if (!card.contains(e.target)) { card.remove(); document.removeEventListener('click', h); }
-    }), 10);
-  });
+          <button onclick="document.getElementById('hmap-goal-card')?.remove();openMatchPanel('${midKey}')"
+            style="margin-top:4px;font-size:.68rem;padding:3px 8px;border-radius:4px;border:1px solid var(--border);background:var(--card2);color:var(--muted);cursor:pointer;font-family:'Barlow Condensed',sans-serif">
+            View match →
+          </button></div>`;
+      }).join('');
+      card.innerHTML = `<div style="font-size:.65rem;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:8px">${hit.shots.length} ${isAssist?'assist':'goal'}${hit.shots.length!==1?'s':''} from this zone</div>${rows}
+        <button onclick="document.getElementById('hmap-goal-card')?.remove()" style="margin-top:8px;width:100%;font-size:.7rem;padding:4px;border-radius:4px;border:1px solid var(--border);background:none;color:var(--muted);cursor:pointer;font-family:'Barlow Condensed',sans-serif">Close</button>`;
+      document.body.appendChild(card);
+      const cw=card.offsetWidth, ch=card.offsetHeight;
+      card.style.left=(ev.clientX+cw+16>window.innerWidth?ev.clientX-cw-8:ev.clientX+10)+'px';
+      card.style.top =(ev.clientY+ch+10>window.innerHeight?ev.clientY-ch:ev.clientY)+'px';
+      setTimeout(()=>document.addEventListener('click',function h(e){if(!card.contains(e.target)){card.remove();document.removeEventListener('click',h);}},),10);
+    });
+  }
 
   // Geometry stats
   const H = Math.round(W * 0.52);
