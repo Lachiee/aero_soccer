@@ -6835,6 +6835,17 @@ function renderProfileTimeStats(name) {
     </div>` : '';
 }
 
+function openMatchPanel(matchIdKey) {
+  nav('matches');
+  setTimeout(() => {
+    const panel = document.getElementById('md-' + matchIdKey);
+    if (!panel) return;
+    panel.classList.add('open');
+    panel.style.display = 'block';
+    setTimeout(() => panel.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80);
+  }, 220);
+}
+
 function renderProfileHeatmap(name, hmapType) {
   hmapType = hmapType || 'shot';
   const section = document.getElementById('profile-heatmap-section');
@@ -6902,57 +6913,114 @@ function renderProfileHeatmap(name, hmapType) {
     showNumbers,
   });
 
-  // Make pills clickable — navigate to the match containing that goal
-  if (!heatCanvas._hmapClickBound) {
-    heatCanvas._hmapClickBound = true;
-    heatCanvas.style.cursor = 'pointer';
-    heatCanvas.addEventListener('click', ev => {
-      const clusters = heatCanvas._hmapClusters;
-      if (!clusters?.length) return;
-      const r = heatCanvas.getBoundingClientRect();
-      const scaleX = (heatCanvas._hmapW || heatCanvas.offsetWidth) / r.width;
-      const scaleY = (heatCanvas._hmapH || heatCanvas.offsetHeight) / r.height;
-      const cx = (ev.clientX - r.left) * scaleX;
-      const cy = (ev.clientY - r.top) * scaleY;
-      const clusterR2 = Math.max(10, (heatCanvas._hmapW||300) * 0.055);
-      const hit = clusters.find(cl => Math.hypot(cl.px - cx, cl.py - cy) < clusterR2);
-      if (!hit || !hit.shots?.length) return;
-      const shot = hit.shots[0];
-      if (!shot.mid) return;
-      // If single goal in cluster, go straight to match; if multiple show tooltip menu
-      if (hit.shots.length === 1) {
-        nav('matches');
-        setTimeout(() => {
-          const matchId = shot.mid.replace(/[#]/g,'__');
-          const panel = document.getElementById('md-' + matchId);
-          if (panel) {
-            panel.style.display = '';
-            panel.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          }
-        }, 150);
-      } else {
-        // Multiple goals clustered — show a small popup listing them
-        const existing = document.getElementById('hmap-cluster-popup');
-        if (existing) existing.remove();
-        const popup = document.createElement('div');
-        popup.id = 'hmap-cluster-popup';
-        popup.style.cssText = `position:fixed;z-index:9999;background:var(--card);border:1px solid var(--border);border-radius:8px;padding:10px 12px;box-shadow:0 4px 16px rgba(0,0,0,.6);font-family:'Barlow Condensed',sans-serif;min-width:160px`;
-        popup.style.left = (ev.clientX + 10) + 'px';
-        popup.style.top  = (ev.clientY - 10) + 'px';
-        popup.innerHTML = `
-          <div style="font-size:.65rem;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:8px">${hit.shots.length} goals here</div>
-          ${hit.shots.map((s, i) => `
-            <div onclick="(function(){document.getElementById('hmap-cluster-popup')?.remove();nav('matches');setTimeout(()=>{const p=document.getElementById('md-${s.mid.replace(/[#]/g,'__')}');if(p){p.style.display='';p.scrollIntoView({behavior:'smooth',block:'center'})}},150)})()"
-              style="padding:5px 0;border-bottom:1px solid rgba(255,255,255,.06);cursor:pointer;font-size:.82rem;color:var(--text);display:flex;justify-content:space-between;gap:12px">
-              <span>${s.assister ? `${s.scorer} ← ${s.assister}` : s.scorer}</span>
-              <span style="color:var(--muted);font-size:.72rem">${s.time || s.half || ''}</span>
-            </div>`).join('')}
-        `;
-        document.body.appendChild(popup);
-        setTimeout(() => document.addEventListener('click', () => popup.remove(), { once: true }), 10);
-      }
-    });
+  // Interactive pills — hover shows goal info tooltip, click shows floating card
+  heatCanvas.style.cursor = 'crosshair';
+
+  // Remove old listeners by replacing with clone
+  const newCanvas = heatCanvas.cloneNode(true);
+  heatCanvas.parentNode.replaceChild(newCanvas, heatCanvas);
+  // Re-get reference after clone
+  const hc = document.getElementById('profile-heatmap');
+  // Copy cluster data to new canvas
+  hc._hmapClusters = heatCanvas._hmapClusters;
+  hc._hmapW = heatCanvas._hmapW;
+  hc._hmapH = heatCanvas._hmapH;
+
+  // Shared tooltip
+  let hmapTip = document.getElementById('hmap-pill-tip');
+  if (!hmapTip) {
+    hmapTip = document.createElement('div');
+    hmapTip.id = 'hmap-pill-tip';
+    hmapTip.style.cssText = 'position:fixed;z-index:9999;background:#0d1a0f;border:1px solid rgba(255,255,255,.15);border-radius:8px;padding:8px 12px;font-family:"Barlow Condensed",sans-serif;pointer-events:none;opacity:0;transition:opacity .1s;min-width:140px;box-shadow:0 4px 16px rgba(0,0,0,.6)';
+    document.body.appendChild(hmapTip);
   }
+
+  const getHit = (ev) => {
+    const clusters = hc._hmapClusters;
+    if (!clusters?.length) return null;
+    const r = hc.getBoundingClientRect();
+    const scaleX = (hc._hmapW || hc.offsetWidth) / r.width;
+    const scaleY = (hc._hmapH || hc.offsetHeight) / r.height;
+    const cx = (ev.clientX - r.left) * scaleX;
+    const cy = (ev.clientY - r.top)  * scaleY;
+    const clusterR2 = Math.max(14, (hc._hmapW||300) * 0.06);
+    return clusters.find(cl => Math.hypot(cl.px - cx, cl.py - cy) < clusterR2) || null;
+  };
+
+  hc.addEventListener('mousemove', ev => {
+    const hit = getHit(ev);
+    if (!hit || !hit.shots?.length) {
+      hmapTip.style.opacity = '0';
+      hc.style.cursor = 'crosshair';
+      return;
+    }
+    hc.style.cursor = 'pointer';
+    const isAssist = hmapType === 'assist';
+    const lines = hit.shots.map(s => {
+      const m = matchList.find(mx => mx.id === s.mid);
+      const dateStr = m?.date || s.mid.split('#')[0] || '';
+      if (isAssist) return `<div style="padding:2px 0;border-bottom:1px solid rgba(255,255,255,.06);font-size:.78rem"><span style="color:var(--amber,#f59e0b)">${s.time||''}</span> <span style="color:var(--text)">${s.scorer}</span> <span style="color:var(--muted);font-size:.68rem">· ${dateStr}</span></div>`;
+      return `<div style="padding:2px 0;border-bottom:1px solid rgba(255,255,255,.06);font-size:.78rem"><span style="color:var(--lime)">${s.time||''}</span> <span style="color:var(--text)">${s.scorer}${s.assister?' <span style="color:var(--muted)">← '+s.assister+'</span>':''}</span> <span style="color:var(--muted);font-size:.68rem">· ${dateStr}</span></div>`;
+    }).join('');
+    hmapTip.innerHTML = `
+      <div style="font-size:.62rem;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:6px">${hit.shots.length} ${isAssist ? 'assist' : 'goal'}${hit.shots.length !== 1 ? 's' : ''} · click to view</div>
+      ${lines}`;
+    const tx = ev.clientX + 14, ty = ev.clientY - 10;
+    const ow = hmapTip.offsetWidth || 160, oh = hmapTip.offsetHeight || 60;
+    hmapTip.style.left = (tx + ow > window.innerWidth  ? ev.clientX - ow - 8 : tx) + 'px';
+    hmapTip.style.top  = (ty + oh > window.innerHeight ? ev.clientY - oh - 5 : ty) + 'px';
+    hmapTip.style.opacity = '1';
+  });
+
+  hc.addEventListener('mouseleave', () => { hmapTip.style.opacity = '0'; hc.style.cursor = 'crosshair'; });
+
+  hc.addEventListener('click', ev => {
+    const hit = getHit(ev);
+    if (!hit || !hit.shots?.length) return;
+    // Remove any existing card
+    document.getElementById('hmap-goal-card')?.remove();
+    hmapTip.style.opacity = '0';
+    const isAssist = hmapType === 'assist';
+    const card = document.createElement('div');
+    card.id = 'hmap-goal-card';
+    card.style.cssText = 'position:fixed;z-index:9998;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;font-family:"Barlow Condensed",sans-serif;box-shadow:0 8px 32px rgba(0,0,0,.7);min-width:200px;max-width:280px';
+    const rows = hit.shots.map(s => {
+      const m = matchList.find(mx => mx.id === s.mid);
+      const dateStr = m?.date || '';
+      const scoreStr = m ? `${m.goalsA}–${m.goalsB}` : '';
+      const midKey = s.mid.replace(/[#]/g,'__');
+      return `<div style="padding:6px 0;border-bottom:1px solid rgba(255,255,255,.06)">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+          <div>
+            <span style="color:${isAssist?'var(--amber,#f59e0b)':'var(--lime)'};font-size:.82rem;font-weight:600">${s.time||s.half||'?'}</span>
+            <span style="color:var(--text);font-size:.82rem;margin-left:6px">${isAssist ? `${s.scorer}` : `${s.scorer}${s.assister?' ← '+s.assister:''}`}</span>
+          </div>
+          <div style="text-align:right">
+            <div style="font-size:.7rem;color:var(--muted)">${dateStr}</div>
+            <div style="font-size:.68rem;color:var(--muted)">${scoreStr}</div>
+          </div>
+        </div>
+        <button onclick="document.getElementById('hmap-goal-card')?.remove();openMatchPanel('${midKey}')"
+          style="margin-top:4px;font-size:.68rem;padding:3px 8px;border-radius:4px;border:1px solid var(--border);background:var(--card2);color:var(--muted);cursor:pointer;font-family:'Barlow Condensed',sans-serif">
+          View match →
+        </button>
+      </div>`;
+    }).join('');
+    card.innerHTML = `
+      <div style="font-size:.65rem;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:8px">${hit.shots.length} ${isAssist?'assist':'goal'}${hit.shots.length!==1?'s':''} from this zone</div>
+      ${rows}
+      <button onclick="document.getElementById('hmap-goal-card')?.remove()" style="margin-top:8px;width:100%;font-size:.7rem;padding:4px;border-radius:4px;border:1px solid var(--border);background:none;color:var(--muted);cursor:pointer;font-family:'Barlow Condensed',sans-serif">Close</button>`;
+    const r = hc.getBoundingClientRect();
+    const cx = ev.clientX, cy = ev.clientY;
+    document.body.appendChild(card);
+    const cw = card.offsetWidth, ch = card.offsetHeight;
+    card.style.left = (cx + cw + 16 > window.innerWidth  ? cx - cw - 8 : cx + 10) + 'px';
+    card.style.top  = (cy + ch + 10 > window.innerHeight ? cy - ch     : cy) + 'px';
+    // Close on outside click
+    setTimeout(() => document.addEventListener('click', function h(e) {
+      if (!card.contains(e.target)) { card.remove(); document.removeEventListener('click', h); }
+    }), 10);
+  });
 
   // Geometry stats
   const H = Math.round(W * 0.52);
