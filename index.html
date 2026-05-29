@@ -111,6 +111,7 @@ body::after{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;opac
 .tag-leader{background:rgba(240,192,64,.2);color:#f0c040;border:1px solid rgba(240,192,64,.4);font-weight:700}
 .tag-target{background:rgba(240,192,64,.18);color:#f0d070;border:1px solid rgba(240,192,64,.3)}
 .tag-wizard{background:rgba(57,211,83,.18);color:#70e890;border:1px solid rgba(57,211,83,.3)}
+.tag-xfactor{background:rgba(250,204,21,.15);color:#fbbf24;border:1px solid rgba(250,204,21,.45);font-weight:700;letter-spacing:.3px}
 .tag-workhorse{background:rgba(100,180,120,.18);color:#90d0a0;border:1px solid rgba(100,180,120,.3)}
 .tag-general{background:rgba(180,180,180,.12);color:#b0b8b0;border:1px solid rgba(180,180,180,.2)}
 
@@ -2793,6 +2794,7 @@ const TAG_DEFS = {
   'Shot Stopper':      { cls:'tag-enforcer',  tip:'Makes more saves per 55 minutes in goal than anyone — the busiest and most reliable keeper in rotation' },
   'Kingmaker':         { cls:'tag-wizard',    tip:'Their team\'s win rate is significantly higher in matches where they score — their goals change games more than anyone else\'s' },
   'Catalyst':          { cls:'tag-engine',    tip:'Defensive actions directly trigger goals more than anyone — a tackle or interception that immediately leads to their team scoring' },
+  'X-Factor':          { cls:'tag-wizard',    tip:'The most unpredictable player in the group — high variance combined with high average output means they can be quiet for 40 minutes then win a game on their own' },
   'Stone Wall':        { cls:'tag-enforcer',  tip:'The only player who ranks in the top 3 for tackles, interceptions AND blocks simultaneously — a complete defensive force' },
   'Ball Magnet':       { cls:'tag-workhorse', tip:'Highest combined shots and key passes per game — the player most involved in the attacking phase, regardless of the end result' },
 
@@ -3568,7 +3570,18 @@ function buildTagAuction() {
   const shotTags = {};
   Object.entries(shotTagWinners).forEach(([label, p]) => { shotTags[p] = label; });
 
-  return { playerTags, shotTags };
+  // ── X-Factor identifier — separate from auction, one winner ─────────────
+  // stdDev × gpg: high variance AND high average = unpredictable match-winner
+  let xFactorWinner = null;
+  let xFactorBest = 0;
+  players.forEach(p => {
+    const m = metrics[p];
+    if (!m || m.ps.games < 5) return;
+    const score = (m.stdDev || 0) * (m.gpg || 0) * 3;
+    if (score > xFactorBest) { xFactorBest = score; xFactorWinner = p; }
+  });
+
+  return { playerTags, shotTags, xFactorWinner };
 }
 
 // ── Shot geometry tag winners — separate from main auction pool ────────────
@@ -3582,7 +3595,8 @@ function getFifaTags(s, cs) {
 
   if (!_tagCache) _tagCache = buildTagAuction();
 
-  const { playerTags, shotTags } = _tagCache;
+  const { playerTags, shotTags, xFactorWinner } = _tagCache;
+  const isXFactor = s.player === xFactorWinner;
 
   // Build the base 2 auction tags
   const cachedLabels = playerTags[s.player] || [];
@@ -3699,6 +3713,16 @@ function getFifaTags(s, cs) {
   if (shotLabel) {
     const def = TAG_DEFS[shotLabel];
     if (def) result.push({ label: shotLabel, cls: def.cls, tip: def.tip, isShotTag: true });
+  }
+
+  // Append X-Factor as a special identifier if this player is the winner
+  if (isXFactor) {
+    result.push({
+      label: '⚡ X-Factor',
+      cls: 'tag-xfactor',
+      tip: TAG_DEFS['X-Factor']?.tip || 'The most unpredictable match-winner in the group',
+      isXFactor: true,
+    });
   }
 
   return result;
@@ -3963,6 +3987,17 @@ function renderSeasonSummary() {
     return score;
   };
 
+  // X-Factor: highest variance × output — unpredictable match-winner
+  const xFactorRaceScore = p => {
+    const ps = playerStats[p.player];
+    if (!ps || ps.games < 5) return -Infinity;
+    const perGame = ps.matches.filter(r=>r.half==='FULL').map(r=>n(r.goals));
+    if (perGame.length < 3) return -Infinity;
+    const mean = perGame.reduce((s,v)=>s+v,0)/perGame.length;
+    const stdDev = Math.sqrt(perGame.reduce((s,v)=>s+(v-mean)**2,0)/perGame.length);
+    return parseFloat((stdDev * mean * 3).toFixed(2));
+  };
+
   // Catalyst: most defensive chains (tackle/interception → goal within 30s) per game
   const catalystScore = p => {
     const ts = getPlayerEventStats(p.player);
@@ -4005,6 +4040,7 @@ function renderSeasonSummary() {
       fmt: v => v.toFixed(1)+' saves/55', min: 1 },
     { label:'🤝 Team Player Race',        desc:'Win rate %',                                               fn: winRateScore,      fmt: v => Math.round(v)+'%' },
     { label:'⏱ Clutch Player Race',       desc:'Late goals (47+ min) — winning/decisive goals weighted more', fn: clutchPlayerScore, fmt: v => v.toFixed(1)+' pts' },
+    { label:'⚡ X-Factor Race',          desc:'Variance × goals per game — the most unpredictable match-winner. Can be invisible then score 5. High floor players won\'t win this.', fn: xFactorRaceScore,  fmt: v => v.toFixed(2)+' pts', min: 5 },
     { label:'⚡ Catalyst Race',           desc:'Tackles/interceptions that led to a goal within 15 seconds — defensive contributions that directly triggered goals (needs event log data)', fn: catalystScore,     fmt: v => v.toFixed(1)+'/game', min: 1 },
     { label:'🔥 Firefighter Race',        desc:'Avg stats in 90s after team concedes — who steps up when the team is under pressure (needs event log data)', fn: firefighterScore,  fmt: v => v.toFixed(1)+' stats/opp', min: 2 },
     { label:'💪 Never Say Die Race',      desc:'% of total output produced while the team is trailing — who fights hardest when chasing (needs event log data)', fn: neverSayDieScore,  fmt: v => Math.round(v)+'% trailing', min: 2 },
@@ -4655,9 +4691,20 @@ function hmapRender(canvas, shots, opts={}) {
   validShots.forEach(shot => {
     const px = shot.sx * W, py = shot.sy * H;
     const existing = clusters.find(cl => Math.hypot(cl.px - px, cl.py - py) < clusterR);
-    if (existing) { existing.count++; existing.px = (existing.px*(existing.count-1)+px)/existing.count; existing.py = (existing.py*(existing.count-1)+py)/existing.count; }
-    else clusters.push({ px, py, count: 1 });
+    if (existing) {
+      existing.count++;
+      existing.px = (existing.px*(existing.count-1)+px)/existing.count;
+      existing.py = (existing.py*(existing.count-1)+py)/existing.count;
+      existing.shots.push(shot);
+    } else {
+      clusters.push({ px, py, count: 1, shots: [shot] });
+    }
   });
+
+  // Store clusters on canvas for click detection
+  canvas._hmapClusters = clusters;
+  canvas._hmapW = W;
+  canvas._hmapH = H;
 
   const baseFS = Math.max(8, Math.round(W * 0.026)) * pillSize;
   const accentColor = markerType === 'assist' ? 'rgba(251,191,36,' : 'rgba(255,255,255,';
@@ -6642,7 +6689,7 @@ function renderPlayers() {
         ${trendMomHtml}
         ${streakHtml(p)}
       </div>
-      <span class="games-badge">${p.games} games${p.attendanceRate != null && p.attendanceGames > 0 ? ` · ${p.attendanceRate}% attendance` : ''}</span>
+      <span class="games-badge">${p.games} games played</span>
       ${wl}
     </div>`;
   }).join('');
@@ -6779,14 +6826,19 @@ function renderProfileHeatmap(name, hmapType) {
   const heatCanvas = document.getElementById('profile-heatmap');
   if (!section || !heatCanvas) return;
 
-  // Collect shots and assists separately
+  // Collect shots and assists separately — include metadata for clickable pills
   const shotShots = [], assistShots = [];
-  Object.values(goalCombos).forEach(data => {
-    [...(data.h1||[]), ...(data.h2||[])].forEach(g => {
-      if (!g.isOG) {
-        if (g.scorer === name && g.sx != null && g.sy != null) shotShots.push({ sx: g.sx, sy: g.sy });
-        if (g.assister === name && g.ax != null && g.ay != null) assistShots.push({ sx: g.ax, sy: g.ay });
-      }
+  Object.entries(goalCombos).forEach(([mid, data]) => {
+    ['h1','h2'].forEach(hk => {
+      (data[hk]||[]).forEach((g, idx) => {
+        if (g.isOG) return;
+        if (g.scorer === name && g.sx != null && g.sy != null) {
+          shotShots.push({ sx: g.sx, sy: g.sy, mid, half: hk==='h1'?'1H':'2H', idx, scorer: g.scorer, assister: g.assister, time: g.time });
+        }
+        if (g.assister === name && g.ax != null && g.ay != null) {
+          assistShots.push({ sx: g.ax, sy: g.ay, mid, half: hk==='h1'?'1H':'2H', idx, scorer: g.scorer, assister: g.assister, time: g.time });
+        }
+      });
     });
   });
 
@@ -6834,6 +6886,58 @@ function renderProfileHeatmap(name, hmapType) {
     pillSize,
     showNumbers,
   });
+
+  // Make pills clickable — navigate to the match containing that goal
+  if (!heatCanvas._hmapClickBound) {
+    heatCanvas._hmapClickBound = true;
+    heatCanvas.style.cursor = 'pointer';
+    heatCanvas.addEventListener('click', ev => {
+      const clusters = heatCanvas._hmapClusters;
+      if (!clusters?.length) return;
+      const r = heatCanvas.getBoundingClientRect();
+      const scaleX = (heatCanvas._hmapW || heatCanvas.offsetWidth) / r.width;
+      const scaleY = (heatCanvas._hmapH || heatCanvas.offsetHeight) / r.height;
+      const cx = (ev.clientX - r.left) * scaleX;
+      const cy = (ev.clientY - r.top) * scaleY;
+      const clusterR2 = Math.max(10, (heatCanvas._hmapW||300) * 0.055);
+      const hit = clusters.find(cl => Math.hypot(cl.px - cx, cl.py - cy) < clusterR2);
+      if (!hit || !hit.shots?.length) return;
+      const shot = hit.shots[0];
+      if (!shot.mid) return;
+      // If single goal in cluster, go straight to match; if multiple show tooltip menu
+      if (hit.shots.length === 1) {
+        nav('matches');
+        setTimeout(() => {
+          const matchId = shot.mid.replace(/[#]/g,'__');
+          const panel = document.getElementById('md-' + matchId);
+          if (panel) {
+            panel.style.display = '';
+            panel.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }
+        }, 150);
+      } else {
+        // Multiple goals clustered — show a small popup listing them
+        const existing = document.getElementById('hmap-cluster-popup');
+        if (existing) existing.remove();
+        const popup = document.createElement('div');
+        popup.id = 'hmap-cluster-popup';
+        popup.style.cssText = `position:fixed;z-index:9999;background:var(--card);border:1px solid var(--border);border-radius:8px;padding:10px 12px;box-shadow:0 4px 16px rgba(0,0,0,.6);font-family:'Barlow Condensed',sans-serif;min-width:160px`;
+        popup.style.left = (ev.clientX + 10) + 'px';
+        popup.style.top  = (ev.clientY - 10) + 'px';
+        popup.innerHTML = `
+          <div style="font-size:.65rem;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:8px">${hit.shots.length} goals here</div>
+          ${hit.shots.map((s, i) => `
+            <div onclick="(function(){document.getElementById('hmap-cluster-popup')?.remove();nav('matches');setTimeout(()=>{const p=document.getElementById('md-${s.mid.replace(/[#]/g,'__')}');if(p){p.style.display='';p.scrollIntoView({behavior:'smooth',block:'center'})}},150)})()"
+              style="padding:5px 0;border-bottom:1px solid rgba(255,255,255,.06);cursor:pointer;font-size:.82rem;color:var(--text);display:flex;justify-content:space-between;gap:12px">
+              <span>${s.assister ? `${s.scorer} ← ${s.assister}` : s.scorer}</span>
+              <span style="color:var(--muted);font-size:.72rem">${s.time || s.half || ''}</span>
+            </div>`).join('')}
+        `;
+        document.body.appendChild(popup);
+        setTimeout(() => document.addEventListener('click', () => popup.remove(), { once: true }), 10);
+      }
+    });
+  }
 
   // Geometry stats
   const H = Math.round(W * 0.52);
@@ -7522,7 +7626,7 @@ function renderProfile(name) {
         return `<div style="display:flex;align-items:center;gap:8px;padding:3px 0;font-size:.72rem;border-bottom:1px solid rgba(255,255,255,.04)">
           <span style="color:var(--muted);min-width:70px">${d.date||'—'}</span>
           <span style="color:var(--text);min-width:14px;font-weight:600">${d.goals}</span>
-          <span style="color:var(--muted);font-size:.65rem;flex:1">opp conceded ${d.oppConceded != null ? d.oppConceded+'g that game' : '—'}</span>
+          <span style="color:var(--muted);font-size:.65rem;flex:1">opposition conceded ${d.oppConceded != null ? d.oppConceded+'g · '+(d.oppConceded <= 3 ? 'strong defence' : d.oppConceded <= 6 ? 'average defence' : 'weak defence') : '—'}</span>
           <span style="color:${wCol};min-width:28px;text-align:right;font-size:.7rem" data-tip="Quality multiplier — league avg ${sr.leagueAvg} ÷ opp avg ${d.oppAvgConceded}">${d.weight != null ? '×'+d.weight : ''}</span>
           <span style="color:var(--lime);min-width:32px;text-align:right;font-weight:600">${d.qualityGoals}</span>
         </div>`;
@@ -7530,7 +7634,7 @@ function renderProfile(name) {
       return `<div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:18px;margin-bottom:14px">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px">
           <div style="font-family:'Barlow Condensed',sans-serif;font-size:.7rem;letter-spacing:2px;text-transform:uppercase;color:var(--muted)">⚽ Striker Rating</div>
-          <div style="font-size:.68rem;color:var(--muted)" data-tip="Quality-adjusted goals per game over the last ${sr.games} game${sr.games!==1?'s':''} — weighted by how stingy the opposition defence was. League avg conceded: ${sr.leagueAvg}g/game. Group 85th percentile (= 10): ${sr.scale} adj goals/game">Last ${sr.games} game${sr.games!==1?'s':''} · scale: ${sr.scale} = 10</div>
+          <div style="font-size:.68rem;color:var(--muted)" data-tip="Quality-adjusted goals per game over the last ${sr.games} game${sr.games!==1?'s':''} — weighted by how strong the opposition defence was. League avg conceded: ${sr.leagueAvg}g/game. Group 85th percentile (= 10): ${sr.scale} adj goals/game">Last ${sr.games} game${sr.games!==1?'s':''} · scale: ${sr.scale} = 10</div>
         </div>
         <div style="display:flex;align-items:center;gap:16px;margin-bottom:14px">
           <div>
@@ -7542,7 +7646,7 @@ function renderProfile(name) {
               <div style="height:100%;width:${barW}%;background:${ratingCol};border-radius:3px;transition:width .4s"></div>
             </div>
             <div style="font-size:.7rem;color:var(--muted)">${sr.avgQualityGoals.toFixed(2)} quality-adjusted goals/game</div>
-            <div style="font-size:.65rem;color:var(--muted);margin-top:2px">Scoring against stronger defences scores higher · max 10</div>
+            <div style="font-size:.65rem;color:var(--muted);margin-top:2px">Goals against stronger defences score higher · max 10</div>
           </div>
         </div>
         ${adminMode ? `<div>
