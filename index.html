@@ -3582,7 +3582,12 @@ function buildTagAuction() {
     if (perGame.length < 3) return;
     const mean = perGame.reduce((s,v)=>s+v,0) / perGame.length;
     const goalStdDev = Math.sqrt(perGame.reduce((s,v)=>s+(v-mean)**2,0) / perGame.length);
-    const score = goalStdDev * (m.gpg || 0) * 3;
+    // Coefficient of variation (stdDev/mean) = unpredictability relative to own baseline
+    // Multiply by min(gpg, leagueAvg) so low scorers can't win on variance alone
+    const allGpg = Object.values(playerStats).map(ps2 => ps2.goals / Math.max(ps2.games,1));
+    const leagueAvgGpg = allGpg.reduce((s,v)=>s+v,0) / allGpg.length;
+    const cv = mean > 0 ? goalStdDev / mean : 0;
+    const score = cv * Math.min(mean, leagueAvgGpg) * 10;
     if (score > xFactorBest) { xFactorBest = score; xFactorWinner = p; }
   });
 
@@ -3995,17 +4000,17 @@ function renderSeasonSummary() {
   // X-Factor: use same formula as buildTagAuction to guarantee consistency
   const xFactorRaceScore = p => {
     if (!_tagCache) _tagCache = buildTagAuction();
-    const { xFactorWinner } = _tagCache;
-    // Build score the same way buildTagAuction does — via the metrics object
     const ps = playerStats[p.player];
     if (!ps || ps.games < 5) return -Infinity;
-    const g = Math.max(ps.games, 1);
-    const gpg = ps.goals / g;
     const perGame = ps.matches.filter(r => r.half === 'FULL').map(r => n(r.goals));
     if (perGame.length < 3) return -Infinity;
     const mean = perGame.reduce((s,v)=>s+v,0) / perGame.length;
+    if (mean === 0) return -Infinity;
     const stdDev = Math.sqrt(perGame.reduce((s,v)=>s+(v-mean)**2,0) / perGame.length);
-    return parseFloat((stdDev * gpg * 3).toFixed(2));
+    const allGpg = Object.values(playerStats).map(ps2 => ps2.goals / Math.max(ps2.games,1));
+    const leagueAvgGpg = allGpg.reduce((s,v)=>s+v,0) / allGpg.length;
+    const cv = stdDev / mean;
+    return parseFloat((cv * Math.min(mean, leagueAvgGpg) * 10).toFixed(2));
   };
 
   // Catalyst: most defensive chains (tackle/interception → goal within 30s) per game
