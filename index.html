@@ -2778,8 +2778,8 @@ const TAG_DEFS = {
 
   // ── Shot geometry ─────────────────────────────────────────────────────────
   'Long Ranger':       { cls:'tag-enforcer',  tip:'Scores goals from further out than anyone — based on mapped goal locations, their average scoring position is the deepest in the group' },
-  'Sharp Angle':       { cls:'tag-striker',   tip:'Scored from the sharpest average angle of anyone in the group — consistently finds the net from positions where others don\'t even attempt a shot' },
-  'Corner Pocket':     { cls:'tag-striker',   tip:'Scored the single most acute-angled goal in the group — one goal from a tighter angle than anyone else has ever managed' },
+  'Sharp Angle':       { cls:'tag-striker',   tip:'Scores from tight angles more consistently than anyone — their average goal angle across all mapped goals is the most acute in the group' },
+  'Corner Pocket':     { cls:'tag-striker',   tip:'Scored the single most impossible angled goal ever recorded — a one-off moment no one else has come close to replicating' },
   'Sniper':            { cls:'tag-striker',   tip:'Scored the single longest goal in the group — one goal from further out than anyone else has ever managed' },
   'Wide Wizard':       { cls:'tag-wizard',    tip:'Creates from wider positions than any other assister — delivers from the flanks where others can\'t' },
   'Deep Creator':      { cls:'tag-engine',    tip:'Assists from deeper than anyone — builds attacks from further out, covering more of the pitch when setting up goals' },
@@ -6262,14 +6262,6 @@ function renderMatches() {
         </div>
       </div>
       <div class="match-detail-panel" id="md-${m.id.replace(/[#]/g,'__')}" onclick="event.stopPropagation()">
-        ${adminMode ? `
-        <div style="display:flex;justify-content:flex-end;padding:10px 14px 0">
-          <button onclick="copyMatchReport('${m.id.replace(/[#]/g,'__')}')"
-            style="font-family:'Barlow Condensed',sans-serif;font-size:.78rem;letter-spacing:.5px;padding:5px 12px;border-radius:6px;border:1px solid var(--border);background:var(--card2);color:var(--muted);cursor:pointer;display:flex;align-items:center;gap:5px"
-            id="report-btn-${m.id.replace(/[#]/g,'__')}">
-            📋 Copy Match Report
-          </button>
-        </div>` : ''}
 
         <!-- Goal Timeline -->
         ${(() => {
@@ -6804,7 +6796,7 @@ function renderProfileTimeStats(name) {
   if (stam && stam.matches >= 2) {
     const stamCol = stam.score >= 7 ? 'var(--green)' : stam.score >= 5 ? 'var(--lime)' : stam.score >= 3 ? 'var(--amber,#f59e0b)' : 'rgba(248,113,113,.8)';
     pills.push(`<div style="background:var(--card2);border:1px solid var(--border);border-radius:8px;padding:8px 10px;text-align:center;cursor:default"
-      data-tip="Computed stamina — how well this player maintains output in late 2H vs early 1H. Sustained: ${stam.sustained}% of early activity. Consistency: ${stam.consistency}%. From ${stam.matches} matches.">
+      data-tip="Computed stamina — outfield activity only (GK spell windows are excluded). Compares late 2H output vs early 1H. Sustained: ${stam.sustained}% of early activity maintained. Consistency: ${stam.consistency}%.">
       <div style="font-size:.6rem;letter-spacing:1.2px;text-transform:uppercase;color:var(--muted);margin-bottom:3px">💪 Stamina</div>
       <div style="font-family:'Bebas Neue',sans-serif;font-size:1.3rem;color:${stamCol};line-height:1">${stam.score}<span style="font-size:.7rem;opacity:.6">/10</span></div>
       <div style="font-size:.6rem;color:${stamCol};margin-top:2px">${stam.label}</div>
@@ -8660,23 +8652,48 @@ function computeStaminaFromEvents(playerName) {
     const { buckets, htBucket } = ps.fatigue;
     if (!htBucket || htBucket < 2) return;
 
-    // Split into 1H and 2H buckets
-    const h1 = buckets.slice(0, htBucket);
-    const h2 = buckets.slice(htBucket);
+    // Zero out buckets that fall within GK spells — in goal = near-zero outfield activity.
+    // GK spell times are raw absolute seconds; bucket index = floor(t / 300).
+    const cleanBuckets = [...buckets];
+    (ps.gkSpells || []).forEach(spell => {
+      const fromBucket = Math.floor(spell.fromSecs / 300);
+      const toBucket   = Math.floor((spell.toSecs === 9999 ? spell.fromSecs + spell.durSecs : spell.toSecs) / 300);
+      for (let i = fromBucket; i <= toBucket && i < cleanBuckets.length; i++) {
+        cleanBuckets[i] = 0;
+      }
+    });
+
+    const outfieldPct = totalMatchSecs > 0 ? (totalMatchSecs - gkSecs) / totalMatchSecs : 1;
+
+    // Split into 1H and 2H buckets using cleaned data
+    const h1 = cleanBuckets.slice(0, htBucket);
+    const h2 = cleanBuckets.slice(htBucket);
     if (!h1.length || !h2.length) return;
 
-    // Early = first third of 1H, Late = last third of 2H
-    const h1Early = h1.slice(0, Math.max(1, Math.floor(h1.length / 3)));
-    const h2Late  = h2.slice(-Math.max(1, Math.floor(h2.length / 3)));
+    // Find the first and last buckets with meaningful outfield activity
+    // (can't just use first/last third if player was in goal during those windows)
+    const allOutfield = cleanBuckets.map((v, i) => ({ v, i })).filter(b => b.v > 0);
+    if (allOutfield.length < 3) return; // not enough outfield data
 
-    const avgEarly = h1Early.reduce((s,v)=>s+v,0) / h1Early.length;
-    const avgLate  = h2Late .reduce((s,v)=>s+v,0) / h2Late.length;
-    if (avgEarly < 0.5) return; // player barely active — skip
+    // Early = avg of first 30% of active outfield buckets
+    // Late  = avg of last 30% of active outfield buckets
+    const slice = Math.max(1, Math.floor(allOutfield.length * 0.3));
+    const earlyBuckets = allOutfield.slice(0, slice);
+    const lateBuckets  = allOutfield.slice(-slice);
 
-    const sustained = avgLate / avgEarly; // 1.0 = same level, 0.5 = half as active
+    const avgEarly = earlyBuckets.reduce((s,b)=>s+b.v,0) / earlyBuckets.length;
+    const avgLate  = lateBuckets .reduce((s,b)=>s+b.v,0) / lateBuckets.length;
+    if (avgEarly < 0.1) return; // truly no outfield activity
 
-    // Consistency: std dev / mean of all buckets (coefficient of variation, inverted)
-    const allActive = buckets.filter(v => v > 0);
+    // Raw sustained: how well late outfield output matches early outfield output
+    // Then penalise by outfield fraction — a player who rested 25 mins in goal
+    // had an advantage over someone outfield the whole game. A player outfield
+    // 50% of the time gets sustained × 0.5 so the scores are comparable.
+    const rawSustained = avgLate / avgEarly;
+    const sustained = rawSustained * outfieldPct;
+
+    // Consistency using only outfield buckets
+    const allActive = allOutfield.map(b => b.v);
     if (allActive.length < 3) return;
     const mean = allActive.reduce((s,v)=>s+v,0) / allActive.length;
     const variance = allActive.reduce((s,v)=>s+(v-mean)**2,0) / allActive.length;
