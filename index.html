@@ -582,6 +582,7 @@ canvas.spider{display:block;margin:0 auto}
   <div class="toolbar">
     <input class="tb-input" id="player-search" placeholder="Search player…" oninput="renderPlayers()">
     <select class="tb-select" id="player-sort" onchange="renderPlayers()" style="max-width:200px">
+      <option value="alpha" selected>Sort: A–Z</option>
       <option value="rating" id="sort-rating">Sort: Rating</option>
       <option value="goals">Sort: Goals</option>
       <option value="assists">Sort: Assists</option>
@@ -655,9 +656,9 @@ canvas.spider{display:block;margin:0 auto}
     <button class="btn-primary" onclick="autoBalance()">⚖ Smart Balance</button>
     <button class="btn-secondary" onclick="clearTeams()">Clear</button>
     <button id="streak-aug-btn" onclick="toggleStreakAugment()"
-      style="padding:6px 14px;border-radius:7px;cursor:pointer;font-family:'Barlow Condensed',sans-serif;font-size:.82rem;letter-spacing:.5px;text-transform:uppercase;border:1px solid var(--lime);background:rgba(168,224,80,.1);color:var(--lime);transition:all .15s"
+      style="padding:6px 14px;border-radius:7px;cursor:pointer;font-family:'Barlow Condensed',sans-serif;font-size:.82rem;letter-spacing:.5px;text-transform:uppercase;border:1px solid var(--border);background:transparent;color:var(--muted);transition:all .15s"
       title="Adjusts player ratings based on win rate — high win rate gets a small nerf, low win rate gets a small buff">
-      ⚖ Win Rate Balance: ON
+      ⚖ Win Rate Balance: OFF
     </button>
     <div id="winrate-strength-wrap" style="display:flex;align-items:center;gap:6px;font-family:'Barlow Condensed',sans-serif;font-size:.78rem;color:var(--muted)">
       <span style="white-space:nowrap">Strength</span>
@@ -4162,36 +4163,62 @@ function renderSeasonSummary() {
 function copyMatchReport(matchIdRaw) {
   const mid = matchIdRaw.replace(/__/g, '#');
   const m = matchList.find(mx => mx.id === mid);
-  const combos = goalCombos[mid];
-  if (!m || !combos) { alert('No goal data found for this match.'); return; }
+  if (!m) { alert('Match not found.'); return; }
 
-  const toSecs = t => { if (!t) return 0; const p = t.split(':').map(Number); return p[0]*60+(p[1]||0); };
+  const combos = goalCombos[mid];
+  const toSecs = t => {
+    if (!t) return 0;
+    const parts = t.split(':');
+    if (parts.length === 3) return parseInt(parts[0])*60 + parseInt(parts[1]) + parseFloat(parts[2])/100;
+    return parseInt(parts[0])*60 + parseFloat(parts[1]||0);
+  };
+
   const scorerTeam = {};
   [...m.teamA, ...m.teamB].forEach(r => { scorerTeam[r.player] = r.team; });
 
-  // Build sorted goal list with half, time, scorer, assister, team
-  const allGoals = [
-    ...(combos.h1||[]).map(g => ({ ...g, half: '1H' })),
-    ...(combos.h2||[]).map(g => ({ ...g, half: '2H' })),
-  ].filter(g => g.time).sort((a, b) => {
-    if (a.half !== b.half) return a.half < b.half ? -1 : 1;
-    return toSecs(a.time) - toSecs(b.time);
-  });
+  let allGoals = [];
+
+  if (combos && ((combos.h1||[]).length + (combos.h2||[]).length) > 0) {
+    // Use goalCombos (has timestamps and assister)
+    allGoals = [
+      ...(combos.h1||[]).map(g => ({ ...g, half: '1H' })),
+      ...(combos.h2||[]).map(g => ({ ...g, half: '2H' })),
+    ].filter(g => g.time).sort((a, b) => {
+      if (a.half !== b.half) return a.half < b.half ? -1 : 1;
+      return toSecs(a.time) - toSecs(b.time);
+    });
+  } else {
+    // Fall back to event log
+    try {
+      const logs = JSON.parse(localStorage.getItem('aero_event_logs') || '{}');
+      const log = logs[mid];
+      if (log?.events) {
+        allGoals = log.events
+          .filter(e => e.event === 'Goals')
+          .map(e => ({ scorer: e.player, assister: e.assistBy || '', time: e.ts, half: e.half, isOG: false }))
+          .filter(g => g.time)
+          .sort((a, b) => {
+            if (a.half !== b.half) return a.half < b.half ? -1 : 1;
+            return toSecs(a.time) - toSecs(b.time);
+          });
+      }
+    } catch(e) {}
+  }
+
+  if (!allGoals.length) { alert('No goal data found for this match — make sure goals have been imported or timestamps recorded.'); return; }
+
+  const cleanTime = t => {
+    if (!t) return '';
+    const parts = t.split(':');
+    if (parts.length === 3) return `${parts[0]}:${parts[1]}`;
+    return parts[0] + ':' + (parts[1]||'00').replace(/\.\d+$/,'').padStart(2,'0');
+  };
 
   const lines1H = [], lines2H = [];
   allGoals.forEach(g => {
-    const team = resolveGoalTeam(g, scorerTeam, m.swappedPlayers, g.half);
     const scorer = g.isOG ? 'Own Goal' : g.scorer;
     const assist = g.assister ? ` (${g.assister})` : '';
-    // Clean timestamp: strip decimal seconds and centiseconds
-    // "30:26.2" → "30:26", "24:08:00" → "24:08", "1:32" → "1:32"
-    const rawTime = g.time || '';
-    const cleanTime = (() => {
-      const parts = rawTime.split(':');
-      if (parts.length === 3) return `${parts[0]}:${parts[1]}`; // MM:SS:cc → MM:SS
-      return parts[0] + ':' + (parts[1] || '00').replace(/\.\d+$/, '').padStart(2,'0'); // MM:SS.d → MM:SS
-    })();
-    const line = `${cleanTime} ${scorer}${assist}`;
+    const line = `${cleanTime(g.time)} ${scorer}${assist}`;
     if (g.half === '1H') lines1H.push(line);
     else lines2H.push(line);
   });
@@ -6591,7 +6618,7 @@ function toggleMatchDetail(id) {
 // =====================================================================
 function renderPlayers() {
   const q = (document.getElementById('player-search')?.value || '').toLowerCase();
-  let sort = document.getElementById('player-sort')?.value || 'rating';
+  let sort = document.getElementById('player-sort')?.value || 'alpha';
   // Show/hide admin-only sort options
   ['sort-rating','sort-enforcer','sort-stamina'].forEach(id => {
     const el = document.getElementById(id);
@@ -6624,6 +6651,7 @@ function renderPlayers() {
   list.sort((a, b) => {
     if (sort === 'enforcer')     return n(customStats[b.player]?.enforcer) - n(customStats[a.player]?.enforcer);
     if (sort === 'stamina')      return n(customStats[b.player]?.stamina)  - n(customStats[a.player]?.stamina);
+    if (sort === 'alpha')        return a.player.localeCompare(b.player);
     if (sort === 'clutch_event') return (b._clutchEvent  ?? -1) - (a._clutchEvent  ?? -1);
     if (sort === 'second_half')  return (b._secondHalf   ?? -1) - (a._secondHalf   ?? -1);
     if (sort === 'pressure_resp')return (b._pressureResp ?? -1) - (a._pressureResp ?? -1);
@@ -8793,7 +8821,7 @@ function teamDimensions(team) {
   return { attack, defense, playmaking, gk, enforcer, synergy: avgSynergy, synergyPairs };
 }
 
-let streakAugmentEnabled = true;
+let streakAugmentEnabled = false;
 let winRateAugStrength = 0.20; // max modifier — 0.20 = ±20% rating adjustment
 
 function toggleStreakAugment() {
