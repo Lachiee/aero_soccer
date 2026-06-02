@@ -8652,21 +8652,36 @@ function computeStaminaFromEvents(playerName) {
     const { buckets, htBucket } = ps.fatigue;
     if (!htBucket || htBucket < 2) return;
 
+    const halfDur = log.timeStats?.halfDur || {};
+    const totalMatchSecs = (halfDur['1H'] || 0) + Math.max(0, (halfDur['2H'] || 0) - (halfDur['1H'] || 0));
+    const halfEndSecs = {
+      '1H': halfDur['1H'] || 1800,
+      '2H': halfDur['2H'] || 3600,
+    };
+
     // Zero out buckets that fall within GK spells — in goal = near-zero outfield activity.
-    // GK spell times are raw absolute seconds; bucket index = floor(t / 300).
+    // Cap spell toSecs against halfDur to fix stale stored data (toSecs > match end).
     const cleanBuckets = [...buckets];
     (ps.gkSpells || []).forEach(spell => {
+      const halfEnd = halfEndSecs[spell.half] || totalMatchSecs;
+      const rawTo = spell.toSecs === 9999 ? halfEnd : Math.min(spell.toSecs, halfEnd);
       const fromBucket = Math.floor(spell.fromSecs / 300);
-      const toBucket   = Math.floor((spell.toSecs === 9999 ? spell.fromSecs + spell.durSecs : spell.toSecs) / 300);
+      const toBucket   = Math.floor(rawTo / 300);
       for (let i = fromBucket; i <= toBucket && i < cleanBuckets.length; i++) {
         cleanBuckets[i] = 0;
       }
     });
 
-    const halfDur = log.timeStats?.halfDur || {};
-    const totalMatchSecs = (halfDur['1H'] || 0) + Math.max(0, (halfDur['2H'] || 0) - (halfDur['1H'] || 0));
-    const gkSecs = ps.gkTimeSecs || 0;
-    const outfieldPct = totalMatchSecs > 0 ? Math.min(1, Math.max(0, (totalMatchSecs - gkSecs) / totalMatchSecs)) : 1;
+    // Recompute corrected gkSecs from capped spells
+    let correctedGkSecs = 0;
+    (ps.gkSpells || []).forEach(spell => {
+      const halfEnd = halfEndSecs[spell.half] || totalMatchSecs;
+      const rawTo = spell.toSecs === 9999 ? halfEnd : Math.min(spell.toSecs, halfEnd);
+      correctedGkSecs += Math.max(0, rawTo - spell.fromSecs);
+    });
+
+    // Skip matches with genuinely invalid data (corrected gkSecs still exceeds match)
+    if (correctedGkSecs > totalMatchSecs * 1.05) return;
 
     // Split into 1H and 2H buckets using cleaned data
     const h1 = cleanBuckets.slice(0, htBucket);
@@ -8688,12 +8703,8 @@ function computeStaminaFromEvents(playerName) {
     const avgLate  = lateBuckets .reduce((s,b)=>s+b.v,0) / lateBuckets.length;
     if (avgEarly < 0.1) return; // truly no outfield activity
 
-    // Raw sustained: how well late outfield output matches early outfield output
-    // Then penalise by outfield fraction — a player who rested 25 mins in goal
-    // had an advantage over someone outfield the whole game. A player outfield
-    // 50% of the time gets sustained × 0.5 so the scores are comparable.
     const rawSustained = avgLate / avgEarly;
-    const sustained = rawSustained * outfieldPct;
+    const sustained = rawSustained; // GK buckets zeroed above, so this is pure outfield comparison
 
     // Consistency using only outfield buckets
     const allActive = allOutfield.map(b => b.v);
@@ -10099,9 +10110,11 @@ function computeAnalytics() {
 
     // Consistency score: 1 - (stddev of per-game MVP scores / mean), scaled 0-100
     const rowScores = p.matches.map(r => {
-      const m = matchList.find(mx => mx.id === r.match_id);
-      const won = m ? r.team === m.winnerTeam : false;
-      return 4*n(r.goals) + 3*n(r.assists) + 0.5*n(r.key_passes) + (won ? 3 : 0);
+      const w = mvpWeights;
+      return w.goals*n(r.goals) + w.assists*n(r.assists) + w.key_passes*n(r.key_passes)
+           + w.tackles*n(r.tackles) + w.interceptions*n(r.interceptions) + w.blocks*n(r.blocks)
+           + w.goalkeeper_saves*n(r.goalkeeper_saves) + w.shots_on_target*n(r.shots_on_target)
+           + w.shots_off_target*n(r.shots_off_target) + w.nutmegs*n(r.nutmegs) + w.post*n(r.post);
     });
     if (rowScores.length < 2) { p.consistency = 100; }
     else {
@@ -10111,13 +10124,14 @@ function computeAnalytics() {
       p.consistency = Math.max(0,Math.round((1-Math.min(cv,1))*100));
     }
 
-    // Best game by MVP score — same weights as MVP Race
-    // goals×4, assists×3, key_passes×0.5, +3 if won that game
+    // Best game by MVP score — same weights as match history MVP
     let bestScore=-1, bestRow=null, maxGoals=0;
     p.matches.forEach(r=>{
-      const m = matchList.find(mx => mx.id === r.match_id);
-      const won = m ? r.team === m.winnerTeam : false;
-      const sc = 4*n(r.goals) + 3*n(r.assists) + 0.5*n(r.key_passes) + (won ? 3 : 0);
+      const w = mvpWeights;
+      const sc = w.goals*n(r.goals) + w.assists*n(r.assists) + w.key_passes*n(r.key_passes)
+               + w.tackles*n(r.tackles) + w.interceptions*n(r.interceptions) + w.blocks*n(r.blocks)
+               + w.goalkeeper_saves*n(r.goalkeeper_saves) + w.shots_on_target*n(r.shots_on_target)
+               + w.shots_off_target*n(r.shots_off_target) + w.nutmegs*n(r.nutmegs) + w.post*n(r.post);
       if(sc>bestScore){bestScore=sc;bestRow=r;}
       if(n(r.goals)>maxGoals) maxGoals=n(r.goals);
     });
@@ -13562,32 +13576,167 @@ document.addEventListener('DOMContentLoaded', () => {
   // Fetch settings.json and data.csv in parallel
   const ts = Date.now();
 
-  const fetchEvents = fetch('events.json?t=' + ts)
-    .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
-    .then(data => {
-      // Merge GitHub events.json into localStorage — localStorage takes precedence for same match
+  const fetchEvents = fetch('events.csv?t=' + ts)
+    .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.text(); })
+    .then(csvText => {
+      // Parse CSV into array of objects using header row
+      const lines = csvText.split('\n').map(l => l.trimEnd()).filter(l => l.length > 0);
+      const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
+      const data = lines.slice(1).map(line => {
+        // Handle quoted fields containing commas
+        const vals = [];
+        let cur = '', inQ = false;
+        for (let i = 0; i < line.length; i++) {
+          const ch = line[i];
+          if (ch === '"') { inQ = !inQ; }
+          else if (ch === ',' && !inQ) { vals.push(cur); cur = ''; }
+          else cur += ch;
+        }
+        vals.push(cur);
+        const obj = {};
+        headers.forEach((h, i) => { obj[h] = (vals[i] || '').trim().replace(/^"|"$/g, ''); });
+        return obj;
+      });
+
+      // Merge into localStorage — same logic as before
       try {
         const stored = JSON.parse(localStorage.getItem('aero_event_logs') || '{}');
         let merged = 0;
-        // GitHub events.json is always authoritative — overwrite any localStorage entry it has
-        // Only keep localStorage entries for matches NOT in the GitHub file (e.g. just imported)
-        Object.entries(data).forEach(([mid, log]) => {
+        const parseTs = t => {
+          if (!t) return 0;
+          const parts = String(t).split(':');
+          if (parts.length === 3) return parseInt(parts[0])*60 + parseInt(parts[1]) + parseFloat(parts[2])/100;
+          if (parts.length === 2) return parseInt(parts[0])*60 + parseFloat(parts[1]);
+          return 0;
+        };
+        // Group CSV rows by date into per-match logs
+        const byDate = {};
+        data.forEach(row => {
+          const date = row['Date'] || '';
+          if (!date) return;
+          if (!byDate[date]) byDate[date] = [];
+          byDate[date].push(row);
+        });
+        const importData = {};
+        Object.entries(byDate).forEach(([date, rows]) => {
+          const matchEntry = matchList.find(m => m.date === date);
+          const mid = matchEntry?.id || (date + '#1');
+          const existing = stored[mid] || {};
+          const events = rows.map(e => ({
+            ts:        e['Timestamp'] || '',
+            tsSecsRaw: parseTs(e['Timestamp']),
+            half:      e['Half'] || '',
+            team:      e['Team'] || '',
+            player:    e['Player'] || '',
+            event:     e['Event'] || '',
+            assistBy:  e['Assist By'] || '',
+            highlight: e['Highlight'] || '',
+            assistHL:  e['Assist Highlight'] || '',
+            shotX:     e['Shot X'] !== '' && e['Shot X'] != null ? parseFloat(e['Shot X']) : null,
+            shotY:     e['Shot Y'] !== '' && e['Shot Y'] != null ? parseFloat(e['Shot Y']) : null,
+            assistX:   e['Assist X'] !== '' && e['Assist X'] != null ? parseFloat(e['Assist X']) : null,
+            assistY:   e['Assist Y'] !== '' && e['Assist Y'] != null ? parseFloat(e['Assist Y']) : null,
+          }));
+
+          // Rebuild gkRotation from GK On/Removed events
+          const gkRotation = { '1H': [], '2H': [] };
+          ['1H','2H'].forEach(half => {
+            const ons  = events.filter(e => e.event === 'GK On'      && e.half === half).sort((a,b)=>a.tsSecsRaw-b.tsSecsRaw);
+            const offs = events.filter(e => e.event === 'GK Removed' && e.half === half).sort((a,b)=>a.tsSecsRaw-b.tsSecsRaw);
+            const maxT = Math.max(...events.filter(e=>e.half===half).map(e=>e.tsSecsRaw), 0);
+            ons.forEach(on => {
+              const off = offs.find(o => o.player === on.player && o.tsSecsRaw >= on.tsSecsRaw);
+              gkRotation[half].push({ player: on.player, team: on.team, fromSecs: on.tsSecsRaw, toSecs: off ? off.tsSecsRaw : maxT });
+            });
+          });
+
+          // Recompute timeStats fresh from events
+          const goalEvts = events.filter(e => e.event === 'Goals');
+          const timeStats = computeTimeStats(events, goalEvts, gkRotation, 0);
+
+          importData[mid] = { ...existing, date, events, gkRotation, timeStats };
+        });
+
+        Object.entries(importData).forEach(([mid, log]) => {
           if (!stored[mid] || (log?.events?.length || 0) >= (stored[mid]?.events?.length || 0)) {
             stored[mid] = log;
             merged++;
           }
         });
+        // Normalise event rows — new format uses CSV-style keys (Timestamp, Player etc)
+        const normaliseLog = (log) => {
+          if (!log?.events?.length) return log;
+          const first = log.events[0];
+          if (first.ts !== undefined || first.tsSecsRaw !== undefined) return log; // already internal
+          const parseTs = t => {
+            if (!t) return 0;
+            const parts = String(t).split(':');
+            if (parts.length === 3) return parseInt(parts[0])*60 + parseInt(parts[1]) + parseFloat(parts[2])/100;
+            if (parts.length === 2) return parseInt(parts[0])*60 + parseFloat(parts[1]);
+            return 0;
+          };
+          return { ...log, events: log.events.map(e => ({
+            ts:        e['Timestamp'] || '',
+            tsSecsRaw: parseTs(e['Timestamp']),
+            half:      e['Half'] || '',
+            team:      e['Team'] || '',
+            player:    e['Player'] || '',
+            event:     e['Event'] || '',
+            assistBy:  e['Assist By'] || '',
+            highlight: e['Highlight'] || '',
+            assistHL:  e['Assist Highlight'] || '',
+            shotX:     e['Shot X'] != null && e['Shot X'] !== '' ? parseFloat(e['Shot X']) : null,
+            shotY:     e['Shot Y'] != null && e['Shot Y'] !== '' ? parseFloat(e['Shot Y']) : null,
+            assistX:   e['Assist X'] != null && e['Assist X'] !== '' ? parseFloat(e['Assist X']) : null,
+            assistY:   e['Assist Y'] != null && e['Assist Y'] !== '' ? parseFloat(e['Assist Y']) : null,
+          }))};
+        };
+
+        // Normalise all logs before saving
+        Object.keys(stored).forEach(k => { stored[k] = normaliseLog(stored[k]); });
+
         localStorage.setItem('aero_event_logs', JSON.stringify(stored));
         if (merged) {
-          localStorage.setItem('aero_event_logs', JSON.stringify(stored));
-          console.log(`✅ Loaded events.json — ${merged} new match logs merged`);
+          console.log(`✅ Loaded events.csv — ${merged} new match logs merged`);
         } else {
-          console.log(`✅ events.json loaded — ${Object.keys(data).length} matches (all already in localStorage)`);
+          console.log(`✅ events.csv loaded — ${Object.keys(data).length} matches (all already in localStorage)`);
         }
-      } catch(e) { console.warn('events.json merge failed:', e); }
+        // Patch stale gkSpell toSecs — fix data stored before halfDur cap was applied
+        let patched = false;
+        Object.values(stored).forEach(log => {
+          const hd = log.timeStats?.halfDur || {};
+          const halfEnd = { '1H': hd['1H'], '2H': hd['2H'] };
+          Object.values(log.timeStats?.playerStats || {}).forEach(ps => {
+            (ps.gkSpells || []).forEach(spell => {
+              const end = halfEnd[spell.half];
+              if (end && spell.toSecs > end * 1.05) {
+                spell.toSecs  = end;
+                spell.durSecs = Math.max(0, end - spell.fromSecs);
+                patched = true;
+              }
+            });
+            if (ps.gkSpells?.length) {
+              const total = (hd['1H']||0) + Math.max(0,(hd['2H']||0)-(hd['1H']||0));
+              if (ps.gkTimeSecs > total * 1.05) {
+                ps.gkTimeSecs = ps.gkSpells.reduce((s,sp)=>s+(sp.durSecs||0),0);
+                patched = true;
+              }
+            }
+          });
+          Object.entries(log.gkRotation || {}).forEach(([half, segs]) => {
+            const end = halfEnd[half];
+            if (!end) return;
+            segs.forEach(seg => { if (seg.toSecs > end * 1.05) { seg.toSecs = end; patched = true; } });
+          });
+        });
+        if (patched) {
+          localStorage.setItem('aero_event_logs', JSON.stringify(stored));
+          console.log('✅ Patched stale GK spell times in localStorage');
+        }
+      } catch(e) { console.warn('events.csv merge failed:', e); }
     })
     .catch(err => {
-      console.log(`events.json not found (${err.message}) — using localStorage event logs only`);
+      console.log(`events.csv not found (${err.message}) — using localStorage event logs only`);
     });
 
   const fetchSettings = fetch('settings.json?t=' + ts)
