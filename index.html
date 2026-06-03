@@ -4165,60 +4165,73 @@ function copyMatchReport(matchIdRaw) {
   const m = matchList.find(mx => mx.id === mid);
   if (!m) { alert('Match not found.'); return; }
 
-  const combos = goalCombos[mid];
   const toSecs = t => {
     if (!t) return 0;
-    const parts = t.split(':');
+    const parts = String(t).split(':');
     if (parts.length === 3) return parseInt(parts[0])*60 + parseInt(parts[1]) + parseFloat(parts[2])/100;
     return parseInt(parts[0])*60 + parseFloat(parts[1]||0);
   };
 
-  const scorerTeam = {};
-  [...m.teamA, ...m.teamB].forEach(r => { scorerTeam[r.player] = r.team; });
-
+  // Always use event log — has accurate timestamps from the CSV
   let allGoals = [];
+  try {
+    const logs = JSON.parse(localStorage.getItem('aero_event_logs') || '{}');
+    const log = logs[mid];
+    if (log?.events) {
+      allGoals = log.events
+        .filter(e => e.event === 'Goals' || e.event === 'OG')
+        .map(e => ({
+          scorer:   e.event === 'OG' ? 'Own Goal' : e.player,
+          assister: e.assistBy || '',
+          time:     e.ts || e.tsSecsRaw,
+          half:     e.half,
+          tsRaw:    e.tsSecsRaw || toSecs(e.ts),
+          isOG:     e.event === 'OG',
+        }))
+        .filter(g => g.time)
+        .sort((a, b) => {
+          if (a.half !== b.half) return a.half < b.half ? -1 : 1;
+          return a.tsRaw - b.tsRaw;
+        });
+    }
+  } catch(e) {}
 
-  if (combos && ((combos.h1||[]).length + (combos.h2||[]).length) > 0) {
-    // Use goalCombos (has timestamps and assister)
-    allGoals = [
-      ...(combos.h1||[]).map(g => ({ ...g, half: '1H' })),
-      ...(combos.h2||[]).map(g => ({ ...g, half: '2H' })),
-    ].filter(g => g.time).sort((a, b) => {
-      if (a.half !== b.half) return a.half < b.half ? -1 : 1;
-      return toSecs(a.time) - toSecs(b.time);
-    });
-  } else {
-    // Fall back to event log
-    try {
-      const logs = JSON.parse(localStorage.getItem('aero_event_logs') || '{}');
-      const log = logs[mid];
-      if (log?.events) {
-        allGoals = log.events
-          .filter(e => e.event === 'Goals')
-          .map(e => ({ scorer: e.player, assister: e.assistBy || '', time: e.ts, half: e.half, isOG: false }))
-          .filter(g => g.time)
-          .sort((a, b) => {
-            if (a.half !== b.half) return a.half < b.half ? -1 : 1;
-            return toSecs(a.time) - toSecs(b.time);
-          });
-      }
-    } catch(e) {}
+  // Fall back to combos if no event log
+  if (!allGoals.length) {
+    const combos = goalCombos[mid];
+    if (combos) {
+      allGoals = [
+        ...(combos.h1||[]).map(g => ({ ...g, half: '1H', tsRaw: toSecs(g.time) })),
+        ...(combos.h2||[]).map(g => ({ ...g, half: '2H', tsRaw: toSecs(g.time) })),
+      ].filter(g => g.time).sort((a,b) => a.half < b.half ? -1 : a.half > b.half ? 1 : a.tsRaw - b.tsRaw);
+    }
   }
 
-  if (!allGoals.length) { alert('No goal data found for this match — make sure goals have been imported or timestamps recorded.'); return; }
+  if (!allGoals.length) { alert('No goal data found — import this match\'s event timeline first.'); return; }
 
+  // Format timestamp as MM:SS with zero-padded seconds
   const cleanTime = t => {
-    if (!t) return '';
-    const parts = t.split(':');
-    if (parts.length === 3) return `${parts[0]}:${parts[1]}`;
-    return parts[0] + ':' + (parts[1]||'00').replace(/\.\d+$/,'').padStart(2,'0');
+    if (t == null) return '';
+    // If numeric (seconds), convert
+    if (typeof t === 'number') {
+      const m = Math.floor(t / 60), s = Math.floor(t % 60);
+      return `${m}:${String(s).padStart(2,'0')}`;
+    }
+    const parts = String(t).split(':');
+    if (parts.length === 3) {
+      // MM:SS:cc — drop centiseconds
+      return `${parts[0]}:${parts[1].padStart(2,'0')}`;
+    }
+    // MM:SS.d — drop decimal
+    const mins = parts[0];
+    const secs = (parts[1]||'0').replace(/\.\d+$/, '').padStart(2,'0');
+    return `${mins}:${secs}`;
   };
 
   const lines1H = [], lines2H = [];
   allGoals.forEach(g => {
-    const scorer = g.isOG ? 'Own Goal' : g.scorer;
     const assist = g.assister ? ` (${g.assister})` : '';
-    const line = `${cleanTime(g.time)} ${scorer}${assist}`;
+    const line = `${cleanTime(g.time || g.tsRaw)} ${g.scorer}${assist}`;
     if (g.half === '1H') lines1H.push(line);
     else lines2H.push(line);
   });
@@ -4231,21 +4244,20 @@ function copyMatchReport(matchIdRaw) {
     ...lines2H,
     '',
     'Score:',
-    `Non-Bibs - ${m.goalsA}`,
-    `Bibs - ${m.goalsB}`,
+    `A - ${m.goalsA}`,
+    `B - ${m.goalsB}`,
   ].join('\n');
 
   navigator.clipboard.writeText(report).then(() => {
     const btn = document.getElementById('report-btn-' + matchIdRaw);
-    if (btn) { btn.textContent = '✅ Copied!'; setTimeout(() => { btn.innerHTML = '📋 Copy Match Report'; }, 2000); }
+    if (btn) { btn.textContent = '✅ Copied!'; setTimeout(() => { btn.innerHTML = '📋 Copy Report'; }, 2000); }
   }).catch(() => {
-    // Fallback for older browsers
     const ta = document.createElement('textarea');
-    ta.value = report; ta.style.position = 'fixed'; ta.style.opacity = '0';
+    ta.value = report; ta.style.cssText = 'position:fixed;opacity:0';
     document.body.appendChild(ta); ta.select(); document.execCommand('copy');
     document.body.removeChild(ta);
     const btn = document.getElementById('report-btn-' + matchIdRaw);
-    if (btn) { btn.textContent = '✅ Copied!'; setTimeout(() => { btn.innerHTML = '📋 Copy Match Report'; }, 2000); }
+    if (btn) { btn.textContent = '✅ Copied!'; setTimeout(() => { btn.innerHTML = '📋 Copy Report'; }, 2000); }
   });
 }
 
@@ -6262,6 +6274,13 @@ function renderMatches() {
         </div>
       </div>
       <div class="match-detail-panel" id="md-${m.id.replace(/[#]/g,'__')}" onclick="event.stopPropagation()">
+        ${adminMode ? `<div style="display:flex;justify-content:flex-end;padding:10px 14px 0">
+          <button onclick="copyMatchReport('${m.id.replace(/[#]/g,'__')}')"
+            id="report-btn-${m.id.replace(/[#]/g,'__')}"
+            style="font-family:'Barlow Condensed',sans-serif;font-size:.78rem;letter-spacing:.5px;padding:5px 12px;border-radius:6px;border:1px solid var(--border);background:var(--card2);color:var(--muted);cursor:pointer">
+            📋 Copy Report
+          </button>
+        </div>` : ''}
 
         <!-- Goal Timeline -->
         ${(() => {
@@ -12361,9 +12380,25 @@ function computeFatigueTrids(events, halfDur) {
   const numBuckets   = Math.ceil(matchEndSecs / BUCKET_SECS) + 1;
   const buckets      = new Array(numBuckets).fill(0);
 
+  // Intensity weights — higher = more physically demanding
+  const INTENSITY = {
+    'Goals':         3.0,  // explosive effort to finish
+    'On Target':     2.0,  // sprint and shot
+    'Off Target':    1.5,  // shot attempt
+    'Post':          1.5,  // shot attempt
+    'Tackles':       2.5,  // physical contest
+    'Blocks':        2.5,  // physical contest
+    'Interceptions': 1.5,  // reading game, less explosive
+    'Key Passes':    1.2,  // creative, moderate effort
+    'Nutmegs':       1.8,  // skill under pressure
+    'GK Saves':      2.0,  // explosive reaction
+    'Assists':       1.5,
+    'default':       1.0,
+  };
+
   validEvents.forEach(e => {
     const idx = Math.min(Math.floor(e.tsSecsRaw / BUCKET_SECS), numBuckets - 1);
-    buckets[idx]++;
+    buckets[idx] += (INTENSITY[e.event] || INTENSITY['default']);
   });
 
   // Trim trailing empty buckets
