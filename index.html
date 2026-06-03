@@ -4994,6 +4994,126 @@ function parseGoalText(text) {
   return pairs;
 }
 
+// ── Key Pass Creation Partners ─────────────────────────────────────────────
+// For each Key Pass by playerName, find the next same-team shot (On Target /
+// Off Target / Goals) within 10 seconds — that player is the creation recipient.
+// Returns { setsUp: [{name, shots, goals, matches}], setUpBy: [{name, shots, goals, matches}] }
+function getCreationPartners(playerName) {
+  let logs;
+  try { logs = JSON.parse(localStorage.getItem('aero_event_logs') || '{}'); }
+  catch(e) { return { setsUp: [], setUpBy: [] }; }
+
+  const WINDOW = 10; // seconds
+  const SHOT_EVENTS = new Set(['On Target','Off Target','Goals']);
+
+  const setsUp  = {}; // playerName created shots FOR these players
+  const setUpBy = {}; // these players created shots for playerName
+
+  Object.values(logs).forEach(log => {
+    const events = log.events || [];
+    const kpEvents = events.filter(e => e.event === 'Key Passes' && e.player === playerName);
+    const allShots = events.filter(e => SHOT_EVENTS.has(e.event));
+
+    kpEvents.forEach(kp => {
+      // Find next same-team shot within window
+      const shot = allShots.find(s =>
+        s.team === kp.team &&
+        s.tsSecsRaw > kp.tsSecsRaw &&
+        s.tsSecsRaw <= kp.tsSecsRaw + WINDOW &&
+        s.player !== playerName // exclude self-shots after own KP (unlikely but safe)
+      );
+      if (!shot) return;
+      if (!setsUp[shot.player]) setsUp[shot.player] = { shots: 0, goals: 0, matches: new Set() };
+      setsUp[shot.player].shots++;
+      if (shot.event === 'Goals') setsUp[shot.player].goals++;
+      setsUp[shot.player].matches.add(log.date || '');
+    });
+
+    // Set up BY: find key passes by others that led to playerName's shot
+    const myShots = events.filter(e => SHOT_EVENTS.has(e.event) && e.player === playerName);
+    const otherKPs = events.filter(e => e.event === 'Key Passes' && e.player !== playerName);
+
+    myShots.forEach(shot => {
+      const kp = otherKPs.find(k =>
+        k.team === shot.team &&
+        k.tsSecsRaw < shot.tsSecsRaw &&
+        k.tsSecsRaw >= shot.tsSecsRaw - WINDOW
+      );
+      if (!kp) return;
+      if (!setUpBy[kp.player]) setUpBy[kp.player] = { shots: 0, goals: 0, matches: new Set() };
+      setUpBy[kp.player].shots++;
+      if (shot.event === 'Goals') setUpBy[kp.player].goals++;
+      setUpBy[kp.player].matches.add(log.date || '');
+    });
+  });
+
+  const toArr = obj => Object.entries(obj)
+    .map(([name, d]) => ({ name, shots: d.shots, goals: d.goals, matches: d.matches.size }))
+    .sort((a,b) => b.shots - a.shots || b.goals - a.goals);
+
+  return { setsUp: toArr(setsUp), setUpBy: toArr(setUpBy) };
+}
+
+// ── Rebound Stats ─────────────────────────────────────────────────────────
+// Shot by Player A → same-team shot by Player B within 2 seconds = rebound.
+// Returns { reboundsCreated, reboundGoals (goals scored off own rebounds by teammate),
+//           reboundsConverted (goals off teammate's rebounds), topReboundPartner }
+function getReboundStats(playerName) {
+  let logs;
+  try { logs = JSON.parse(localStorage.getItem('aero_event_logs') || '{}'); }
+  catch(e) { return null; }
+
+  const WINDOW = 2;
+  const SHOT_EVENTS = new Set(['On Target','Off Target','Goals']);
+
+  let reboundsCreated = 0, reboundGoalsCreated = 0;
+  let reboundsConverted = 0, reboundGoalsConverted = 0;
+  const partners = {};
+
+  Object.values(logs).forEach(log => {
+    const events = log.events || [];
+    const shots = events.filter(e => SHOT_EVENTS.has(e.event));
+
+    shots.forEach((shot, i) => {
+      if (shot.player !== playerName) return;
+      // Find next same-team shot within 2s by a different player
+      const rebound = shots.find((s, j) =>
+        j > i &&
+        s.team === shot.team &&
+        s.player !== playerName &&
+        s.tsSecsRaw > shot.tsSecsRaw &&
+        s.tsSecsRaw <= shot.tsSecsRaw + WINDOW
+      );
+      if (rebound) {
+        reboundsCreated++;
+        if (rebound.event === 'Goals') reboundGoalsCreated++;
+        if (!partners[rebound.player]) partners[rebound.player] = 0;
+        partners[rebound.player]++;
+      }
+    });
+
+    // Rebounds converted: teammate shot → playerName shot within 2s
+    shots.forEach((shot, i) => {
+      if (shot.player === playerName) return;
+      const myRebound = shots.find((s, j) =>
+        j > i &&
+        s.team === shot.team &&
+        s.player === playerName &&
+        s.tsSecsRaw > shot.tsSecsRaw &&
+        s.tsSecsRaw <= shot.tsSecsRaw + WINDOW
+      );
+      if (myRebound) {
+        reboundsConverted++;
+        if (myRebound.event === 'Goals') reboundGoalsConverted++;
+      }
+    });
+  });
+
+  if (reboundsCreated + reboundsConverted === 0) return null;
+  const topPartner = Object.entries(partners).sort((a,b)=>b[1]-a[1])[0];
+  return { reboundsCreated, reboundGoalsCreated, reboundsConverted, reboundGoalsConverted, topPartner: topPartner?.[0] || null };
+}
+
 function getPlayerComboStats(playerName) {
   // Returns { scoredFrom: [{assister, goals, comboMatches, sharedGames}], assistedTo: [...] }
   const scoredFrom = {};
@@ -7509,13 +7629,66 @@ function renderProfile(name) {
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
           <div>
             <div style="font-size:.63rem;letter-spacing:1px;text-transform:uppercase;color:var(--green);margin-bottom:8px;font-family:'Barlow Condensed',sans-serif">Who sets up ${name.split(' ')[0]}</div>
-            ${scoredFrom.length ? scoredFrom.slice(0,5).map(p => partnerCard(p,'scored')).join('') : `<div style="font-size:.74rem;color:var(--muted)">No data yet</div>`}
+            ${scoredFrom.length ? scoredFrom.slice(0,3).map(p => partnerCard(p,'scored')).join('') : `<div style="font-size:.74rem;color:var(--muted)">No data yet</div>`}
           </div>
           <div>
             <div style="font-size:.63rem;letter-spacing:1px;text-transform:uppercase;color:var(--lime);margin-bottom:8px;font-family:'Barlow Condensed',sans-serif">Who ${name.split(' ')[0]} sets up</div>
-            ${assistedTo.length ? assistedTo.slice(0,5).map(p => partnerCard(p,'assisted')).join('') : `<div style="font-size:.74rem;color:var(--muted)">No data yet</div>`}
+            ${assistedTo.length ? assistedTo.slice(0,3).map(p => partnerCard(p,'assisted')).join('') : `<div style="font-size:.74rem;color:var(--muted)">No data yet</div>`}
           </div>
         </div>
+
+        ${(() => {
+          // Key pass creation partners
+          const { setsUp, setUpBy } = getCreationPartners(name);
+          if (!setsUp.length && !setUpBy.length) return '';
+          const cpRow = (p, type) => {
+            const col = type === 'setsUp' ? 'var(--lime)' : 'var(--amber,#f59e0b)';
+            const label = type === 'setsUp'
+              ? `${name.split(' ')[0]} → <strong>${p.name}</strong>`
+              : `<strong>${p.name}</strong> → ${name.split(' ')[0]}`;
+            return `<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid rgba(255,255,255,.04);cursor:pointer" onclick="nav('profile','${p.name}')">
+              <div style="width:24px;height:24px;border-radius:4px;background:var(--card2);display:flex;align-items:center;justify-content:center;font-family:'Bebas Neue',sans-serif;font-size:.65rem;color:var(--muted);flex-shrink:0">${p.name.slice(0,2).toUpperCase()}</div>
+              <div style="flex:1;font-size:.78rem">${label}</div>
+              <div style="font-size:.7rem;color:var(--muted)">${p.shots} shot${p.shots!==1?'s':''}</div>
+              ${p.goals > 0 ? `<div style="font-size:.7rem;color:var(--green);font-weight:600">${p.goals}⚽</div>` : ''}
+            </div>`;
+          };
+          return `<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border)">
+            <div style="font-family:'Barlow Condensed',sans-serif;font-size:.65rem;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-bottom:8px">🎯 Key Pass Chains</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+              <div>
+                <div style="font-size:.6rem;color:var(--lime);text-transform:uppercase;letter-spacing:.8px;margin-bottom:4px">${name.split(' ')[0]} creates for</div>
+                ${setsUp.slice(0,3).map(p=>cpRow(p,'setsUp')).join('') || '<div style="font-size:.7rem;color:var(--muted)">No data</div>'}
+              </div>
+              <div>
+                <div style="font-size:.6rem;color:var(--amber,#f59e0b);text-transform:uppercase;letter-spacing:.8px;margin-bottom:4px">Creates for ${name.split(' ')[0]}</div>
+                ${setUpBy.slice(0,3).map(p=>cpRow(p,'setUpBy')).join('') || '<div style="font-size:.7rem;color:var(--muted)">No data</div>'}
+              </div>
+            </div>
+          </div>`;
+        })()}
+
+        ${(() => {
+          // Rebound stats
+          const rb = getReboundStats(name);
+          if (!rb) return '';
+          return `<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border)">
+            <div style="font-family:'Barlow Condensed',sans-serif;font-size:.65rem;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-bottom:8px">💥 Rebounds</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+              <div style="background:var(--card2);border-radius:7px;padding:8px 10px" data-tip="Times ${name.split(' ')[0]}'s shot was followed by a same-team shot within 2 seconds — they created the rebound opportunity">
+                <div style="font-size:.6rem;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);margin-bottom:2px">Created</div>
+                <div style="font-family:'Bebas Neue',sans-serif;font-size:1.4rem;color:var(--lime);line-height:1">${rb.reboundsCreated}</div>
+                ${rb.reboundGoalsCreated > 0 ? `<div style="font-size:.65rem;color:var(--green)">${rb.reboundGoalsCreated} led to goals</div>` : ''}
+                ${rb.topPartner ? `<div style="font-size:.62rem;color:var(--muted)">most with ${rb.topPartner}</div>` : ''}
+              </div>
+              <div style="background:var(--card2);border-radius:7px;padding:8px 10px" data-tip="Times ${name.split(' ')[0]} followed up on a teammate's shot within 2 seconds">
+                <div style="font-size:.6rem;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);margin-bottom:2px">Converted</div>
+                <div style="font-family:'Bebas Neue',sans-serif;font-size:1.4rem;color:var(--lime);line-height:1">${rb.reboundsConverted}</div>
+                ${rb.reboundGoalsConverted > 0 ? `<div style="font-size:.65rem;color:var(--green)">${rb.reboundGoalsConverted} goals</div>` : ''}
+              </div>
+            </div>
+          </div>`;
+        })()}
       </div>`;
     })()}
 
