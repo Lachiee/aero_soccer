@@ -2815,7 +2815,7 @@ const TAG_DEFS = {
 // =====================================================================
 // TAG SYSTEM — global auction: each tag goes to exactly one player
 // =====================================================================
-let _tagCache = null; window._strikerRatingScale = null; // { playerName: [{label,cls,tip},...] }
+let _tagCache = null; window._strikerRatingScale = null; window._staminaGroupAvg = null; // { playerName: [{label,cls,tip},...] }
 
 function buildTagAuction() {
   // Use filtered stats (respects L10 / season / all toggle)
@@ -5802,7 +5802,7 @@ function setGlobalFilter(f) {
 
 // Build filtered player stats based on globalFilter
 function computeFilteredStats() {
-  _tagCache = null; window._strikerRatingScale = null; // Clear tag cache — filters changed
+  _tagCache = null; window._strikerRatingScale = null; window._staminaGroupAvg = null; // Clear tag cache — filters changed
   const allFull = allRows.filter(r => r.half === 'FULL' && r.team !== 'DNP');
   const allHalf = allRows.filter(r => (r.half === '1H' || r.half === '2H') && r.team !== 'DNP');
 
@@ -8680,35 +8680,62 @@ function computeStaminaFromEvents(playerName) {
       correctedGkSecs += Math.max(0, rawTo - spell.fromSecs);
     });
 
-    // Skip matches with genuinely invalid data (corrected gkSecs still exceeds match)
+    // Skip matches with genuinely invalid data
     if (correctedGkSecs > totalMatchSecs * 1.05) return;
 
-    // Split into 1H and 2H buckets using cleaned data
-    const h1 = cleanBuckets.slice(0, htBucket);
-    const h2 = cleanBuckets.slice(htBucket);
-    if (!h1.length || !h2.length) return;
+    // Compare 1H outfield activity vs 2H outfield activity
+    // This prevents a GK rest mid-match from inflating "late" scores
+    const h1Active = cleanBuckets.slice(0, htBucket).filter(v => v > 0);
+    const h2Active = cleanBuckets.slice(htBucket).filter(v => v > 0);
 
-    // Find the first and last buckets with meaningful outfield activity
-    // (can't just use first/last third if player was in goal during those windows)
-    const allOutfield = cleanBuckets.map((v, i) => ({ v, i })).filter(b => b.v > 0);
-    if (allOutfield.length < 3) return; // not enough outfield data
+    // Need at least 1 active outfield bucket in each half
+    // Players with heavy GK time may only have 1-2 outfield windows — still valid
+    if (h1Active.length < 1 || h2Active.length < 1) return;
 
-    // Early = avg of first 30% of active outfield buckets
-    // Late  = avg of last 30% of active outfield buckets
-    const slice = Math.max(1, Math.floor(allOutfield.length * 0.3));
-    const earlyBuckets = allOutfield.slice(0, slice);
-    const lateBuckets  = allOutfield.slice(-slice);
+    const avgH1 = h1Active.reduce((s,v)=>s+v,0) / h1Active.length;
+    const avgH2 = h2Active.reduce((s,v)=>s+v,0) / h2Active.length;
+    if (avgH1 < 0.1) return; // truly zero outfield activity — skip
 
-    const avgEarly = earlyBuckets.reduce((s,b)=>s+b.v,0) / earlyBuckets.length;
-    const avgLate  = lateBuckets .reduce((s,b)=>s+b.v,0) / lateBuckets.length;
-    if (avgEarly < 0.1) return; // truly no outfield activity
+    // sustained = absolute late output × own retention rate, normalised to group
+    // Rewards both high output AND maintaining it — Alberto in goal a lot stays low
+    // groupAvgH2 is cached and computed once across all players
+    if (!window._staminaGroupAvg) {
+      // Compute group average H2 outfield output
+      let allH2 = [];
+      try {
+        const allLogs = JSON.parse(localStorage.getItem('aero_event_logs') || '{}');
+        Object.values(allLogs).forEach(lg => {
+          const hd2 = lg.timeStats?.halfDur || {};
+          const tot2 = (hd2['1H']||0) + Math.max(0,(hd2['2H']||0)-(hd2['1H']||0));
+          Object.values(lg.timeStats?.playerStats || {}).forEach(ps2 => {
+            const fat2 = ps2.fatigue || {};
+            const b2 = fat2.buckets || [];
+            const ht2 = fat2.htBucket;
+            if (!b2.length || !ht2) return;
+            const clean2 = [...b2];
+            (ps2.gkSpells||[]).forEach(sp => {
+              const he = { '1H': hd2['1H']||tot2, '2H': hd2['2H']||tot2 };
+              const rTo = sp.toSecs===9999 ? he[sp.half]||tot2 : Math.min(sp.toSecs, he[sp.half]||tot2);
+              const fb = Math.floor(sp.fromSecs/300), tb = Math.floor(rTo/300);
+              for (let i=fb; i<=tb&&i<clean2.length; i++) clean2[i]=0;
+            });
+            const h2vals = clean2.slice(ht2).filter(v=>v>0);
+            const h1vals = clean2.slice(0,ht2).filter(v=>v>0);
+            if (h1vals.length>=2 && h2vals.length>=2) {
+              allH2.push(h2vals.reduce((s,v)=>s+v,0)/h2vals.length);
+            }
+          });
+        });
+      } catch(e) {}
+      window._staminaGroupAvg = allH2.length > 0 ? allH2.reduce((s,v)=>s+v,0)/allH2.length : 5;
+    }
+    const groupAvg = window._staminaGroupAvg;
+    const retention = avgH2 / avgH1;
+    const sustained = (avgH2 / groupAvg) * retention;
 
-    const rawSustained = avgLate / avgEarly;
-    const sustained = rawSustained; // GK buckets zeroed above, so this is pure outfield comparison
-
-    // Consistency using only outfield buckets
-    const allActive = allOutfield.map(b => b.v);
-    if (allActive.length < 3) return;
+    // Consistency across ALL outfield buckets
+    const allActive = cleanBuckets.filter(v => v > 0);
+    if (allActive.length < 1) return;
     const mean = allActive.reduce((s,v)=>s+v,0) / allActive.length;
     const variance = allActive.reduce((s,v)=>s+(v-mean)**2,0) / allActive.length;
     const cv = mean > 0 ? Math.sqrt(variance) / mean : 1;
@@ -8719,14 +8746,14 @@ function computeStaminaFromEvents(playerName) {
 
   if (matchData.length < 2) return null;
 
-  const avgSustained    = matchData.reduce((s,d)=>s+d.sustained,0)   / matchData.length;
-  const avgConsistency  = matchData.reduce((s,d)=>s+d.consistency,0) / matchData.length;
+  const avgSustained   = matchData.reduce((s,d)=>s+d.sustained,0)   / matchData.length;
+  const avgConsistency = matchData.reduce((s,d)=>s+d.consistency,0) / matchData.length;
 
-  // Clamp sustained to [0, 1.3] — anything above 130% is already exceptional
-  const sustainedClamped = Math.min(1.3, Math.max(0, avgSustained));
-
-  const rawScore = sustainedClamped * 0.7 + avgConsistency * 0.3;
-  const score = Math.min(10, parseFloat((rawScore / 1.0 * 10).toFixed(1)));
+  // sustained is group-relative: ~1.5 = elite, ~1.0 = average, ~0.5 = low
+  // Scale to 0-10: use 1.5 as the ceiling (top performers in the group)
+  const sustainedScore = Math.min(10, (avgSustained / 1.5) * 10);
+  const rawScore = sustainedScore * 0.7 + avgConsistency * 10 * 0.3;
+  const score = Math.min(10, parseFloat(rawScore.toFixed(1)));
 
   const label = score >= 8.5 ? 'Iron Lungs' : score >= 7 ? 'Strong' : score >= 5.5 ? 'Solid' : score >= 4 ? 'Average' : score >= 2.5 ? 'Fades' : 'Tires Fast';
 
@@ -12935,7 +12962,7 @@ function appendToAppData() {
     renderMatches();
     saveExtraRows();
     updateDraftBanner();
-    _tagCache = null; window._strikerRatingScale = null;
+    _tagCache = null; window._strikerRatingScale = null; window._staminaGroupAvg = null;
 
     // Import combos if from new format
     if (window._weeklyPendingCombos && window._weeklyMatchId) {
@@ -13838,7 +13865,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       } catch(e) {}
       goalCombos = loaded;
-      _tagCache = null; window._strikerRatingScale = null; // force tag rebuild with fresh combo data
+      _tagCache = null; window._strikerRatingScale = null; window._staminaGroupAvg = null; // force tag rebuild with fresh combo data
       // Rerender profile if open so highlights appear
       if (currentPage === 'profile' && currentProfileName) {
         renderAll();
