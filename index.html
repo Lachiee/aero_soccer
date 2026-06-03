@@ -6290,6 +6290,20 @@ function renderMatches() {
             ...(combos.h1||[]).map(p=>({...p,half:'1H'})),
             ...(combos.h2||[]).map(p=>({...p,half:'2H'}))
           ].filter(p=>p.time);
+
+          // Supplement with OG events from event log (not stored in combos)
+          try {
+            const logs = JSON.parse(localStorage.getItem('aero_event_logs') || '{}');
+            const log = logs[m.id];
+            if (log?.events) {
+              const tsToSecs = t => { if (!t) return 0; const p=String(t).split(':'); return p.length===3?parseInt(p[0])*60+parseInt(p[1])+parseFloat(p[2])/100:parseInt(p[0])*60+parseFloat(p[1]||0); };
+              log.events.filter(e => e.event === 'OG').forEach(e => {
+                const already = all.find(g => g.isOG && Math.abs(tsToSecs(g.time) - e.tsSecsRaw) < 2);
+                if (!already) all.push({ scorer: e.player, assister: e.assistBy||'', time: e.ts, half: e.half, isOG: true });
+              });
+            }
+          } catch(ex) {}
+
           if (!all.length) return '';
 
           const toSecs = time => { const [min,sec]=time.split(':').map(Number); return min*60+(sec||0); };
@@ -6810,16 +6824,18 @@ function renderProfileTimeStats(name) {
     </div>`);
   }
 
-  // Computed stamina
-  const stam = computeStaminaFromEvents(name);
-  if (stam && stam.matches >= 2) {
-    const stamCol = stam.score >= 7 ? 'var(--green)' : stam.score >= 5 ? 'var(--lime)' : stam.score >= 3 ? 'var(--amber,#f59e0b)' : 'rgba(248,113,113,.8)';
-    pills.push(`<div style="background:var(--card2);border:1px solid var(--border);border-radius:8px;padding:8px 10px;text-align:center;cursor:default"
-      data-tip="Computed stamina — outfield activity only (GK spell windows are excluded). Compares late 2H output vs early 1H. Sustained: ${stam.sustained}% of early activity maintained. Consistency: ${stam.consistency}%.">
-      <div style="font-size:.6rem;letter-spacing:1.2px;text-transform:uppercase;color:var(--muted);margin-bottom:3px">💪 Stamina</div>
-      <div style="font-family:'Bebas Neue',sans-serif;font-size:1.3rem;color:${stamCol};line-height:1">${stam.score}<span style="font-size:.7rem;opacity:.6">/10</span></div>
-      <div style="font-size:.6rem;color:${stamCol};margin-top:2px">${stam.label}</div>
-    </div>`);
+  // Computed stamina — admin only (still being calibrated)
+  if (adminMode) {
+    const stam = computeStaminaFromEvents(name);
+    if (stam && stam.matches >= 1) {
+      const stamCol = stam.score >= 7 ? 'var(--green)' : stam.score >= 5 ? 'var(--lime)' : stam.score >= 3 ? 'var(--amber,#f59e0b)' : 'rgba(248,113,113,.8)';
+      pills.push(`<div style="background:var(--card2);border:1px solid var(--border);border-radius:8px;padding:8px 10px;text-align:center;cursor:default"
+        data-tip="Stamina (admin) — blend of absolute H2 output vs group and own H2/H1 retention. ${stam.matches} match${stam.matches!==1?'es':''} of data.">
+        <div style="font-size:.6rem;letter-spacing:1.2px;text-transform:uppercase;color:var(--muted);margin-bottom:3px">💪 Stamina</div>
+        <div style="font-family:'Bebas Neue',sans-serif;font-size:1.3rem;color:${stamCol};line-height:1">${stam.score}<span style="font-size:.7rem;opacity:.6">/10</span></div>
+        <div style="font-size:.6rem;color:${stamCol};margin-top:2px">${stam.label}</div>
+      </div>`);
+    }
   }
 
   // Lead/trail breakdown
@@ -8750,7 +8766,9 @@ function computeStaminaFromEvents(playerName) {
     }
     const groupAvg = window._staminaGroupAvg;
     const retention = avgH2 / avgH1;
-    const sustained = (avgH2 / groupAvg) * retention;
+    // Blend absolute output and retention equally — prevents double-penalising faders
+    // Xavier: H2/groupAvg=0.60, retention=0.38 → sustained=0.49 → ~6.5/10
+    const sustained = 0.5 * (avgH2 / groupAvg) + 0.5 * Math.min(retention, 1.5);
 
     // Consistency across ALL outfield buckets
     const allActive = cleanBuckets.filter(v => v > 0);
@@ -9352,10 +9370,11 @@ function renderTeamResult(tA, tB) {
         return `<span style="font-size:.65rem;color:${col}" data-tip="Striker rating ${sr.rating}/10 (${sr.label}) — quality-adjusted goals vs opposition defence over last ${sr.games} games. Adds ${((sr.rating/10)*0.08*100).toFixed(0)}% buff to rating.">⚽ ${sr.rating}</span>`;
       })()}
       ${(() => {
+        if (!adminMode) return '';
         const stam = computeStaminaFromEvents(p.player);
-        if (!stam || stam.matches < 2) return '';
+        if (!stam || stam.matches < 1) return '';
         const col = stam.score >= 7 ? 'var(--green)' : stam.score >= 5 ? 'var(--lime)' : stam.score >= 3 ? 'var(--amber,#f59e0b)' : 'rgba(248,113,113,.8)';
-        return `<span style="font-size:.65rem;color:${col}" data-tip="Stamina ${stam.score}/10 (${stam.label}) — ${stam.sustained}% of early-game output maintained in late 2H. Feeds into rating automatically.">💪 ${stam.score}</span>`;
+        return `<span style="font-size:.65rem;color:${col}" data-tip="Stamina ${stam.score}/10 (${stam.label}) — admin only.">💪 ${stam.score}</span>`;
       })()}
       <span class="tp-rating">${adminMode ? (() => {
         const base = p.weightedRating.toFixed(1);
