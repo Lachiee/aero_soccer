@@ -92,6 +92,10 @@
     "Lach2": {
       "enforcer": 11,
       "stamina": 11
+    },
+    "Vijit": {
+      "enforcer": 6,
+      "stamina": 8
     }
   },
   "bannerHeights": {
