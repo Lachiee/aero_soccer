@@ -4525,61 +4525,64 @@ function drawWormCanvas(canvasId, matchId) {
     const momScale = (cH / 2) * 0.65 / MAX_VAL;
     const bucketToX = i => toX((i + 0.5) * BUCKET);
 
-    // Net momentum per bucket: positive = Team A dominant, negative = Team B
-    // Clamped to [-MAX_VAL, MAX_VAL]
+    // Net momentum: positive = Team A, negative = Team B
     const net = Array.from({ length: nBuckets }, (_, i) =>
       Math.max(-MAX_VAL, Math.min(MAX_VAL, (aB[i] || 0) - (bB[i] || 0)))
     );
-
-    // Build smooth pts
     const pts = net.map((v, i) => ({
       x: bucketToX(i),
-      y: midY - v * momScale  // positive = up (Team A), negative = down (Team B)
+      y: midY - v * momScale
     }));
 
-    // Draw filled area in segments — green above midline, blue below
-    // Split at zero crossings so each segment gets the right colour
-    const drawSegment = (fromIdx, toIdx, col) => {
-      if (fromIdx >= toIdx) return;
+    // Build the full curve path once
+    const buildCurvePath = () => {
       ctx.beginPath();
-      ctx.moveTo(pts[fromIdx].x, midY);
-      for (let i = fromIdx; i <= toIdx; i++) {
-        if (i === fromIdx) {
-          ctx.lineTo(pts[i].x, pts[i].y);
-        } else {
-          const mx = (pts[i-1].x + pts[i].x) / 2;
-          const my = (pts[i-1].y + pts[i].y) / 2;
-          ctx.quadraticCurveTo(pts[i-1].x, pts[i-1].y, mx, my);
-        }
+      ctx.moveTo(pts[0].x, pts[0].y);
+      for (let i = 1; i < pts.length - 1; i++) {
+        const mx = (pts[i].x + pts[i+1].x) / 2;
+        const my = (pts[i].y + pts[i+1].y) / 2;
+        ctx.quadraticCurveTo(pts[i].x, pts[i].y, mx, my);
       }
-      ctx.lineTo(pts[toIdx].x, midY);
-      ctx.closePath();
-      ctx.fillStyle = col;
-      ctx.fill();
+      ctx.lineTo(pts[pts.length-1].x, pts[pts.length-1].y);
     };
 
-    // Find zero crossings and draw alternating segments
-    let segStart = 0;
-    for (let i = 1; i <= nBuckets; i++) {
-      const prev = net[i-1] >= 0;
-      const curr = i < nBuckets ? net[i] >= 0 : prev;
-      if (curr !== prev || i === nBuckets) {
-        const col = prev ? 'rgba(57,211,83,.25)' : 'rgba(96,165,250,.25)';
-        drawSegment(segStart, i-1, col);
-        segStart = i-1;
-      }
-    }
-
-    // Single smooth line over the top — coloured green/blue per segment
+    // Green fill — clipped to above midline only
     ctx.save();
-    for (let i = 1; i < nBuckets; i++) {
+    ctx.beginPath();
+    ctx.rect(pad.left, pad.top, cW, midY - pad.top);
+    ctx.clip();
+    buildCurvePath();
+    ctx.lineTo(pts[pts.length-1].x, midY);
+    ctx.lineTo(pts[0].x, midY);
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(57,211,83,.22)';
+    ctx.fill();
+    ctx.restore();
+
+    // Blue fill — clipped to below midline only
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(pad.left, midY, cW, pad.top + cH - midY);
+    ctx.clip();
+    buildCurvePath();
+    ctx.lineTo(pts[pts.length-1].x, midY);
+    ctx.lineTo(pts[0].x, midY);
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(96,165,250,.22)';
+    ctx.fill();
+    ctx.restore();
+
+    // Single smooth line coloured green/blue per segment
+    ctx.save();
+    for (let i = 1; i < pts.length; i++) {
+      const prevMx = i === 1 ? pts[0].x : (pts[i-2].x + pts[i-1].x) / 2;
+      const prevMy = i === 1 ? pts[0].y : (pts[i-2].y + pts[i-1].y) / 2;
       const mx = (pts[i-1].x + pts[i].x) / 2;
       const my = (pts[i-1].y + pts[i].y) / 2;
       ctx.beginPath();
-      ctx.moveTo(i === 1 ? pts[0].x : (pts[i-1].x + pts[i-2].x)/2,
-                 i === 1 ? pts[0].y : (pts[i-1].y + pts[i-2].y)/2);
+      ctx.moveTo(prevMx, prevMy);
       ctx.quadraticCurveTo(pts[i-1].x, pts[i-1].y, mx, my);
-      ctx.strokeStyle = net[i-1] >= 0 ? 'rgba(57,211,83,.8)' : 'rgba(96,165,250,.8)';
+      ctx.strokeStyle = net[i-1] >= 0 ? 'rgba(57,211,83,.85)' : 'rgba(96,165,250,.85)';
       ctx.lineWidth = 1.8;
       ctx.stroke();
     }
@@ -4651,18 +4654,7 @@ function drawWormCanvas(canvasId, matchId) {
   });
   pts.push({ x: pad.left+cW, y: toY(fA-fB) });
 
-  // Neutral fill above/below zero — let momentum colours dominate
-  ctx.beginPath(); ctx.moveTo(pad.left, toY(0));
-  pts.forEach(p => ctx.lineTo(p.x, Math.min(p.y, toY(0))));
-  ctx.lineTo(pad.left+cW, toY(0)); ctx.closePath();
-  ctx.fillStyle = 'rgba(255,255,255,.04)'; ctx.fill();
-
-  ctx.beginPath(); ctx.moveTo(pad.left, toY(0));
-  pts.forEach(p => ctx.lineTo(p.x, Math.max(p.y, toY(0))));
-  ctx.lineTo(pad.left+cW, toY(0)); ctx.closePath();
-  ctx.fillStyle = 'rgba(255,255,255,.04)'; ctx.fill();
-
-  // Worm line
+  // Worm line — white only, no fill — white only, no fill
   ctx.beginPath();
   pts.forEach((p,i) => i===0 ? ctx.moveTo(p.x,p.y) : ctx.lineTo(p.x,p.y));
   ctx.strokeStyle = 'rgba(255,255,255,.82)'; ctx.lineWidth = 2; ctx.lineJoin = 'round'; ctx.stroke();
@@ -4672,21 +4664,39 @@ function drawWormCanvas(canvasId, matchId) {
   canvas._wormRows = rows;
   canvas._wormMeta = { pad, cW, cH, matchDur, htSecs: htTimeSecs, toX, toY, fA, fB, W, H, maxLead, yRange };
 
-  // Goal dots — drawn + stored for hover
+  // Draw soccer ball nodes at each goal
+  const drawSoccerBall = (cx, cy, r, isOG) => {
+    // White circle base
+    ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI*2);
+    ctx.fillStyle = isOG ? '#1a0505' : '#fff'; ctx.fill();
+    ctx.strokeStyle = isOG ? '#f87171' : 'rgba(0,0,0,.5)'; ctx.lineWidth = 1; ctx.stroke();
+
+    if (isOG) {
+      // X mark for OG
+      ctx.strokeStyle = '#f87171'; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.moveTo(cx-r*.5, cy-r*.5); ctx.lineTo(cx+r*.5, cy+r*.5); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(cx+r*.5, cy-r*.5); ctx.lineTo(cx-r*.5, cy+r*.5); ctx.stroke();
+      return;
+    }
+
+    // Pentagon patches — simplified soccer ball pattern
+    ctx.fillStyle = '#111';
+    const patches = [
+      [0, -r*0.45],
+      [r*0.42, r*0.14],
+      [r*0.26, r*0.38],
+      [-r*0.26, r*0.38],
+      [-r*0.42, r*0.14],
+    ];
+    patches.forEach(([dx, dy]) => {
+      ctx.beginPath(); ctx.arc(cx+dx, cy+dy, r*0.22, 0, Math.PI*2); ctx.fill();
+    });
+  };
+
   const dotData = [];
   rows.forEach(e => {
     const x = toX(e.secs), y = toY(e.scoreA - e.scoreB);
-    ctx.beginPath(); ctx.arc(x, y, 5, 0, Math.PI*2);
-    if (e.isOG) {
-      ctx.fillStyle = 'rgba(0,0,0,.6)'; ctx.fill();
-      ctx.strokeStyle = '#f87171'; ctx.lineWidth = 2; ctx.stroke();
-      ctx.strokeStyle = '#f87171'; ctx.lineWidth = 1.5;
-      ctx.beginPath(); ctx.moveTo(x-2.5,y-2.5); ctx.lineTo(x+2.5,y+2.5); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(x+2.5,y-2.5); ctx.lineTo(x-2.5,y+2.5); ctx.stroke();
-    } else {
-      ctx.fillStyle = e.team==='A' ? '#4ade80' : '#60a5fa'; ctx.fill();
-      ctx.strokeStyle = 'rgba(0,0,0,.6)'; ctx.lineWidth = 1.5; ctx.stroke();
-    }
+    drawSoccerBall(x, y, 6, e.isOG);
     dotData.push({
       x, y, r: 10,
       secs: e.secs, time: e.time, half: e.half,
