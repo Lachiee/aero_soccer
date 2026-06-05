@@ -4521,48 +4521,69 @@ function drawWormCanvas(canvasId, matchId) {
   if (mom) {
     const { aB, bB, nBuckets, BUCKET } = mom;
     const midY = toY(0);
-    // Max value is 10 (as specified), scale to 65% of half chart height
     const MAX_VAL = 10;
     const momScale = (cH / 2) * 0.65 / MAX_VAL;
     const bucketToX = i => toX((i + 0.5) * BUCKET);
 
-    const drawCurve = (buckets, upward, fillCol, lineCol) => {
-      const pts = Array.from({ length: nBuckets }, (_, i) => {
-        const v = Math.min(buckets[i] || 0, MAX_VAL);
-        const h = v * momScale;
-        return { x: bucketToX(i), y: upward ? midY - h : midY + h };
-      });
+    // Net momentum per bucket: positive = Team A dominant, negative = Team B
+    // Clamped to [-MAX_VAL, MAX_VAL]
+    const net = Array.from({ length: nBuckets }, (_, i) =>
+      Math.max(-MAX_VAL, Math.min(MAX_VAL, (aB[i] || 0) - (bB[i] || 0)))
+    );
 
-      // Filled area under curve
+    // Build smooth pts
+    const pts = net.map((v, i) => ({
+      x: bucketToX(i),
+      y: midY - v * momScale  // positive = up (Team A), negative = down (Team B)
+    }));
+
+    // Draw filled area in segments — green above midline, blue below
+    // Split at zero crossings so each segment gets the right colour
+    const drawSegment = (fromIdx, toIdx, col) => {
+      if (fromIdx >= toIdx) return;
       ctx.beginPath();
-      ctx.moveTo(pts[0].x, midY);
-      for (let i = 0; i < pts.length - 1; i++) {
-        const mx = (pts[i].x + pts[i+1].x) / 2;
-        const my = (pts[i].y + pts[i+1].y) / 2;
-        ctx.quadraticCurveTo(pts[i].x, pts[i].y, mx, my);
+      ctx.moveTo(pts[fromIdx].x, midY);
+      for (let i = fromIdx; i <= toIdx; i++) {
+        if (i === fromIdx) {
+          ctx.lineTo(pts[i].x, pts[i].y);
+        } else {
+          const mx = (pts[i-1].x + pts[i].x) / 2;
+          const my = (pts[i-1].y + pts[i].y) / 2;
+          ctx.quadraticCurveTo(pts[i-1].x, pts[i-1].y, mx, my);
+        }
       }
-      ctx.lineTo(pts[pts.length-1].x, pts[pts.length-1].y);
-      ctx.lineTo(pts[pts.length-1].x, midY);
+      ctx.lineTo(pts[toIdx].x, midY);
       ctx.closePath();
-      ctx.fillStyle = fillCol;
+      ctx.fillStyle = col;
       ctx.fill();
-
-      // Smooth line on top
-      ctx.beginPath();
-      ctx.moveTo(pts[0].x, pts[0].y);
-      for (let i = 0; i < pts.length - 1; i++) {
-        const mx = (pts[i].x + pts[i+1].x) / 2;
-        const my = (pts[i].y + pts[i+1].y) / 2;
-        ctx.quadraticCurveTo(pts[i].x, pts[i].y, mx, my);
-      }
-      ctx.lineTo(pts[pts.length-1].x, pts[pts.length-1].y);
-      ctx.strokeStyle = lineCol;
-      ctx.lineWidth = 1.5;
-      ctx.stroke();
     };
 
-    drawCurve(aB, true,  'rgba(57,211,83,.18)',  'rgba(57,211,83,.7)');
-    drawCurve(bB, false, 'rgba(96,165,250,.18)', 'rgba(96,165,250,.7)');
+    // Find zero crossings and draw alternating segments
+    let segStart = 0;
+    for (let i = 1; i <= nBuckets; i++) {
+      const prev = net[i-1] >= 0;
+      const curr = i < nBuckets ? net[i] >= 0 : prev;
+      if (curr !== prev || i === nBuckets) {
+        const col = prev ? 'rgba(57,211,83,.25)' : 'rgba(96,165,250,.25)';
+        drawSegment(segStart, i-1, col);
+        segStart = i-1;
+      }
+    }
+
+    // Single smooth line over the top — coloured green/blue per segment
+    ctx.save();
+    for (let i = 1; i < nBuckets; i++) {
+      const mx = (pts[i-1].x + pts[i].x) / 2;
+      const my = (pts[i-1].y + pts[i].y) / 2;
+      ctx.beginPath();
+      ctx.moveTo(i === 1 ? pts[0].x : (pts[i-1].x + pts[i-2].x)/2,
+                 i === 1 ? pts[0].y : (pts[i-1].y + pts[i-2].y)/2);
+      ctx.quadraticCurveTo(pts[i-1].x, pts[i-1].y, mx, my);
+      ctx.strokeStyle = net[i-1] >= 0 ? 'rgba(57,211,83,.8)' : 'rgba(96,165,250,.8)';
+      ctx.lineWidth = 1.8;
+      ctx.stroke();
+    }
+    ctx.restore();
   }
 
   // Grid lines + Y labels
