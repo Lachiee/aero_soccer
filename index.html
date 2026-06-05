@@ -4501,6 +4501,42 @@ function drawWormCanvas(canvasId, matchId) {
   const toX = s => pad.left + (s / matchDur) * cW;
   const toY = d => pad.top + cH / 2 - (d / yRange) * (cH / 2);
 
+  // ── Momentum background layer ─────────────────────────────────────────
+  // Draw shot activity as shaded areas behind the worm.
+  // Only show whichever team had more activity in each bucket (no overlap).
+  const mom = window._momentumData?.[matchId];
+  if (mom) {
+    const { aB, bB, nBuckets, BUCKET } = mom;
+    const midY = toY(0); // zero line
+    const maxMom = Math.max(...aB, ...bB, 1);
+    // Scale momentum to use 70% of half the chart height
+    const momScale = (cH / 2) * 0.65 / maxMom;
+    const momToX = i => pad.left + (i / (nBuckets - 1)) * cW;
+
+    // Draw A (green, upward from midline) and B (blue, downward) as separate passes
+    // Only draw a team's bar if it has more activity than opponent in that bucket
+    const drawMomArea = (buckets, rival, upward, color) => {
+      ctx.beginPath();
+      ctx.moveTo(momToX(0), midY);
+      for (let i = 0; i < nBuckets; i++) {
+        const x = momToX(i);
+        // Only show if this team dominates or is equal in this window
+        const v = Math.max(0, upward
+          ? (buckets[i] > rival[i] ? buckets[i] : buckets[i] * 0.4) // fade if opponent higher
+          : (buckets[i] > rival[i] ? buckets[i] : buckets[i] * 0.4));
+        const h = v * momScale;
+        ctx.lineTo(x, upward ? midY - h : midY + h);
+      }
+      ctx.lineTo(momToX(nBuckets - 1), midY);
+      ctx.closePath();
+      ctx.fillStyle = color;
+      ctx.fill();
+    };
+
+    drawMomArea(aB, bB, true,  'rgba(57,211,83,.18)');
+    drawMomArea(bB, aB, false, 'rgba(96,165,250,.18)');
+  }
+
   // Grid lines + Y labels
   ctx.font = 'bold 10px Barlow Condensed, sans-serif';
   for (let g = -maxLead; g <= maxLead; g++) {
@@ -4548,7 +4584,7 @@ function drawWormCanvas(canvasId, matchId) {
   ctx.fillStyle = 'rgba(255,255,255,.75)'; ctx.font = 'bold 11px Barlow Condensed, sans-serif'; ctx.textAlign = 'left';
   ctx.fillText('MATCH TIMELINE', pad.left, 18);
   ctx.fillStyle = 'rgba(255,255,255,.3)'; ctx.font = '9px Barlow Condensed, sans-serif';
-  ctx.fillText('GOAL DIFFERENTIAL OVER ' + totalMins + "'", pad.left + 112, 18);
+  ctx.fillText('GOAL DIFFERENTIAL · ' + (mom ? 'shading = shot momentum' : 'OVER ' + totalMins + "'"), pad.left + 112, 18);
 
   // Legend
   ctx.textAlign = 'right';
@@ -6724,8 +6760,7 @@ function renderMatches() {
                 // Store for canvas draw
                 window._momentumData = window._momentumData || {};
                 window._momentumData[m.id] = { aB, bB, matchDur, htSecs, nBuckets, BUCKET };
-                return '<div style="margin-top:12px"><div style="font-size:.62rem;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-bottom:6px;font-family:\'Barlow Condensed\',sans-serif">Offensive Momentum</div>'
-                  + '<canvas id="' + momId + '" style="width:100%;height:160px;display:block;border-radius:8px"></canvas></div>';
+                return ''; // drawn on worm canvas as background layer
               } catch(e) { return ''; }
             })()
             +'</div>';
@@ -6969,14 +7004,7 @@ function toggleMatchDetail(id) {
         );
         if (mid) drawWormCanvas(c.id, mid);
       });
-      // Draw momentum chart
-      el.querySelectorAll('canvas[id^="momentum-"]').forEach(c => {
-        const matchId = c.id.replace('momentum-','').replace(/__/g,'#').replace(/_/g,',');
-        const mid = Object.keys(window._momentumData||{}).find(k =>
-          k.replace(/[#,]/g,'_') === c.id.replace('momentum-','') || k === matchId
-        );
-        if (mid) drawMomentumCanvas(c.id, mid);
-      });
+      // Draw momentum is now handled inside drawWormCanvas as background layer
     }, 30);
   }
 }
