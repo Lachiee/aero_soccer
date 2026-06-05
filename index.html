@@ -4131,8 +4131,109 @@ function renderSeasonSummary() {
     return parts.length ? `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px;margin-top:10px;margin-bottom:10px">${parts.join('')}</div>` : '';
   })();
 
+  // ── Team A vs Team B record ──────────────────────────────────────────────
+  const teamRecord = (() => {
+    const seasonMatches2 = matchList.filter(m => inSeason(m.date) && m.winnerTeam);
+    const aWins = seasonMatches2.filter(m => m.winnerTeam === 'A').length;
+    const bWins = seasonMatches2.filter(m => m.winnerTeam === 'B').length;
+    const draws = seasonMatches2.filter(m => m.winnerTeam === 'draw').length;
+    const total = seasonMatches2.length;
+    if (!total) return '';
+    const aPct = Math.round(aWins/total*100), bPct = Math.round(bWins/total*100);
+    return `<div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:12px">
+      <div style="font-family:'Barlow Condensed',sans-serif;font-size:.7rem;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-bottom:10px">⚽ Non-Bibs vs Bibs — ${total} games</div>
+      <div style="display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:12px">
+        <div style="text-align:center">
+          <div style="font-family:'Bebas Neue',sans-serif;font-size:2.5rem;color:var(--green);line-height:1">${aWins}</div>
+          <div style="font-size:.7rem;color:var(--muted)">NON-BIBS WINS · ${aPct}%</div>
+        </div>
+        <div style="text-align:center">
+          <div style="font-family:'Bebas Neue',sans-serif;font-size:1rem;color:var(--muted)">${draws}D</div>
+        </div>
+        <div style="text-align:center">
+          <div style="font-family:'Bebas Neue',sans-serif;font-size:2.5rem;color:var(--blue,#60a5fa);line-height:1">${bWins}</div>
+          <div style="font-size:.7rem;color:var(--muted)">BIBS WINS · ${bPct}%</div>
+        </div>
+      </div>
+      <div style="margin-top:10px;height:6px;border-radius:3px;overflow:hidden;background:var(--blue,#60a5fa)">
+        <div style="height:100%;width:${aPct}%;background:var(--green);border-radius:3px 0 0 3px"></div>
+      </div>
+    </div>`;
+  })();
+
+  // ── Partnership win % (2-player and 3-player) ─────────────────────────────
+  const partnershipRecord = (() => {
+    const seasonM = matchList.filter(m => inSeason(m.date) && m.winnerTeam);
+    if (seasonM.length < 5) return '';
+
+    // 2-player partnerships — find pairs that played together ≥4 times
+    const pairs = {};
+    seasonM.forEach(m => {
+      const players = [...m.teamA, ...m.teamB].map(r => r.player);
+      const teams = { A: m.teamA.map(r=>r.player), B: m.teamB.map(r=>r.player) };
+      ['A','B'].forEach(t => {
+        const tp = teams[t];
+        for (let i=0; i<tp.length; i++) for (let j=i+1; j<tp.length; j++) {
+          const key = [tp[i],tp[j]].sort().join('|');
+          if (!pairs[key]) pairs[key] = { wins:0, games:0, players:[tp[i],tp[j]] };
+          pairs[key].games++;
+          if (m.winnerTeam === t) pairs[key].wins++;
+        }
+      });
+    });
+    const topPairs = Object.values(pairs)
+      .filter(p => p.games >= 4)
+      .map(p => ({ ...p, pct: Math.round(p.wins/p.games*100) }))
+      .sort((a,b) => b.pct-a.pct || b.games-a.games)
+      .slice(0, 5);
+
+    // 3-player partnerships — find trios that played together ≥3 times
+    const trios = {};
+    seasonM.forEach(m => {
+      const teams = { A: m.teamA.map(r=>r.player), B: m.teamB.map(r=>r.player) };
+      ['A','B'].forEach(t => {
+        const tp = teams[t];
+        for (let i=0; i<tp.length; i++) for (let j=i+1; j<tp.length; j++) for (let k=j+1; k<tp.length; k++) {
+          const key = [tp[i],tp[j],tp[k]].sort().join('|');
+          if (!trios[key]) trios[key] = { wins:0, games:0, players:[tp[i],tp[j],tp[k]] };
+          trios[key].games++;
+          if (m.winnerTeam === t) trios[key].wins++;
+        }
+      });
+    });
+    const topTrios = Object.values(trios)
+      .filter(p => p.games >= 3)
+      .map(p => ({ ...p, pct: Math.round(p.wins/p.games*100) }))
+      .sort((a,b) => b.pct-a.pct || b.games-a.games)
+      .slice(0, 5);
+
+    if (!topPairs.length && !topTrios.length) return '';
+
+    const pairRow = (p) => {
+      const col = p.pct >= 60 ? 'var(--green)' : p.pct >= 50 ? 'var(--lime)' : p.pct >= 40 ? 'var(--amber,#f59e0b)' : 'rgba(248,113,113,.8)';
+      return `<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid rgba(255,255,255,.04)">
+        <div style="flex:1;font-size:.82rem;color:var(--text)">${p.players.join(' + ')}</div>
+        <div style="font-size:.75rem;color:var(--muted)">${p.games}g</div>
+        <div style="font-family:'Bebas Neue',sans-serif;font-size:1rem;color:${col};min-width:40px;text-align:right">${p.pct}%</div>
+      </div>`;
+    };
+
+    return `<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+      ${topPairs.length ? `<div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px">
+        <div style="font-family:'Barlow Condensed',sans-serif;font-size:.7rem;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-bottom:10px">🤝 Best 2-Player Win %</div>
+        ${topPairs.map(pairRow).join('')}
+      </div>` : ''}
+      ${topTrios.length ? `<div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px">
+        <div style="font-family:'Barlow Condensed',sans-serif;font-size:.7rem;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-bottom:10px">🤝 Best 3-Player Win %</div>
+        ${topTrios.map(pairRow).join('')}
+      </div>` : ''}
+    </div>`;
+  })();
+
   try {
     content.innerHTML = `
+    ${teamRecord}
+    ${partnershipRecord}
     <!-- Hero row: top 3 awards -->
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;margin-bottom:10px">
       ${a1 ? heroCard(a1, '#f0c040') : ''}
@@ -4282,6 +4383,96 @@ function resolveGoalTeam(p, scorerTeam, swappedPlayers, half) {
 }
 
 window._wormData = window._wormData || {};
+
+function drawMomentumCanvas(canvasId, matchId) {
+  const canvas = document.getElementById(canvasId);
+  const data = window._momentumData?.[matchId];
+  if (!canvas || !data) return;
+
+  const { aB, bB, matchDur, htSecs, nBuckets, BUCKET } = data;
+  const dpr = window.devicePixelRatio || 1;
+  const W = canvas.offsetWidth || 700, H = 160;
+  canvas.width = W * dpr; canvas.height = H * dpr;
+  canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+
+  // Background
+  ctx.fillStyle = 'rgba(0,0,0,.3)';
+  if (ctx.roundRect) ctx.roundRect(0,0,W,H,8); else ctx.rect(0,0,W,H);
+  ctx.fill();
+
+  const pad = { top: 20, right: 16, bottom: 20, left: 16 };
+  const cW = W - pad.left - pad.right;
+  const cY = H / 2; // centre line
+  const maxVal = Math.max(...aB, ...bB, 1);
+  const halfH = (H - pad.top - pad.bottom) / 2;
+
+  const toX = i => pad.left + (i / (nBuckets - 1)) * cW;
+
+  // Centre line
+  ctx.strokeStyle = 'rgba(255,255,255,.15)'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(pad.left, cY); ctx.lineTo(pad.left+cW, cY); ctx.stroke();
+
+  // HT line
+  if (htSecs) {
+    const htX = toX(htSecs / BUCKET);
+    ctx.strokeStyle = 'rgba(255,255,255,.25)'; ctx.setLineDash([4,4]);
+    ctx.beginPath(); ctx.moveTo(htX, pad.top); ctx.lineTo(htX, H-pad.bottom); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.font = '9px Barlow Condensed, sans-serif'; ctx.fillStyle = 'rgba(255,255,255,.3)'; ctx.textAlign = 'center';
+    ctx.fillText('HT', htX, pad.top - 2);
+  }
+
+  // Draw team area — Team A upward (green), Team B downward (blue)
+  const drawArea = (buckets, upward, color) => {
+    ctx.beginPath();
+    ctx.moveTo(toX(0), cY);
+    buckets.forEach((v, i) => {
+      const x = toX(i);
+      const h = (v / maxVal) * halfH;
+      ctx.lineTo(x, upward ? cY - h : cY + h);
+    });
+    ctx.lineTo(toX(nBuckets-1), cY);
+    ctx.closePath();
+    const grad = ctx.createLinearGradient(0, upward ? pad.top : cY, 0, upward ? cY : H-pad.bottom);
+    grad.addColorStop(0, color.replace(')', ', .7)').replace('rgb', 'rgba'));
+    grad.addColorStop(1, color.replace(')', ', .05)').replace('rgb', 'rgba'));
+    ctx.fillStyle = grad;
+    ctx.fill();
+    // Outline
+    ctx.beginPath();
+    ctx.moveTo(toX(0), cY);
+    buckets.forEach((v, i) => {
+      const x = toX(i), h = (v/maxVal)*halfH;
+      ctx.lineTo(x, upward ? cY-h : cY+h);
+    });
+    ctx.strokeStyle = color; ctx.lineWidth = 1.5;
+    ctx.stroke();
+  };
+
+  drawArea(aB, true,  'rgb(57,211,83)');   // Team A — green upward
+  drawArea(bB, false, 'rgb(96,165,250)');  // Team B — blue downward
+
+  // Labels
+  ctx.font = 'bold 9px Barlow Condensed, sans-serif'; ctx.textAlign = 'left';
+  ctx.fillStyle = 'rgba(57,211,83,.8)'; ctx.fillText('NON-BIBS ▲', pad.left+3, pad.top+10);
+  ctx.fillStyle = 'rgba(96,165,250,.8)'; ctx.fillText('BIBS ▼', pad.left+3, H-pad.bottom-4);
+
+  // Time labels
+  ctx.textAlign = 'center'; ctx.fillStyle = 'rgba(255,255,255,.25)'; ctx.font = '9px Barlow Condensed, sans-serif';
+  [0, 10, 20, 30, 40, 50].forEach(min => {
+    const i = (min*60) / BUCKET;
+    if (i < nBuckets) { const x = toX(i); ctx.fillText(min+"'", x, H-4); }
+  });
+
+  // Total shots summary
+  const totalA = aB.reduce((s,v)=>s+v,0), totalB = bB.reduce((s,v)=>s+v,0);
+  ctx.textAlign = 'right'; ctx.fillStyle = 'rgba(57,211,83,.7)';
+  ctx.fillText('A: '+Math.round(totalA/1.5)+' shots', W-pad.right, pad.top+10);
+  ctx.fillStyle = 'rgba(96,165,250,.7)';
+  ctx.fillText('B: '+Math.round(totalB/1.5)+' shots', W-pad.right, H-pad.bottom-4);
+}
 
 function drawWormCanvas(canvasId, matchId) {
   const canvas = document.getElementById(canvasId);
@@ -6510,6 +6701,33 @@ function renderMatches() {
             }).join('')
             +'</div>'
             +(insights.length?'<details style="margin-top:8px" onclick="event.stopPropagation()"><summary style="cursor:pointer;font-size:.68rem;color:var(--muted);font-family:\'Barlow Condensed\',sans-serif;letter-spacing:.5px;list-style:none;display:inline-flex;align-items:center;gap:4px;padding:2px 8px;background:var(--card2);border:1px solid var(--border);border-radius:5px;user-select:none">▶ Match Insights ('+insights.length+')</summary><div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:6px">'+insights.map(ins=>'<div style="background:var(--card2);border:1px solid var(--border);border-radius:5px;padding:2px 9px;font-size:.68rem;color:'+ins.col+'">'+ins.text+'</div>').join('')+'</div></details>':'')
+            +(() => {
+              // Momentum swing chart — rolling shot activity per team
+              try {
+                const logs = JSON.parse(localStorage.getItem('aero_event_logs') || '{}');
+                const log = logs[m.id];
+                if (!log?.events?.length) return '';
+                const SHOT_W = { 'Goals': 3, 'On Target': 2, 'Off Target': 1, 'Post': 1 };
+                const BUCKET = 120; // 2-minute windows
+                const matchDur = totalDurSecs || 3000;
+                const nBuckets = Math.ceil(matchDur / BUCKET) + 1;
+                const aB = new Array(nBuckets).fill(0);
+                const bB = new Array(nBuckets).fill(0);
+                log.events.forEach(e => {
+                  const w = SHOT_W[e.event];
+                  if (!w) return;
+                  const idx = Math.min(Math.floor(e.tsSecsRaw / BUCKET), nBuckets - 1);
+                  if (e.team === 'A') aB[idx] += w;
+                  else bB[idx] += w;
+                });
+                const momId = 'momentum-' + m.id.replace(/[#,]/g,'_');
+                // Store for canvas draw
+                window._momentumData = window._momentumData || {};
+                window._momentumData[m.id] = { aB, bB, matchDur, htSecs, nBuckets, BUCKET };
+                return '<div style="margin-top:12px"><div style="font-size:.62rem;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-bottom:6px;font-family:\'Barlow Condensed\',sans-serif">Offensive Momentum</div>'
+                  + '<canvas id="' + momId + '" style="width:100%;height:160px;display:block;border-radius:8px"></canvas></div>';
+              } catch(e) { return ''; }
+            })()
             +'</div>';
         })()}
 
@@ -6742,17 +6960,22 @@ function toggleMatchDetail(id) {
   if (!el) return;
   el.classList.toggle('open');
   if (el.classList.contains('open')) {
-    // Use setTimeout to let the browser paint the panel visible first
     setTimeout(() => {
+      // Draw score worm
       el.querySelectorAll('canvas[id^="timeline-"]').forEach(c => {
-        // Extract match ID from canvas ID: "timeline-2026-04-23__1" → "2026-04-23#1"
         const matchId = c.id.replace('timeline-','').replace(/__/g,'#').replace(/_/g,',');
-        // Try both separator formats
         const mid = Object.keys(window._wormData||{}).find(k =>
-          k.replace(/[#,]/g,'_') === c.id.replace('timeline-','') ||
-          k === matchId
+          k.replace(/[#,]/g,'_') === c.id.replace('timeline-','') || k === matchId
         );
         if (mid) drawWormCanvas(c.id, mid);
+      });
+      // Draw momentum chart
+      el.querySelectorAll('canvas[id^="momentum-"]').forEach(c => {
+        const matchId = c.id.replace('momentum-','').replace(/__/g,'#').replace(/_/g,',');
+        const mid = Object.keys(window._momentumData||{}).find(k =>
+          k.replace(/[#,]/g,'_') === c.id.replace('momentum-','') || k === matchId
+        );
+        if (mid) drawMomentumCanvas(c.id, mid);
       });
     }, 30);
   }
@@ -8266,7 +8489,7 @@ const LB_STATS = [
   ['total_shots','Shots'],['shot_accuracy','Shot Accuracy %'],['shot_conversion','Shot Conv %'],
   ['tackles','Tackles'],['interceptions','Intercepts'],
   ['nutmegs','Nutmegs'],['key_passes','Key Passes'],['blocks','Blocks'],
-  ['goalkeeper_saves','GK Saves'],['wins','Wins'],['mvps','MVPs 👑'],
+  ['goalkeeper_saves','GK Saves'],['wins','Wins'],['win_rate','Win %'],['mvps','MVPs 👑'],
   ['gd','Goal Difference'],['attendance','Attendance %'],
 ];
 let lbStat = 'goals';
@@ -8345,9 +8568,12 @@ function renderLeaderboard() {
     if (lbStat === 'shot_accuracy') {
       return p.total_shots > 0 ? parseFloat((p.shots_on_target / p.total_shots * 100).toFixed(1)) : 0;
     }
-    if (lbStat === 'gd') return p.gd ?? 0;
+    if (lbStat === 'win_rate') {
+      const total = (p.wins||0) + (p.losses||0) + (p.draws||0);
+      return total >= 3 ? parseFloat(((p.wins||0) / total * 100).toFixed(1)) : -1;
+    }
     if (lbStat === 'attendance') return p.attendanceRate ?? 0;
-    const noPerGame = ['wins','losses','draws','mvps','mvp2s','mvp3s','rating','shot_conversion','shot_accuracy','gd','attendance'];
+    const noPerGame = ['wins','losses','draws','mvps','mvp2s','mvp3s','rating','shot_conversion','shot_accuracy','win_rate','gd','attendance'];
     const raw = p[lbStat] ?? 0;
     if (lbPerGame && !noPerGame.includes(lbStat)) return parseFloat((raw / g).toFixed(2));
     return raw;
@@ -8429,6 +8655,7 @@ function renderLeaderboard() {
       <div class="lb-bar-wrap"><div class="lb-bar" style="width:${(v/max*100).toFixed(1)}%"></div></div>
       <div class="lb-val">${
         (lbStat==='shot_conversion'||lbStat==='shot_accuracy'||lbStat==='attendance') ? v+'%' :
+        lbStat==='win_rate' ? v+'% <span style="font-size:.65rem;opacity:.6">('+((p.wins||0)+(p.losses||0)+(p.draws||0))+'g)</span>' :
         lbStat==='gd' ? (v>0?'+':'')+v :
         v
       }</div>
