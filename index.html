@@ -6739,74 +6739,13 @@ function renderMatches() {
           comboPairs.forEach(p=>insights.push({col:'var(--amber)',text:'🤝 '+p.name+' combined '+p.times.length+'× ('+p.times.join(', ')+')'}));
 
           window._momStyle = window._momStyle || 'line';
-          const momToggleId = 'mom-toggle-' + mid.replace(/[#,]/g,'_');
           return '<div style="margin-bottom:14px">'
-            + '<div style="display:grid;grid-template-columns:1fr 220px;gap:10px;align-items:start">'
-            + '<div>'
-            + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">'
-            + '<div style="font-size:.62rem;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);font-family:\'Barlow Condensed\',sans-serif">Score Worm'+(ytId?' · click dot to seek video':'')+'</div>'
-            + '<div id="'+momToggleId+'" style="display:flex;gap:3px" onclick="event.stopPropagation()">'
-            + '<button onclick="event.stopPropagation();window._momStyle=\'bars\';document.querySelectorAll(\'canvas[id^=\\\"timeline-\\\"]\').forEach(c=>{const mid=Object.keys(window._wormData||{}).find(k=>k.replace(/[#,]/g,\'_\')===c.id.replace(\'timeline-\',\'\'));if(mid)drawWormCanvas(c.id,mid)})" style="font-family:\'Barlow Condensed\',sans-serif;font-size:.65rem;padding:2px 7px;border-radius:4px;border:1px solid var(--border);cursor:pointer;background:var(--card2);color:var(--muted)">Bars</button>'
-            + '<button onclick="event.stopPropagation();window._momStyle=\'line\';document.querySelectorAll(\'canvas[id^=\\\"timeline-\\\"]\').forEach(c=>{const mid=Object.keys(window._wormData||{}).find(k=>k.replace(/[#,]/g,\'_\')===c.id.replace(\'timeline-\',\'\'));if(mid)drawWormCanvas(c.id,mid)})" style="font-family:\'Barlow Condensed\',sans-serif;font-size:.65rem;padding:2px 7px;border-radius:4px;border:1px solid var(--border);cursor:pointer;background:var(--card2);color:var(--muted)">Line</button>'
-            + '</div></div>'
-            +'<canvas id="'+canvasId+'" style="width:100%;height:280px;display:block;border-radius:8px"></canvas>'
+            +'<div style="font-size:.62rem;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-bottom:6px;font-family:\'Barlow Condensed\',sans-serif">Score Worm'+(ytId?' · click dot to seek video':'')+'</div>'
+            +'<div style="display:flex;gap:6px;margin-bottom:6px">'
+            +'<span onclick="event.stopPropagation();window._momStyle=\'bars\';document.querySelectorAll(\'canvas[id^=timeline-]\').forEach(function(c){var k=Object.keys(window._wormData||{}).find(function(k){return k.replace(/[#,]/g,\'_\')===c.id.replace(\'timeline-\',\'\')});if(k)drawWormCanvas(c.id,k)})" style="font-family:Barlow Condensed,sans-serif;font-size:.62rem;letter-spacing:.5px;padding:1px 7px;border-radius:4px;border:1px solid var(--border);cursor:pointer;background:var(--card2);color:var(--muted);user-select:none">Bars</span>'
+            +'<span onclick="event.stopPropagation();window._momStyle=\'line\';document.querySelectorAll(\'canvas[id^=timeline-]\').forEach(function(c){var k=Object.keys(window._wormData||{}).find(function(k){return k.replace(/[#,]/g,\'_\')===c.id.replace(\'timeline-\',\'\')});if(k)drawWormCanvas(c.id,k)})" style="font-family:Barlow Condensed,sans-serif;font-size:.62rem;letter-spacing:.5px;padding:1px 7px;border-radius:4px;border:1px solid var(--border);cursor:pointer;background:var(--card2);color:var(--muted);user-select:none">Line</span>'
             +'</div>'
-            // Right: top stats panel
-            + (() => {
-              const sumTeam = (rows, key) => rows.reduce((s,r) => s + n(r[key]), 0);
-              const aShots = sumTeam(m.teamA, 'total_shots'), bShots = sumTeam(m.teamB, 'total_shots');
-              const aOT = sumTeam(m.teamA, 'shots_on_target'), bOT = sumTeam(m.teamB, 'shots_on_target');
-              const aInt = sumTeam(m.teamA, 'interceptions'), bInt = sumTeam(m.teamB, 'interceptions');
-              const aTkl = sumTeam(m.teamA, 'tackles'), bTkl = sumTeam(m.teamB, 'tackles');
-              const aBlk = sumTeam(m.teamA, 'blocks'), bBlk = sumTeam(m.teamB, 'blocks');
-              const aKP = sumTeam(m.teamA, 'key_passes'), bKP = sumTeam(m.teamB, 'key_passes');
-              const aNM = sumTeam(m.teamA, 'nutmegs'), bNM = sumTeam(m.teamB, 'nutmegs');
-              const totalShots = aShots + bShots || 1;
-              const totalOT = aOT + bOT || 1;
-
-              const statRow = (label, a, b) => {
-                const total = a + b || 1;
-                const aPct = Math.round(a/total*100);
-                const bPct = 100 - aPct;
-                const aCol = a > b ? 'var(--green)' : a === b ? 'var(--muted)' : 'rgba(255,255,255,.4)';
-                const bCol = b > a ? '#60a5fa' : b === a ? 'var(--muted)' : 'rgba(255,255,255,.4)';
-                return `<div style="margin-bottom:10px">
-                  <div style="font-size:.6rem;letter-spacing:.8px;text-transform:uppercase;color:var(--muted);text-align:center;margin-bottom:3px">${label}</div>
-                  <div style="display:flex;align-items:center;gap:5px">
-                    <span style="font-family:'Bebas Neue',sans-serif;font-size:.95rem;color:${aCol};min-width:20px;text-align:right">${a}</span>
-                    <div style="flex:1;height:6px;border-radius:3px;overflow:hidden;background:rgba(96,165,250,.25)">
-                      <div style="height:100%;width:${aPct}%;background:var(--green);border-radius:3px 0 0 3px"></div>
-                    </div>
-                    <span style="font-family:'Bebas Neue',sans-serif;font-size:.95rem;color:${bCol};min-width:20px">${b}</span>
-                  </div>
-                </div>`;
-              };
-
-              const shotShareA = Math.round(aShots/totalShots*100);
-              return `<div style="background:rgba(0,0,0,.3);border-radius:8px;padding:12px">
-                <div style="font-family:'Bebas Neue',sans-serif;font-size:.9rem;letter-spacing:1px;color:var(--text);text-align:center;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid rgba(255,255,255,.08)">Top Stats</div>
-                <div style="margin-bottom:10px">
-                  <div style="font-size:.6rem;letter-spacing:.8px;text-transform:uppercase;color:var(--muted);text-align:center;margin-bottom:3px">Shot Share</div>
-                  <div style="display:flex;border-radius:3px;overflow:hidden;height:20px">
-                    <div style="width:${shotShareA}%;background:rgba(57,211,83,.5);display:flex;align-items:center;justify-content:center;font-family:'Bebas Neue',sans-serif;font-size:.75rem;color:#fff">${shotShareA}%</div>
-                    <div style="flex:1;background:rgba(96,165,250,.5);display:flex;align-items:center;justify-content:center;font-family:'Bebas Neue',sans-serif;font-size:.75rem;color:#fff">${100-shotShareA}%</div>
-                  </div>
-                </div>
-                ${statRow('Total Shots', aShots, bShots)}
-                ${statRow('On Target', aOT, bOT)}
-                ${statRow('Key Passes', aKP, bKP)}
-                ${statRow('Tackles', aTkl, bTkl)}
-                ${statRow('Interceptions', aInt, bInt)}
-                ${statRow('Blocks', aBlk, bBlk)}
-                ${statRow('Nutmegs', aNM, bNM)}
-                <div style="display:flex;justify-content:space-between;margin-top:8px;padding-top:6px;border-top:1px solid rgba(255,255,255,.08)">
-                  <span style="font-size:.6rem;color:var(--green);font-family:'Barlow Condensed',sans-serif;letter-spacing:.5px">● NON-BIBS</span>
-                  <span style="font-size:.6rem;color:#60a5fa;font-family:'Barlow Condensed',sans-serif;letter-spacing:.5px">BIBS ●</span>
-                </div>
-              </div>`;
-            })()
-            + '</div>'
-            // Goal chips row
+            +'<canvas id="'+canvasId+'" style="width:100%;height:280px;display:block;border-radius:8px"></canvas>'
             +'<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:8px">'
             +rows.map(e=>{
               const ytSecs=ytId&&e.time?timeToYtSeconds(e.time,e.half):null;
