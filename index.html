@@ -4509,57 +4509,23 @@ function drawWormCanvas(canvasId, matchId) {
   const mom = window._momentumData?.[matchId];
   if (mom) {
     const { aB, bB, nBuckets, BUCKET } = mom;
-    const midY = toY(0); // zero / centre line
+    const midY = toY(0);
     const maxMom = Math.max(...aB, ...bB, 1);
     const momScale = (cH / 2) * 0.7 / maxMom;
-    const bW = Math.max(1, cW / nBuckets - 0.5); // bucket bar width
+    const bW = Math.max(1, cW / nBuckets - 0.5);
 
-    // Draw as filled bars from centre — clean spike look
     for (let i = 0; i < nBuckets; i++) {
       const x = pad.left + (i / (nBuckets - 1)) * cW;
       const a = aB[i] || 0, b = bB[i] || 0;
-
       if (a > 0) {
-        const h = a * momScale;
-        // Full green if A dominant, faint if B dominant
         ctx.fillStyle = a >= b ? 'rgba(57,211,83,.35)' : 'rgba(57,211,83,.08)';
-        ctx.fillRect(x - bW/2, midY - h, bW, h);
+        ctx.fillRect(x - bW/2, midY - a * momScale, bW, a * momScale);
       }
       if (b > 0) {
-        const h = b * momScale;
-        // Full blue if B dominant, faint if A dominant
         ctx.fillStyle = b >= a ? 'rgba(96,165,250,.35)' : 'rgba(96,165,250,.08)';
-        ctx.fillRect(x - bW/2, midY, bW, h);
+        ctx.fillRect(x - bW/2, midY, bW, b * momScale);
       }
     }
-
-    // Smooth outline using bezier curve over the spikes
-    const drawOutline = (buckets, rival, upward, color) => {
-      const pts = [];
-      for (let i = 0; i < nBuckets; i++) {
-        const x = pad.left + (i / (nBuckets - 1)) * cW;
-        const v = buckets[i] || 0;
-        const h = v * momScale;
-        pts.push({ x, y: upward ? midY - h : midY + h });
-      }
-      if (pts.length < 2) return;
-      ctx.beginPath();
-      ctx.moveTo(pts[0].x, midY);
-      ctx.lineTo(pts[0].x, pts[0].y);
-      for (let i = 1; i < pts.length - 1; i++) {
-        const cpx = (pts[i].x + pts[i+1].x) / 2;
-        const cpy = (pts[i].y + pts[i+1].y) / 2;
-        ctx.quadraticCurveTo(pts[i].x, pts[i].y, cpx, cpy);
-      }
-      ctx.lineTo(pts[pts.length-1].x, pts[pts.length-1].y);
-      ctx.lineTo(pts[pts.length-1].x, midY);
-      ctx.strokeStyle = color;
-      ctx.lineWidth = 1;
-      ctx.stroke();
-    };
-
-    drawOutline(aB, bB, true,  'rgba(57,211,83,.5)');
-    drawOutline(bB, aB, false, 'rgba(96,165,250,.5)');
   }
 
   // Grid lines + Y labels
@@ -6769,7 +6735,7 @@ function renderMatches() {
                 const log = logs[m.id];
                 if (!log?.events?.length) return '';
                 const SHOT_W = { 'Goals': 3, 'On Target': 2, 'Off Target': 1, 'Post': 1 };
-                const BUCKET = 120; // 2-minute windows
+                const BUCKET = 30; // 30-second windows
                 const matchDur = totalDurSecs || 3000;
                 const nBuckets = Math.ceil(matchDur / BUCKET) + 1;
                 const aB = new Array(nBuckets).fill(0);
