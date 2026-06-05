@@ -4521,56 +4521,48 @@ function drawWormCanvas(canvasId, matchId) {
   if (mom) {
     const { aB, bB, nBuckets, BUCKET } = mom;
     const midY = toY(0);
-    const maxMom = Math.max(...aB, ...bB, 1);
-    const momScale = (cH / 2) * 0.7 / maxMom;
-    const bW = Math.max(1, cW / nBuckets - 0.3);
-    const momStyle = window._momStyle || 'line';
+    // Max value is 10 (as specified), scale to 65% of half chart height
+    const MAX_VAL = 10;
+    const momScale = (cH / 2) * 0.65 / MAX_VAL;
+    const bucketToX = i => toX((i + 0.5) * BUCKET);
 
-    // Map bucket index to X using same toX scale as worm (time-based)
-    const bucketToX = i => toX((i + 0.5) * BUCKET); // centre of bucket
+    const drawCurve = (buckets, upward, fillCol, lineCol) => {
+      const pts = Array.from({ length: nBuckets }, (_, i) => {
+        const v = Math.min(buckets[i] || 0, MAX_VAL);
+        const h = v * momScale;
+        return { x: bucketToX(i), y: upward ? midY - h : midY + h };
+      });
 
-    if (momStyle === 'bars') {
-      for (let i = 0; i < nBuckets; i++) {
-        const x = bucketToX(i);
-        const a = aB[i] || 0, b = bB[i] || 0;
-        if (a > 0) {
-          ctx.fillStyle = a >= b ? 'rgba(57,211,83,.35)' : 'rgba(57,211,83,.08)';
-          ctx.fillRect(x - bW/2, midY - a * momScale, bW, a * momScale);
-        }
-        if (b > 0) {
-          ctx.fillStyle = b >= a ? 'rgba(96,165,250,.35)' : 'rgba(96,165,250,.08)';
-          ctx.fillRect(x - bW/2, midY, bW, b * momScale);
-        }
+      // Filled area under curve
+      ctx.beginPath();
+      ctx.moveTo(pts[0].x, midY);
+      for (let i = 0; i < pts.length - 1; i++) {
+        const mx = (pts[i].x + pts[i+1].x) / 2;
+        const my = (pts[i].y + pts[i+1].y) / 2;
+        ctx.quadraticCurveTo(pts[i].x, pts[i].y, mx, my);
       }
-    } else {
-      // Line mode — smooth filled area
-      const drawLine = (buckets, rival, upward, fillCol, lineCol) => {
-        const pts = Array.from({ length: nBuckets }, (_, i) => ({
-          x: bucketToX(i),
-          y: (() => { const h = (buckets[i]||0) * momScale; return upward ? midY - h : midY + h; })()
-        }));
-        // Filled area
-        ctx.beginPath();
-        ctx.moveTo(pts[0].x, midY);
-        pts.forEach(p => ctx.lineTo(p.x, p.y));
-        ctx.lineTo(pts[pts.length-1].x, midY);
-        ctx.closePath();
-        ctx.fillStyle = fillCol;
-        ctx.fill();
-        // Line
-        ctx.beginPath();
-        ctx.moveTo(pts[0].x, pts[0].y);
-        for (let i = 1; i < pts.length - 1; i++) {
-          const mx = (pts[i].x + pts[i+1].x) / 2;
-          const my = (pts[i].y + pts[i+1].y) / 2;
-          ctx.quadraticCurveTo(pts[i].x, pts[i].y, mx, my);
-        }
-        ctx.lineTo(pts[pts.length-1].x, pts[pts.length-1].y);
-        ctx.strokeStyle = lineCol; ctx.lineWidth = 1.5; ctx.stroke();
-      };
-      drawLine(aB, bB, true,  'rgba(57,211,83,.2)', 'rgba(57,211,83,.6)');
-      drawLine(bB, aB, false, 'rgba(96,165,250,.2)', 'rgba(96,165,250,.6)');
-    }
+      ctx.lineTo(pts[pts.length-1].x, pts[pts.length-1].y);
+      ctx.lineTo(pts[pts.length-1].x, midY);
+      ctx.closePath();
+      ctx.fillStyle = fillCol;
+      ctx.fill();
+
+      // Smooth line on top
+      ctx.beginPath();
+      ctx.moveTo(pts[0].x, pts[0].y);
+      for (let i = 0; i < pts.length - 1; i++) {
+        const mx = (pts[i].x + pts[i+1].x) / 2;
+        const my = (pts[i].y + pts[i+1].y) / 2;
+        ctx.quadraticCurveTo(pts[i].x, pts[i].y, mx, my);
+      }
+      ctx.lineTo(pts[pts.length-1].x, pts[pts.length-1].y);
+      ctx.strokeStyle = lineCol;
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+    };
+
+    drawCurve(aB, true,  'rgba(57,211,83,.18)',  'rgba(57,211,83,.7)');
+    drawCurve(bB, false, 'rgba(96,165,250,.18)', 'rgba(96,165,250,.7)');
   }
 
   // Grid lines + Y labels
@@ -4638,19 +4630,16 @@ function drawWormCanvas(canvasId, matchId) {
   });
   pts.push({ x: pad.left+cW, y: toY(fA-fB) });
 
-  // Green fill above zero
-  const gA = ctx.createLinearGradient(0, toY(maxLead), 0, toY(0));
-  gA.addColorStop(0, 'rgba(57,211,83,.22)'); gA.addColorStop(1, 'rgba(57,211,83,.04)');
+  // Neutral fill above/below zero — let momentum colours dominate
   ctx.beginPath(); ctx.moveTo(pad.left, toY(0));
   pts.forEach(p => ctx.lineTo(p.x, Math.min(p.y, toY(0))));
-  ctx.lineTo(pad.left+cW, toY(0)); ctx.closePath(); ctx.fillStyle = gA; ctx.fill();
+  ctx.lineTo(pad.left+cW, toY(0)); ctx.closePath();
+  ctx.fillStyle = 'rgba(255,255,255,.04)'; ctx.fill();
 
-  // Blue fill below zero
-  const gB = ctx.createLinearGradient(0, toY(0), 0, toY(-maxLead));
-  gB.addColorStop(0, 'rgba(96,165,250,.04)'); gB.addColorStop(1, 'rgba(96,165,250,.28)');
   ctx.beginPath(); ctx.moveTo(pad.left, toY(0));
   pts.forEach(p => ctx.lineTo(p.x, Math.max(p.y, toY(0))));
-  ctx.lineTo(pad.left+cW, toY(0)); ctx.closePath(); ctx.fillStyle = gB; ctx.fill();
+  ctx.lineTo(pad.left+cW, toY(0)); ctx.closePath();
+  ctx.fillStyle = 'rgba(255,255,255,.04)'; ctx.fill();
 
   // Worm line
   ctx.beginPath();
@@ -6748,13 +6737,9 @@ function renderMatches() {
           if(maxStr>180) insights.push({col:'var(--muted)',text:'⏱ Goalless '+Math.round(maxStr/60)+' mins ('+strS+'–'+strE+')'});
           comboPairs.forEach(p=>insights.push({col:'var(--amber)',text:'🤝 '+p.name+' combined '+p.times.length+'× ('+p.times.join(', ')+')'}));
 
-          window._momStyle = window._momStyle || 'line';
+          window._momStyle = 'line';
           return '<div style="margin-bottom:14px">'
             +'<div style="font-size:.62rem;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-bottom:6px;font-family:\'Barlow Condensed\',sans-serif">Score Worm'+(ytId?' · click dot to seek video':'')+'</div>'
-            +'<div style="display:flex;gap:6px;margin-bottom:6px">'
-            +'<span onclick="setMomStyle(event,0)" style="font-family:\'Barlow Condensed\',sans-serif;font-size:.62rem;padding:1px 7px;border-radius:4px;border:1px solid var(--border);cursor:pointer;background:var(--card2);color:var(--muted)">Bars</span>'
-            +'<span onclick="setMomStyle(event,1)" style="font-family:\'Barlow Condensed\',sans-serif;font-size:.62rem;padding:1px 7px;border-radius:4px;border:1px solid var(--border);cursor:pointer;background:var(--card2);color:var(--muted)">Line</span>'
-            +'</div>'
             +'<canvas id="'+canvasId+'" style="width:100%;height:280px;display:block;border-radius:8px"></canvas>'
             +'<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:8px">'
             +rows.map(e=>{
@@ -6783,7 +6768,7 @@ function renderMatches() {
                 const logs = JSON.parse(localStorage.getItem('aero_event_logs') || '{}');
                 const log = logs[m.id];
                 if (!log?.events?.length) return '';
-                const SHOT_W = { 'Goals': 3, 'On Target': 2, 'Off Target': 1, 'Post': 1 };
+                const SHOT_W = { 'Goals': 10, 'On Target': 10, 'Post': 10, 'Off Target': 5 };
                 const BUCKET = 15; // 15-second windows
                 const matchDur = totalDurSecs || 3000;
                 const nBuckets = Math.ceil(matchDur / BUCKET) + 1;
