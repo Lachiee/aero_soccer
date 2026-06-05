@@ -4514,7 +4514,7 @@ function drawWormCanvas(canvasId, matchId) {
     const maxMom = Math.max(...aB, ...bB, 1);
     const momScale = (cH / 2) * 0.7 / maxMom;
     const bW = Math.max(1, cW / nBuckets - 0.3);
-    const momStyle = window._momStyle || 'bars';
+    const momStyle = window._momStyle || 'line';
 
     // Map bucket index to X using same toX scale as worm (time-based)
     const bucketToX = i => toX((i + 0.5) * BUCKET); // centre of bucket
@@ -6738,15 +6738,16 @@ function renderMatches() {
           if(maxStr>180) insights.push({col:'var(--muted)',text:'⏱ Goalless '+Math.round(maxStr/60)+' mins ('+strS+'–'+strE+')'});
           comboPairs.forEach(p=>insights.push({col:'var(--amber)',text:'🤝 '+p.name+' combined '+p.times.length+'× ('+p.times.join(', ')+')'}));
 
+          window._momStyle = window._momStyle || 'line';
+          const momToggleId = 'mom-toggle-' + mid.replace(/[#,]/g,'_');
           return '<div style="margin-bottom:14px">'
             + '<div style="display:grid;grid-template-columns:1fr 220px;gap:10px;align-items:start">'
-            // Left: score worm
             + '<div>'
             + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">'
             + '<div style="font-size:.62rem;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);font-family:\'Barlow Condensed\',sans-serif">Score Worm'+(ytId?' · click dot to seek video':'')+'</div>'
-            + '<div style="display:flex;gap:4px">'
-            + '<button onclick="window._momStyle=\'bars\';document.querySelectorAll(\'canvas[id^=\\\"timeline-\\\"]\').forEach(c=>{const mid=Object.keys(window._wormData||{}).find(k=>k.replace(/[#,]/g,\'_\')===c.id.replace(\'timeline-\',\'\'));if(mid)drawWormCanvas(c.id,mid)})" style="font-family:\'Barlow Condensed\',sans-serif;font-size:.68rem;padding:2px 8px;border-radius:4px;border:1px solid var(--border);cursor:pointer;background:var(--card2);color:var(--muted)">Bars</button>'
-            + '<button onclick="window._momStyle=\'line\';document.querySelectorAll(\'canvas[id^=\\\"timeline-\\\"]\').forEach(c=>{const mid=Object.keys(window._wormData||{}).find(k=>k.replace(/[#,]/g,\'_\')===c.id.replace(\'timeline-\',\'\'));if(mid)drawWormCanvas(c.id,mid)})" style="font-family:\'Barlow Condensed\',sans-serif;font-size:.68rem;padding:2px 8px;border-radius:4px;border:1px solid var(--border);cursor:pointer;background:var(--card2);color:var(--muted)">Line</button>'
+            + '<div id="'+momToggleId+'" style="display:flex;gap:3px" onclick="event.stopPropagation()">'
+            + '<button onclick="event.stopPropagation();window._momStyle=\'bars\';document.querySelectorAll(\'canvas[id^=\\\"timeline-\\\"]\').forEach(c=>{const mid=Object.keys(window._wormData||{}).find(k=>k.replace(/[#,]/g,\'_\')===c.id.replace(\'timeline-\',\'\'));if(mid)drawWormCanvas(c.id,mid)})" style="font-family:\'Barlow Condensed\',sans-serif;font-size:.65rem;padding:2px 7px;border-radius:4px;border:1px solid var(--border);cursor:pointer;background:var(--card2);color:var(--muted)">Bars</button>'
+            + '<button onclick="event.stopPropagation();window._momStyle=\'line\';document.querySelectorAll(\'canvas[id^=\\\"timeline-\\\"]\').forEach(c=>{const mid=Object.keys(window._wormData||{}).find(k=>k.replace(/[#,]/g,\'_\')===c.id.replace(\'timeline-\',\'\'));if(mid)drawWormCanvas(c.id,mid)})" style="font-family:\'Barlow Condensed\',sans-serif;font-size:.65rem;padding:2px 7px;border-radius:4px;border:1px solid var(--border);cursor:pointer;background:var(--card2);color:var(--muted)">Line</button>'
             + '</div></div>'
             +'<canvas id="'+canvasId+'" style="width:100%;height:280px;display:block;border-radius:8px"></canvas>'
             +'</div>'
