@@ -6877,7 +6877,20 @@ function renderMatches() {
                   personalBest[key][ps.player] = prev.length ? Math.max(...prev.map(r => n(r[key]))) : 0;
                 });
               });
-              const isPB = (player, key, val) => val > 0 && val > (personalBest[key]?.[player] ?? 0);
+              // Per-match GK stats from event log — shots faced = saves + goals conceded
+              const matchGkStats = {};
+              try {
+                const logs = JSON.parse(localStorage.getItem('aero_event_logs') || '{}');
+                const log = logs[m.id];
+                if (log?.timeStats?.playerStats) {
+                  Object.entries(log.timeStats.playerStats).forEach(([player, ps]) => {
+                    const conceded = ps.gkGoalsConceded || 0;
+                    const saves = n(([...m.teamA,...m.teamB].find(r=>r.player===player)||{}).goalkeeper_saves);
+                    const faced = saves + conceded;
+                    if (faced > 0) matchGkStats[player] = { saves, conceded, faced, pct: Math.round(saves/faced*100)+'%' };
+                  });
+                }
+              } catch(e) {}
               const pbStar = (player, key, val) => isPB(player, key, val)
                 ? `<span style="color:var(--amber);font-size:.65rem;margin-left:2px" title="Personal best!">★</span>` : '';
 
@@ -6894,6 +6907,9 @@ function renderMatches() {
                 const shots = n(r.total_shots), goals = n(r.goals);
                 const conv = shots > 0 ? (goals/shots*100).toFixed(1)+'%' : '0%';
                 const gkS = n(r.goalkeeper_saves);
+                const gkM = matchGkStats[p];
+                const gkFacedCell = gkM ? gkM.faced : (gkS > 0 ? '—' : '—');
+                const gkPctCell   = gkM ? gkM.pct   : '—';
                 const mvpScore = mvpEntry ? `<span style="font-size:.6rem;color:var(--muted);margin-left:3px">${mvpEntry.score}pts</span>` : '';
                 const rs = rowStyle(r);
                 const v = (key, val) => `${val}${pbStar(p, key, val)}`;
@@ -6911,8 +6927,8 @@ function renderMatches() {
                   <td style="${dCol}">${v('tackles',n(r.tackles)||0)}</td>
                   <td style="${dCol}">${v('interceptions',n(r.interceptions)||0)}</td>
                   <td style="${dCol}">${gkS>0?v('goalkeeper_saves',gkS):'—'}</td>
-                  <td style="${dCol};color:var(--muted)">—</td>
-                  <td style="${dCol};color:var(--muted)">—</td>
+                  <td style="${dCol}">${gkFacedCell}</td>
+                  <td style="${dCol}">${gkPctCell}</td>
                   <td style="${bCol}">${v('nutmegs',n(r.nutmegs)||0)}</td>
                 </tr>`;
               };
@@ -6921,6 +6937,9 @@ function renderMatches() {
                 const sum = key => rows.reduce((s, r) => s + n(r[key]), 0);
                 const totalGoals = sum('goals'), totalShots = sum('total_shots');
                 const conv = totalShots > 0 ? (totalGoals/totalShots*100).toFixed(1)+'%' : '0%';
+                const totalSaves = sum('goalkeeper_saves');
+                const totalFaced = rows.reduce((s,r) => s + (matchGkStats[r.player]?.faced||0), 0);
+                const totalPct   = totalFaced > 0 ? Math.round(totalSaves/totalFaced*100)+'%' : '—';
                 const tS = `padding:5px 8px;font-size:.72rem;font-weight:700;border-top:2px solid rgba(255,255,255,.1);background:rgba(0,0,0,.2)`;
                 return `<tr>
                   <td style="${tS};color:${nameColor}">TOTAL</td>
@@ -6935,9 +6954,9 @@ function renderMatches() {
                   <td style="${tS};${dCol}">${sum('blocks')}</td>
                   <td style="${tS};${dCol}">${sum('tackles')}</td>
                   <td style="${tS};${dCol}">${sum('interceptions')}</td>
-                  <td style="${tS};${dCol}">${sum('goalkeeper_saves')||0}</td>
-                  <td style="${tS};${dCol};color:var(--muted)">—</td>
-                  <td style="${tS};${dCol};color:var(--muted)">—</td>
+                  <td style="${tS};${dCol}">${totalSaves||0}</td>
+                  <td style="${tS};${dCol}">${totalFaced||'—'}</td>
+                  <td style="${tS};${dCol}">${totalPct}</td>
                   <td style="${tS};${bCol}">${sum('nutmegs')}</td>
                 </tr>`;
               };
