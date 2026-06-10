@@ -920,10 +920,6 @@ canvas.spider{display:block;margin:0 auto}
             style="display:flex;align-items:center;gap:6px;padding:7px 14px;background:var(--green);color:#071009;border:none;border-radius:7px;font-family:'Barlow Condensed',sans-serif;font-size:.85rem;font-weight:700;cursor:pointer">
             ⬇ events.csv
           </button>
-          <button onclick="exportCombosCsv()"
-            style="display:flex;align-items:center;gap:6px;padding:7px 14px;background:var(--card2);border:1px solid var(--border);color:var(--text);border-radius:7px;font-family:'Barlow Condensed',sans-serif;font-size:.85rem;cursor:pointer">
-            ⬇ combos.csv
-          </button>
         </div>
         <div style="font-size:.68rem;color:var(--muted);margin-top:8px">data.csv can be downloaded from the admin panel backup section as usual.</div>
       </div>
@@ -13399,9 +13395,6 @@ function generateNewFormatCSV() {
     }
   });
 
-  // Generate combos CSV rows from goal events
-  const combosRows = generateCombosFromGoalEvents(goalEvents, matchId);
-
   // Store event log in localStorage keyed by matchId
   try {
     const stored = JSON.parse(localStorage.getItem('aero_event_logs') || '{}');
@@ -13415,10 +13408,9 @@ function generateNewFormatCSV() {
   } catch(e) { console.warn('Event log storage failed:', e); }
 
   const csvText = rows.join('\n');
-  window._weeklyPendingCSV   = csvText;
-  window._weeklyPendingDate  = matchDate;
-  window._weeklyPendingCombos = combosRows;
-  window._weeklyMatchId      = matchId;
+  window._weeklyPendingCSV  = csvText;
+  window._weeklyPendingDate = matchDate;
+  window._weeklyMatchId     = matchId;
 
   // Show previews
   showNewFormatPreview(allPlayers, summary1H, summary2H, summaryFull);
@@ -13704,11 +13696,8 @@ function appendToAppData() {
     updateDraftBanner();
     _tagCache = null; window._strikerRatingScale = null; window._staminaGroupAvg = null;
 
-    // Import combos if from new format
-    if (window._weeklyPendingCombos && window._weeklyMatchId) {
-      const combosCsvText = 'match_id,half,time,scorer,assister,is_og,is_goal_highlight,is_assist_highlight,shot_x,shot_y,assist_x,assist_y\n' + window._weeklyPendingCombos.join('\n');
-      importCombosCSV(combosCsvText);
-    }
+    // Rebuild goalCombos from event logs (combos.csv no longer used)
+    buildGoalCombosFromEventLogs();
 
     // Check for notable performances
     const matchDate = window._weeklyPendingDate;
@@ -14092,7 +14081,7 @@ function generateWeeklyCSV() {
   document.getElementById('weekly-append-status').textContent = '';
   window._weeklyPendingCSV = csvText;
   window._weeklyPendingDate = matchDate;
-  window._weeklyPendingCombos = null;
+  window._weeklyPendingCSV  = null;
 }
 
 function showWeeklyPreview(players, h1, h2, ogMap) {
@@ -14548,74 +14537,47 @@ document.addEventListener('DOMContentLoaded', () => {
       console.log(`settings.json not found (${err.message}) — using defaults`);
     });
 
-  const fetchCombos = fetch('combos.csv?t=' + ts)
-    .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.text(); })
-    .then(csv => {
-      if (!csv.trim().startsWith('match_id')) throw new Error('Not a valid combos CSV');
-      // Parse combos.csv into goalCombos object
-      const lines = csv.trim().split('\n');
-      const header = lines[0].split(',');
-      const idx = Object.fromEntries(header.map((h,i) => [h.trim(), i]));
-      const loaded = {};
-      lines.slice(1).forEach(line => {
-        if (!line.trim()) return;
-        const cols = line.split(',');
-        const mid    = cols[idx.match_id]?.trim();
-        const half   = cols[idx.half]?.trim();
-        const time   = cols[idx.time]?.trim() || null;
-        const scorer = cols[idx.scorer]?.trim();
-        const assister = cols[idx.assister]?.trim() || null;
-        const isOG = cols[idx.is_og]?.trim() === '1' || /\bOG\b|\bown\s*goal\b/i.test(scorer || '');
-        const rawGoalHL   = cols[idx.is_goal_highlight]?.trim() || '';
-        const rawAssistHL = cols[idx.is_assist_highlight]?.trim() || '';
-        const isGoalHL   = rawGoalHL.includes('!') || rawGoalHL === '1' || cols.join(',').includes('!');
-        const isAssistHL = rawAssistHL.includes('*') || rawAssistHL === '1';
-        const sx = cols[idx.shot_x] != null && cols[idx.shot_x].trim() !== '' ? parseFloat(cols[idx.shot_x]) : null;
-        const sy = cols[idx.shot_y] != null && cols[idx.shot_y].trim() !== '' ? parseFloat(cols[idx.shot_y]) : null;
-        const ax = cols[idx.assist_x] != null && cols[idx.assist_x]?.trim() !== '' ? parseFloat(cols[idx.assist_x]) : null;
-        const ay = cols[idx.assist_y] != null && cols[idx.assist_y]?.trim() !== '' ? parseFloat(cols[idx.assist_y]) : null;
-        if (!mid || !scorer) return;
-        if (!loaded[mid]) loaded[mid] = { h1: [], h2: [] };
-        const key = half === '2H' ? 'h2' : 'h1';
-        loaded[mid][key].push({ scorer, assister, time, isOG, isGoalHighlight: isGoalHL, isAssistHighlight: isAssistHL,
-          ...(sx != null && sy != null ? { sx, sy } : {}),
-          ...(ax != null && ay != null ? { ax, ay } : {}) });
-      });
-      // Merge with localStorage — preserve sx/sy shot positions from localStorage
-      // since the GitHub CSV may not have them yet
-      try {
-        const lsRaw = localStorage.getItem('aeroSoccer_goalCombos');
-        if (lsRaw) {
-          const lsData = JSON.parse(lsRaw);
-          Object.entries(loaded).forEach(([mid, data]) => {
-            const ls = lsData[mid];
-            if (!ls) return;
-            ['h1','h2'].forEach(half => {
-              (data[half]||[]).forEach((g, i) => {
-                const lsG = (ls[half]||[])[i];
-                if (lsG && lsG.sx != null && lsG.sy != null) {
-                  g.sx = lsG.sx; g.sy = lsG.sy;
-                }
-                if (lsG && lsG.ax != null && lsG.ay != null) {
-                  g.ax = lsG.ax; g.ay = lsG.ay;
-                }
-              });
-            });
+  // Build goalCombos from event logs (replaces combos.csv)
+  // Called after events are loaded so localStorage is populated
+  function buildGoalCombosFromEventLogs() {
+    try {
+      const stored = JSON.parse(localStorage.getItem('aero_event_logs') || '{}');
+      const built = {};
+      Object.entries(stored).forEach(([matchId, log]) => {
+        if (!log.events?.length) return;
+        built[matchId] = { h1: [], h2: [] };
+        log.events.forEach(e => {
+          if (e.event !== 'Goals') return;
+          const key = e.half === '2H' ? 'h2' : 'h1';
+          // Preserve existing sx/sy/ax/ay from localStorage goalCombos (user-pinned positions)
+          const existing = goalCombos[matchId]?.[key];
+          const existIdx = built[matchId][key].length;
+          const ls = existing?.[existIdx];
+          built[matchId][key].push({
+            scorer:   e.player   || '',
+            assister: e.assistBy || '',
+            time:     e.ts       || '',
+            isOG:     e.event === 'Own Goal',
+            isGoalHighlight:   e.highlight && e.highlight !== 'none' && e.highlight !== '',
+            isAssistHighlight: e.assistHL  && e.assistHL  !== 'none' && e.assistHL  !== '',
+            ...(e.shotX  != null ? { sx: e.shotX,  sy: e.shotY  } : {}),
+            ...(e.assistX != null ? { ax: e.assistX, ay: e.assistY } : {}),
+            // Overlay user-pinned positions if they exist
+            ...(ls?.sx != null ? { sx: ls.sx, sy: ls.sy } : {}),
+            ...(ls?.ax != null ? { ax: ls.ax, ay: ls.ay } : {}),
           });
-        }
-      } catch(e) {}
-      goalCombos = loaded;
-      _tagCache = null; window._strikerRatingScale = null; window._staminaGroupAvg = null; // force tag rebuild with fresh combo data
-      // Rerender profile if open so highlights appear
-      if (currentPage === 'profile' && currentProfileName) {
-        renderAll();
-        setTimeout(() => renderProfileHeatmap(currentProfileName, window._hmapType||'shot'), 300);
-      }
-      console.log(`✅ Loaded combos.csv — ${Object.keys(loaded).length} matches with combo data`);
-    })
-    .catch(err => {
-      console.log(`combos.csv not found (${err.message}) — using localStorage combos`);
-    });
+        });
+        // Remove empty
+        if (!built[matchId].h1.length && !built[matchId].h2.length) delete built[matchId];
+      });
+      goalCombos = built;
+      saveGoalCombos();
+      _tagCache = null; window._strikerRatingScale = null; window._staminaGroupAvg = null;
+      console.log(`✅ Built goalCombos from event logs — ${Object.keys(built).length} matches`);
+    } catch(e) {
+      console.warn('buildGoalCombosFromEventLogs failed:', e);
+    }
+  }
 
   const fetchData = fetch('data.csv?t=' + ts)
     .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.text(); })
@@ -14628,9 +14590,10 @@ document.addEventListener('DOMContentLoaded', () => {
       return null;
     });
 
-  // Wait for all four, then initialise
-  Promise.all([fetchEvents, fetchSettings, fetchData, fetchCombos]).then(([,, csv]) => {
+  // Wait for all three, then initialise
+  Promise.all([fetchEvents, fetchSettings, fetchData]).then(([,, csv]) => {
     initWithCSV(csv || RAW_CSV, csv ? 'data.csv (GitHub)' : 'RAW_CSV (baked)');
+    buildGoalCombosFromEventLogs();
   });
 });
 </script>
