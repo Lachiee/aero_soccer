@@ -918,7 +918,7 @@ canvas.spider{display:block;margin:0 auto}
         <div style="display:flex;gap:8px;flex-wrap:wrap">
           <button onclick="downloadEventsJson()"
             style="display:flex;align-items:center;gap:6px;padding:7px 14px;background:var(--green);color:#071009;border:none;border-radius:7px;font-family:'Barlow Condensed',sans-serif;font-size:.85rem;font-weight:700;cursor:pointer">
-            ⬇ events.json
+            ⬇ events.csv
           </button>
           <button onclick="exportCombosCsv()"
             style="display:flex;align-items:center;gap:6px;padding:7px 14px;background:var(--card2);border:1px solid var(--border);color:var(--text);border-radius:7px;font-family:'Barlow Condensed',sans-serif;font-size:.85rem;cursor:pointer">
@@ -5734,22 +5734,47 @@ function previewCombos() {
 }
 
 function downloadEventsJson() {
+  // Now outputs events.csv format (Date,Timestamp,Half,Team,Player,Event,...)
   try {
     const stored = JSON.parse(localStorage.getItem('aero_event_logs') || '{}');
     if (!Object.keys(stored).length) {
       alert('No event logs stored yet — import a match using the new format first.');
       return;
     }
-    const json = JSON.stringify(stored, null, 2);
-    const blob = new Blob([json], { type: 'application/json' });
+    const header = 'Date,Timestamp,Half,Team,Player,Event,Assist By,Highlight,Assist Highlight,Shot X,Shot Y,Assist X,Assist Y';
+    const rows = [header];
+    // Sort by date then timestamp
+    const entries = Object.entries(stored).sort((a,b) => (a[1].date||'').localeCompare(b[1].date||''));
+    entries.forEach(([matchId, log]) => {
+      const date = log.date || matchId.split('#')[0] || '';
+      (log.events || []).forEach(e => {
+        const escape = v => (v == null || v === '') ? '' : String(v).includes(',') ? `"${v}"` : String(v);
+        rows.push([
+          date,
+          escape(e.ts || e.tsRaw || ''),
+          escape(e.half || ''),
+          escape(e.team || ''),
+          escape(e.player || ''),
+          escape(e.event || ''),
+          escape(e.assistBy || ''),
+          escape(e.highlight || ''),
+          escape(e.assistHL || ''),
+          e.shotX  != null ? e.shotX.toFixed(4)  : '',
+          e.shotY  != null ? e.shotY.toFixed(4)  : '',
+          e.assistX != null ? e.assistX.toFixed(4) : '',
+          e.assistY != null ? e.assistY.toFixed(4) : '',
+        ].join(','));
+      });
+    });
+    const blob = new Blob([rows.join('\n')], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = url; a.download = 'events.json';
+    a.href = url; a.download = 'events.csv';
     document.body.appendChild(a); a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
   } catch(e) {
-    alert('Failed to generate events.json: ' + e.message);
+    alert('Failed to generate events.csv: ' + e.message);
   }
 }
 
@@ -13286,7 +13311,42 @@ function generateNewFormatCSV() {
   const matchId     = matchIdInput || `${matchDate}#1`;
   const twoGames    = document.getElementById('new-two-games').checked;
 
-  const { summary1H, summary2H, summaryFull, goalEvents, gkRotation, timeStats, allPlayers } = _newFormatParsed;
+  const { summary1H, summary2H, summaryFull, goalEvents, gkRotation, timeStats, allPlayers, eventRows } = _newFormatParsed;
+
+  // Build event-log-derived stats per player per half (most accurate for defensive stats)
+  const evStats = { '1H': {}, '2H': {} };
+  const EV_MAP = {
+    'Goals': 'goals', 'On Target': 'shots_on_target', 'Off Target': 'shots_off_target',
+    'Post': 'post', 'Key Passes': 'key_passes', 'GK Saves': 'goalkeeper_saves',
+    'Blocks': 'blocks', 'Tackles': 'tackles', 'Interceptions': 'interceptions',
+    'Nutmegs': 'nutmegs', 'OG': 'own_goals'
+  };
+  eventRows.forEach(r => {
+    if (!r.player || !r.half || !EV_MAP[r.event]) return;
+    if (!evStats[r.half]) return;
+    if (!evStats[r.half][r.player]) evStats[r.half][r.player] = {};
+    evStats[r.half][r.player][EV_MAP[r.event]] = (evStats[r.half][r.player][EV_MAP[r.event]] || 0) + 1;
+  });
+  // Assists from goal rows
+  eventRows.forEach(r => {
+    if (r.event === 'Goals' && r.assistBy && r.half) {
+      if (!evStats[r.half][r.assistBy]) evStats[r.half][r.assistBy] = {};
+      evStats[r.half][r.assistBy]['assists'] = (evStats[r.half][r.assistBy]['assists'] || 0) + 1;
+    }
+  });
+
+  // Merge: for each stat, prefer summary if > 0, fall back to event log
+  // (summary is trusted for goals/assists/shots; event log is authoritative for defensive stats)
+  const DEFENSIVE = ['blocks','tackles','interceptions','goalkeeper_saves','nutmegs','post'];
+  const mergeStats = (summaryS, evS) => {
+    const s = { ...summaryS };
+    DEFENSIVE.forEach(key => {
+      if (!(s[key] > 0) && evS?.[key] > 0) s[key] = evS[key];
+    });
+    s.total_shots = (s.shots_on_target || 0) + (s.shots_off_target || 0);
+    s.total_saves = (s.goalkeeper_saves || 0);
+    return s;
+  };
 
   const headers = ['match_id','match_date','team','player','half','goals','assists',
     'shots_on_target','shots_off_target','total_shots','goalkeeper_saves','blocks',
@@ -13310,9 +13370,14 @@ function generateNewFormatCSV() {
       return;
     }
 
-    const s1   = summary1H[player]   || {};
-    const s2   = summary2H[player]   || {};
-    const full = summaryFull[player] || {};
+    const s1   = mergeStats(summary1H[player]   || {}, evStats['1H'][player]);
+    const s2   = mergeStats(summary2H[player]   || {}, evStats['2H'][player]);
+    // FULL: sum 1H+2H event stats for defensive, trust summaryFull for goals/assists/shots
+    const evFull = {};
+    [...Object.keys(evStats['1H'][player]||{}), ...Object.keys(evStats['2H'][player]||{})].forEach(k => {
+      evFull[k] = ((evStats['1H'][player]||{})[k]||0) + ((evStats['2H'][player]||{})[k]||0);
+    });
+    const full = mergeStats(summaryFull[player] || {}, evFull);
 
     // Determine effective team per row — use the assigned teams
     const t1 = ta.h1 !== 'DNP' ? ta.h1 : (ta.h2 !== 'DNP' ? ta.h2 : 'A');
