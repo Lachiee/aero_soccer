@@ -6891,6 +6891,7 @@ function renderMatches() {
                   });
                 }
               } catch(e) {}
+              const isPB = (player, key, val) => val > 0 && val > (personalBest[key]?.[player] ?? 0);
               const pbStar = (player, key, val) => isPB(player, key, val)
                 ? `<span style="color:var(--amber);font-size:.65rem;margin-left:2px" title="Personal best!">★</span>` : '';
 
