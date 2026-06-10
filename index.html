@@ -9484,7 +9484,7 @@ function teamDimensions(team) {
     defense  += ((p.tackles + p.interceptions + p.blocks) / games) * 1.2;
     playmaking += (p.assists / games) * 3 + (p.key_passes / games) * 1;
     gk       += ((p.goalkeeper_saves || 0) / games) * 2;
-    enforcer += n(cs.enforcer || 0);
+    enforcer += p.enforcer != null ? p.enforcer : n(cs.enforcer || 0);
   });
 
   // Team synergy: sum of pairwise chemistry deltas within the team
@@ -9590,7 +9590,8 @@ function autoBalance(rebalanceOnly = false) {
       weightedRating,
       streakMod,
       streakLabel,
-      enforcer: n((customStats[name] || {}).enforcer || 0),
+      enforcer: n((customStats[name] || {}).enforcer || 0) * (1 - pen),
+      enforcerRaw: n((customStats[name] || {}).enforcer || 0),
       role: getPlayerRole(p)
     };
   }).filter(Boolean);
@@ -9860,15 +9861,14 @@ function renderTeamResult(tA, tB) {
   // Recompute effectiveRating for all players in case notes/penalties changed
   const recomputeRating = (p) => {
     const pen = getPenalty(playerNotes[p.player]);
-    // Custom players use computeRating directly (no match history to weight)
-    // If they have a rating override, use that
     const weightedRating = p._isCustom
       ? (p._ratingOverride || computeRating(p, customStats[p.player] || {}))
       : computeWeightedRating(p.player);
     const streakMod = p._isCustom ? 1.0 : (p.streakMod || 1.0);
-    const newRating = weightedRating * (1 - pen) * streakMod;
-    p.effectiveRating = newRating;
+    p.effectiveRating = weightedRating * (1 - pen) * streakMod;
     p.weightedRating = weightedRating;
+    p.enforcerRaw = n((customStats[p.player] || {}).enforcer || 0);
+    p.enforcer = p.enforcerRaw * (1 - pen);
   };
   tA.forEach(recomputeRating);
   tB.forEach(recomputeRating);
@@ -9982,6 +9982,14 @@ function renderTeamResult(tA, tB) {
         const col = sr.rating >= 8 ? 'var(--green)' : sr.rating >= 6 ? 'var(--lime)' : 'var(--amber,#f59e0b)';
         return `<span style="font-size:.65rem;color:${col}" data-tip="Striker rating ${sr.rating}/10 (${sr.label}) — quality-adjusted goals vs opposition defence over last ${sr.games} games. Adds ${((sr.rating/10)*0.08*100).toFixed(0)}% buff to rating.">⚽ ${sr.rating}</span>`;
       })()}
+      ${adminMode && p.enforcerRaw > 0 ? (() => {
+        const pen = getPenalty(playerNotes[p.player]);
+        const eff = (p.enforcerRaw * (1 - pen)).toFixed(1);
+        const col = p.enforcerRaw >= 7 ? 'var(--amber)' : p.enforcerRaw >= 4 ? 'var(--lime)' : 'var(--muted)';
+        return pen > 0
+          ? `<span style="font-size:.65rem;color:var(--muted)" data-tip="Enforcer reduced by injury: ${p.enforcerRaw} → ${eff}">🛡 <s style="opacity:.5">${p.enforcerRaw}</s> ${eff}</span>`
+          : `<span style="font-size:.65rem;color:${col}" data-tip="Enforcer: ${p.enforcerRaw}/10">🛡 ${p.enforcerRaw}</span>`;
+      })() : ''}
       ${(() => {
         if (!adminMode) return '';
         const stam = computeStaminaFromEvents(p.player);
