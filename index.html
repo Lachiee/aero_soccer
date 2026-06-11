@@ -9693,7 +9693,8 @@ function shuffleTeams() {
 
   teamA = chosen.a;
   teamB = chosen.b;
-  renderTeamResult(teamA, teamB);
+
+  renderTeamResult(teamA, teamB); // sets balance-msg-area with balance bar + enforcer note
 
   const rA = teamA.reduce((s,p) => s+p.effectiveRating, 0);
   const rB = teamB.reduce((s,p) => s+p.effectiveRating, 0);
@@ -9701,13 +9702,13 @@ function shuffleTeams() {
   const col = gap <= 5 ? 'var(--green)' : gap <= 12 ? 'var(--amber)' : 'rgba(248,113,113,.8)';
   const msg = document.getElementById('balance-msg-area');
   if (msg) {
-    // Prepend the shuffle note — renderTeamResult will append enforcer note after
-    const shuffleNote = `<div id="shuffle-msg" style="font-size:.78rem;color:${col};margin-bottom:4px">🔀 Shuffled — rating gap ${gap}%</div>`;
-    msg.innerHTML = shuffleNote;
-    setTimeout(() => {
-      const el = document.getElementById('shuffle-msg');
-      if (el) el.remove();
-    }, 3000);
+    // Prepend shuffle note without wiping the enforcer note already there
+    const note = document.createElement('div');
+    note.id = 'shuffle-msg';
+    note.style.cssText = `font-size:.78rem;color:${col};margin-bottom:4px`;
+    note.textContent = `🔀 Shuffled — rating gap ${gap}%`;
+    msg.prepend(note);
+    setTimeout(() => { const el = document.getElementById('shuffle-msg'); if (el) el.remove(); }, 3000);
   }
 }
 
@@ -10222,16 +10223,24 @@ function renderTeamResult(tA, tB) {
   const bigTeamEnf   = tA.length <= tB.length ? dB2.enforcer : dA2.enforcer;
   let enfNote = '';
   if (adminMode) {
-    if (uneven) {
-      enfNote = smallTeamEnf >= bigTeamEnf
-        ? `<div style="font-size:.72rem;color:var(--green);margin-top:4px">✓ Smaller team has higher Enforcer (${smallTeamEnf.toFixed(0)} vs ${bigTeamEnf.toFixed(0)}) — compensating correctly</div>`
-        : `<div style="font-size:.72rem;color:var(--amber);margin-top:4px">⚠ Smaller team has lower Enforcer (${smallTeamEnf.toFixed(0)} vs ${bigTeamEnf.toFixed(0)}) — consider manual adjustment</div>`;
-    } else {
-      const enfDiff = Math.abs(dA2.enforcer - dB2.enforcer);
-      enfNote = enfDiff <= 3
-        ? `<div style="font-size:.72rem;color:var(--green);margin-top:4px">✓ Enforcer balanced (A: ${dA2.enforcer.toFixed(0)} · B: ${dB2.enforcer.toFixed(0)})</div>`
-        : `<div style="font-size:.72rem;color:var(--amber);margin-top:4px">⚠ Enforcer gap (A: ${dA2.enforcer.toFixed(0)} · B: ${dB2.enforcer.toFixed(0)}) — drag to adjust</div>`;
-    }
+    const enfDiff = Math.abs(dA2.enforcer - dB2.enforcer);
+    const statusCol = uneven
+      ? (smallTeamEnf >= bigTeamEnf ? 'var(--green)' : 'var(--amber)')
+      : (enfDiff <= 3 ? 'var(--green)' : 'var(--amber)');
+    const statusMsg = uneven
+      ? (smallTeamEnf >= bigTeamEnf ? '✓ Smaller team compensated' : '⚠ Adjust enforcer balance')
+      : (enfDiff <= 3 ? '✓ Balanced' : '⚠ Gap — drag to adjust');
+    enfNote = `<div style="display:flex;align-items:center;gap:12px;margin-top:8px;padding:8px 12px;background:rgba(0,0,0,.2);border-radius:8px;border:1px solid rgba(255,255,255,.06)">
+      <div style="display:flex;align-items:baseline;gap:5px">
+        <span style="font-family:'Barlow Condensed',sans-serif;font-size:.62rem;letter-spacing:1px;text-transform:uppercase;color:var(--muted)">🛡 Enforcer</span>
+      </div>
+      <div style="display:flex;align-items:baseline;gap-6px">
+        <span style="font-family:'Bebas Neue',sans-serif;font-size:2rem;line-height:1;color:var(--green)">${dA2.enforcer.toFixed(1)}</span>
+        <span style="font-family:'Barlow Condensed',sans-serif;font-size:.7rem;color:var(--muted);margin:0 6px">vs</span>
+        <span style="font-family:'Bebas Neue',sans-serif;font-size:2rem;line-height:1;color:#60a5fa">${dB2.enforcer.toFixed(1)}</span>
+      </div>
+      <div style="font-size:.7rem;color:${statusCol};margin-left:4px">${statusMsg}</div>
+    </div>`;
   }
 
   document.getElementById('team-a-rows').innerHTML = renderRows(tA, 'A');
