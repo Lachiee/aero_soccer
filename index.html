@@ -9701,8 +9701,13 @@ function shuffleTeams() {
   const col = gap <= 5 ? 'var(--green)' : gap <= 12 ? 'var(--amber)' : 'rgba(248,113,113,.8)';
   const msg = document.getElementById('balance-msg-area');
   if (msg) {
-    msg.innerHTML = `<div style="font-size:.78rem;color:${col};margin-bottom:8px">🔀 Shuffled — rating gap ${gap}%</div>`;
-    setTimeout(() => { if (msg) msg.innerHTML = ''; }, 3000);
+    // Prepend the shuffle note — renderTeamResult will append enforcer note after
+    const shuffleNote = `<div id="shuffle-msg" style="font-size:.78rem;color:${col};margin-bottom:4px">🔀 Shuffled — rating gap ${gap}%</div>`;
+    msg.innerHTML = shuffleNote;
+    setTimeout(() => {
+      const el = document.getElementById('shuffle-msg');
+      if (el) el.remove();
+    }, 3000);
   }
 }
 
