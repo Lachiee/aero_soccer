@@ -6560,7 +6560,7 @@ function renderMatches() {
     const goalsA = m.goalsA;
     const goalsB = m.goalsB;
     const ogList = [...m.teamA,...m.teamB].filter(r=>n(r.own_goals)>0).map(r=>`${r.player} (OG)`);
-    const ogNote = ogList.length ? `<span style="font-size:.7rem;color:var(--red);margin-left:6px">⚽ ${ogList.join(', ')}</span>` : '';
+    const ogNote = ''; // OG shown in table columns, not needed in header
     const topA = [...m.teamA].sort((a,b) => n(b.goals)+n(b.assists) - n(a.goals)-n(a.assists)).slice(0,3);
     const topB = [...m.teamB].sort((a,b) => n(b.goals)+n(b.assists) - n(a.goals)-n(a.assists)).slice(0,3);
     const outcomeLabel = goalsA > goalsB ? '🟢 Team A Win' : goalsB > goalsA ? '🔵 Team B Win' : '🟡 Draw';
@@ -6922,7 +6922,7 @@ function renderMatches() {
               // Badge emojis for match-best per stat
               const MATCH_BADGE = {
                 goals:            '⚽',
-                assists:          '🎯',
+                assists:          '👟',
                 key_passes:       '🔑',
                 total_shots:      '🔫',
                 shots_on_target:  '🎯',
@@ -6931,7 +6931,7 @@ function renderMatches() {
                 interceptions:    '✂️',
                 goalkeeper_saves: '🧤',
                 nutmegs:          '🥜',
-                post:             '🏃',
+                post:             '🔔',
               };
 
               const isPB = (player, key, val) => val > 0 && val > (personalBest[key]?.[player] ?? 0);
@@ -13362,9 +13362,13 @@ function generateNewFormatCSV() {
   // Merge: for each stat, prefer summary if > 0, fall back to event log
   // (summary is trusted for goals/assists/shots; event log is authoritative for defensive stats)
   const DEFENSIVE = ['blocks','tackles','interceptions','goalkeeper_saves','nutmegs','post'];
+  const SHOTS = ['shots_off_target']; // also derive from events when summary missing
   const mergeStats = (summaryS, evS) => {
     const s = { ...summaryS };
     DEFENSIVE.forEach(key => {
+      if (!(s[key] > 0) && evS?.[key] > 0) s[key] = evS[key];
+    });
+    SHOTS.forEach(key => {
       if (!(s[key] > 0) && evS?.[key] > 0) s[key] = evS[key];
     });
     s.total_shots = (s.shots_on_target || 0) + (s.shots_off_target || 0);
