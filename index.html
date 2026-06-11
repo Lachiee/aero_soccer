@@ -652,7 +652,7 @@ canvas.spider{display:block;margin:0 auto}
     <div id="notes-rows"></div>
   </div>
 
-  <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;align-items:center">
+  <div style="display:flex;gap:10px;margin-bottom:8px;flex-wrap:wrap;align-items:center">
     <button class="btn-primary" onclick="autoBalance()">⚖ Smart Balance</button>
     <button class="btn-secondary" onclick="shuffleTeams()" title="Randomly redistribute selected players into two equal teams">🔀 Shuffle</button>
     <button class="btn-secondary" onclick="clearTeams()">Clear</button>
@@ -669,6 +669,36 @@ canvas.spider{display:block;margin:0 auto}
       <span id="winrate-strength-val" style="color:var(--lime);min-width:28px">20%</span>
     </div>
     <div style="font-size:.78rem;color:var(--muted);margin-left:4px">Balance considers attacking, defensive &amp; playmaking roles</div>
+  </div>
+
+  <!-- Shuffle options -->
+  <div id="shuffle-options" style="background:var(--card2);border:1px solid var(--border);border-radius:10px;padding:12px 16px;margin-bottom:12px">
+    <div style="font-family:'Barlow Condensed',sans-serif;font-size:.72rem;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-bottom:10px">🔀 Shuffle Options</div>
+    <div style="display:flex;flex-wrap:wrap;gap:16px;align-items:flex-start">
+      <!-- Enforcer threshold -->
+      <div style="display:flex;align-items:center;gap:8px;font-family:'Barlow Condensed',sans-serif;font-size:.8rem;color:var(--muted)">
+        <span>🛡 Max enforcer gap</span>
+        <input type="range" id="enf-threshold" min="1" max="15" step="1" value="3"
+          oninput="document.getElementById('enf-threshold-val').textContent=this.value"
+          style="width:80px;accent-color:var(--amber)">
+        <span id="enf-threshold-val" style="color:var(--amber);min-width:20px;font-size:.9rem">3</span>
+      </div>
+      <!-- Keep apart -->
+      <div style="flex:1;min-width:200px">
+        <div style="font-family:'Barlow Condensed',sans-serif;font-size:.75rem;color:var(--muted);margin-bottom:5px">⛔ Keep on opposite teams</div>
+        <div id="keep-apart-list" style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:6px"></div>
+        <div style="display:flex;gap:6px;align-items:center">
+          <select id="keep-apart-a" style="flex:1;background:var(--card);border:1px solid var(--border);border-radius:5px;color:var(--text);font-family:'Barlow Condensed',sans-serif;font-size:.78rem;padding:4px 6px">
+            <option value="">Player A…</option>
+          </select>
+          <span style="font-size:.7rem;color:var(--muted)">vs</span>
+          <select id="keep-apart-b" style="flex:1;background:var(--card);border:1px solid var(--border);border-radius:5px;color:var(--text);font-family:'Barlow Condensed',sans-serif;font-size:.78rem;padding:4px 6px">
+            <option value="">Player B…</option>
+          </select>
+          <button onclick="addKeepApart()" style="padding:4px 10px;border-radius:5px;border:1px solid var(--border);background:var(--card);color:var(--green);font-family:'Barlow Condensed',sans-serif;font-size:.8rem;cursor:pointer">+ Add</button>
+        </div>
+      </div>
+    </div>
   </div>
 
   <div id="balance-msg-area"></div>
@@ -9153,6 +9183,7 @@ function toggleTeamPlayer(name) {
   if (selectedForTeams.has(name)) selectedForTeams.delete(name);
   else selectedForTeams.add(name);
   renderTeamBuilder();
+  updateKeepApartDropdowns();
 }
 
 function savePlayerNote(name, val, rebalance = false) {
@@ -9602,6 +9633,48 @@ function toggleStreakAugment() {
   if (teamA.length || teamB.length) renderTeamResult(teamA, teamB);
 }
 
+// Keep-apart pairs for shuffle
+let keepApartPairs = [];
+
+function updateKeepApartDropdowns() {
+  const players = [...selectedForTeams];
+  ['keep-apart-a','keep-apart-b'].forEach(id => {
+    const sel = document.getElementById(id);
+    if (!sel) return;
+    const cur = sel.value;
+    sel.innerHTML = `<option value="">Player…</option>` +
+      players.map(p => `<option value="${p}" ${p===cur?'selected':''}>${p}</option>`).join('');
+  });
+}
+
+function addKeepApart() {
+  const a = document.getElementById('keep-apart-a')?.value;
+  const b = document.getElementById('keep-apart-b')?.value;
+  if (!a || !b || a === b) return;
+  const key = [a,b].sort().join('|||');
+  if (keepApartPairs.some(p => p.key === key)) return;
+  keepApartPairs.push({ a, b, key });
+  renderKeepApartList();
+  document.getElementById('keep-apart-a').value = '';
+  document.getElementById('keep-apart-b').value = '';
+}
+
+function removeKeepApart(key) {
+  keepApartPairs = keepApartPairs.filter(p => p.key !== key);
+  renderKeepApartList();
+}
+
+function renderKeepApartList() {
+  const el = document.getElementById('keep-apart-list');
+  if (!el) return;
+  el.innerHTML = keepApartPairs.map(p =>
+    `<div style="display:flex;align-items:center;gap:4px;background:rgba(248,113,113,.1);border:1px solid rgba(248,113,113,.3);border-radius:5px;padding:2px 8px;font-family:'Barlow Condensed',sans-serif;font-size:.75rem;color:var(--text)">
+      <span style="color:var(--red)">⛔</span> ${p.a} <span style="color:var(--muted);font-size:.65rem">vs</span> ${p.b}
+      <span onclick="removeKeepApart('${p.key}')" style="cursor:pointer;color:var(--muted);margin-left:4px;font-size:.8rem">✕</span>
+    </div>`
+  ).join('');
+}
+
 function shuffleTeams() {
   // Build rated player objects same way autoBalance does
   const sel = [...selectedForTeams].map(name => {
@@ -9640,6 +9713,17 @@ function shuffleTeams() {
 
   const total = sel.length;
   const sizeA = Math.ceil(total / 2);
+  const enfThreshold = parseInt(document.getElementById('enf-threshold')?.value || 3);
+
+  // Keep-apart constraint check
+  const violatesKeepApart = (a, b) => {
+    const aNm = new Set(a.map(p => p.player));
+    const bNm = new Set(b.map(p => p.player));
+    return keepApartPairs.some(pair =>
+      (aNm.has(pair.a) && aNm.has(pair.b)) ||
+      (bNm.has(pair.a) && bNm.has(pair.b))
+    );
+  };
 
   const shuffle = arr => {
     const a = [...arr];
@@ -9671,19 +9755,46 @@ function shuffleTeams() {
     );
   };
 
-  // Try 300 random splits, collect the best 8, pick one randomly from them
+  // Try 300 random splits, collect valid ones, pick from top 8
   const candidates = [];
   const seen = new Set();
   for (let i = 0; i < 300; i++) {
     const shuffled = shuffle(sel);
     const a = shuffled.slice(0, sizeA);
     const b = shuffled.slice(sizeA);
-    // Dedup by sorted player names
     const key = a.map(p=>p.player).sort().join('|');
     if (seen.has(key)) continue;
     seen.add(key);
+    const eA = a.reduce((s,p) => s + p.enforcer, 0);
+    const eB = b.reduce((s,p) => s + p.enforcer, 0);
+    if (Math.abs(eA - eB) > enfThreshold) continue;
+    if (violatesKeepApart(a, b)) continue;
     const score = scoreSplit(a, b);
     candidates.push({ a, b, score });
+  }
+
+  // If no valid split found, relax enforcer constraint but keep keep-apart
+  if (!candidates.length) {
+    for (let i = 0; i < 200; i++) {
+      const shuffled = shuffle(sel);
+      const a = shuffled.slice(0, sizeA);
+      const b = shuffled.slice(sizeA);
+      const key = a.map(p=>p.player).sort().join('|');
+      if (seen.has(key)) continue;
+      seen.add(key);
+      if (violatesKeepApart(a, b)) continue;
+      candidates.push({ a, b, score: scoreSplit(a, b) });
+    }
+  }
+
+  // Last resort — ignore all constraints
+  if (!candidates.length) {
+    for (let i = 0; i < 100; i++) {
+      const shuffled = shuffle(sel);
+      const a = shuffled.slice(0, sizeA);
+      const b = shuffled.slice(sizeA);
+      candidates.push({ a, b, score: scoreSplit(a, b) });
+    }
   }
 
   // Sort by score, take top 8, pick one at random from those
@@ -9702,13 +9813,11 @@ function shuffleTeams() {
   const col = gap <= 5 ? 'var(--green)' : gap <= 12 ? 'var(--amber)' : 'rgba(248,113,113,.8)';
   const msg = document.getElementById('balance-msg-area');
   if (msg) {
-    // Prepend shuffle note without wiping the enforcer note already there
     const note = document.createElement('div');
     note.id = 'shuffle-msg';
     note.style.cssText = `font-size:.78rem;color:${col};margin-bottom:4px`;
     note.textContent = `🔀 Shuffled — rating gap ${gap}%`;
     msg.prepend(note);
-    setTimeout(() => { const el = document.getElementById('shuffle-msg'); if (el) el.remove(); }, 3000);
   }
 }
 
