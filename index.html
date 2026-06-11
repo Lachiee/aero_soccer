@@ -654,6 +654,7 @@ canvas.spider{display:block;margin:0 auto}
 
   <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;align-items:center">
     <button class="btn-primary" onclick="autoBalance()">⚖ Smart Balance</button>
+    <button class="btn-secondary" onclick="shuffleTeams()" title="Randomly redistribute selected players into two equal teams">🔀 Shuffle</button>
     <button class="btn-secondary" onclick="clearTeams()">Clear</button>
     <button id="streak-aug-btn" onclick="toggleStreakAugment()"
       style="padding:6px 14px;border-radius:7px;cursor:pointer;font-family:'Barlow Condensed',sans-serif;font-size:.82rem;letter-spacing:.5px;text-transform:uppercase;border:1px solid var(--border);background:transparent;color:var(--muted);transition:all .15s"
@@ -9599,6 +9600,110 @@ function toggleStreakAugment() {
     btn.style.color       = streakAugmentEnabled ? 'var(--lime)' : 'var(--muted)';
   }
   if (teamA.length || teamB.length) renderTeamResult(teamA, teamB);
+}
+
+function shuffleTeams() {
+  // Build rated player objects same way autoBalance does
+  const sel = [...selectedForTeams].map(name => {
+    const p = customPlayers[name] || playerStats[name];
+    if (!p) return null;
+    const cs = customStats[name] || {};
+    p.rating = computeRating(p, cs);
+    const weightedRating = p._isCustom ? computeRating(p, cs) : computeWeightedRating(name);
+    const pen = getPenalty(playerNotes[name]);
+    let streakMod = 1.0;
+    if (streakAugmentEnabled && p.games >= 5) {
+      const recentMatches = [...matchList]
+        .filter(m => [...m.teamA,...m.teamB].some(r => r.player === p.player))
+        .sort((a,b) => b.date.localeCompare(a.date)).slice(0,10);
+      let wins = 0, total = 0;
+      recentMatches.forEach(m => {
+        const onTeam = m.teamA.find(r=>r.player===p.player) ? 'A' : 'B';
+        total++;
+        if (m.winnerTeam === onTeam) wins++;
+      });
+      const wr = total >= 3 ? wins/total : 0.5;
+      streakMod = 1 + ((wr - 0.5) * winRateAugStrength * 2);
+    }
+    return {
+      ...p,
+      effectiveRating: weightedRating * (1 - pen) * streakMod,
+      weightedRating,
+      streakMod,
+      enforcer: n(cs.enforcer || 0) * (1 - pen),
+      enforcerRaw: n(cs.enforcer || 0),
+      role: getPlayerRole(p)
+    };
+  }).filter(Boolean);
+
+  if (sel.length < 2) { alert('Add at least 2 players first.'); return; }
+
+  const total = sel.length;
+  const sizeA = Math.ceil(total / 2);
+
+  const shuffle = arr => {
+    const a = [...arr];
+    for (let i = a.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [a[i], a[j]] = [a[j], a[i]];
+    }
+    return a;
+  };
+
+  // Score a split using the same multi-dimensional balance as autoBalance
+  const scoreSplit = (a, b) => {
+    const rA = a.reduce((s,p) => s+p.effectiveRating, 0);
+    const rB = b.reduce((s,p) => s+p.effectiveRating, 0);
+    const dA = teamDimensions(a), dB = teamDimensions(b);
+    const gkA = a.reduce((s,p) => s + ((p.goalkeeper_saves||0)/Math.max(p.games,1)), 0);
+    const gkB = b.reduce((s,p) => s + ((p.goalkeeper_saves||0)/Math.max(p.games,1)), 0);
+    const eA  = a.reduce((s,p) => s + p.enforcer, 0);
+    const eB  = b.reduce((s,p) => s + p.enforcer, 0);
+    const abs = (x,y) => Math.abs(x-y);
+    return (
+      abs(rA,rB)          * 3.0 +
+      abs(dA.attack,dB.attack)   * 1.5 +
+      abs(dA.defense,dB.defense) * 1.5 +
+      abs(dA.playmaking,dB.playmaking) * 1.0 +
+      abs(gkA,gkB)        * 2.0 +
+      abs(eA,eB)          * 1.2 +
+      Math.abs(dA.synergy - dB.synergy) * 5.0
+    );
+  };
+
+  // Try 300 random splits, collect the best 8, pick one randomly from them
+  const candidates = [];
+  const seen = new Set();
+  for (let i = 0; i < 300; i++) {
+    const shuffled = shuffle(sel);
+    const a = shuffled.slice(0, sizeA);
+    const b = shuffled.slice(sizeA);
+    // Dedup by sorted player names
+    const key = a.map(p=>p.player).sort().join('|');
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const score = scoreSplit(a, b);
+    candidates.push({ a, b, score });
+  }
+
+  // Sort by score, take top 8, pick one at random from those
+  candidates.sort((x,y) => x.score - y.score);
+  const pool = candidates.slice(0, Math.min(8, candidates.length));
+  const chosen = pool[Math.floor(Math.random() * pool.length)];
+
+  teamA = chosen.a;
+  teamB = chosen.b;
+  renderTeamResult(teamA, teamB);
+
+  const rA = teamA.reduce((s,p) => s+p.effectiveRating, 0);
+  const rB = teamB.reduce((s,p) => s+p.effectiveRating, 0);
+  const gap = Math.round(Math.abs(rA-rB) / ((rA+rB)/2) * 100);
+  const col = gap <= 5 ? 'var(--green)' : gap <= 12 ? 'var(--amber)' : 'rgba(248,113,113,.8)';
+  const msg = document.getElementById('balance-msg-area');
+  if (msg) {
+    msg.innerHTML = `<div style="font-size:.78rem;color:${col};margin-bottom:8px">🔀 Shuffled — rating gap ${gap}%</div>`;
+    setTimeout(() => { if (msg) msg.innerHTML = ''; }, 3000);
+  }
 }
 
 function autoBalance(rebalanceOnly = false) {
