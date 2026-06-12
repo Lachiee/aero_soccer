@@ -133,8 +133,8 @@ body::after{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;opac
   border-radius:5px;padding:2px 8px;color:var(--text2)}
 .mp-chip.mp-a{border-color:rgba(57,211,83,.3);color:rgba(57,211,83,.85)}
 .mp-chip.mp-b{border-color:rgba(79,163,232,.3);color:rgba(79,163,232,.85)}
-.match-detail-panel{display:none;margin-top:10px;border-top:1px solid var(--border);padding-top:14px}
-.match-detail-panel.open{display:block}
+.match-detail-panel{display:none;margin-top:10px;border-top:1px solid var(--border);padding-top:14px;overflow:visible}
+.match-detail-panel.open{display:block;overflow:visible}
 .detail-table{width:100%;border-collapse:collapse;font-size:.8rem}
 .detail-table th{padding:6px 10px;text-align:left;color:var(--muted);font-weight:500;
   font-family:'Barlow Condensed',sans-serif;letter-spacing:.5px;text-transform:uppercase;border-bottom:1px solid var(--border)}
@@ -4430,59 +4430,65 @@ function drawWormChips(canvasId, matchId, ytId) {
   const rows = canvas._wormRows;
   if (!meta || !rows?.length) return;
 
-  const cssW = canvas.offsetWidth  || 700;
-  const cssH = canvas.offsetHeight || 280;
+  const cssW = canvas.offsetWidth || 700;
   const dpr  = meta.W / cssW;
   const toCssX = cx => cx / dpr;
-
   const { pad, cW, matchDur } = meta;
 
-  // Separate by team, sort by time
   const teamA = rows.filter(e => e.team === 'A').sort((a,b) => a.secs - b.secs);
-  const teamB = rows.filter(e => e.team === 'B' || e.team !== 'A').sort((a,b) => a.secs - b.secs);
+  const teamB = rows.filter(e => e.team !== 'A').sort((a,b) => a.secs - b.secs);
 
-  const makeChip = (e, topEdge) => {
+  const makeChip = (e, isA) => {
     const xCss = toCssX(pad.left + (e.secs / matchDur) * cW);
-    if (xCss < 4 || xCss > cssW - 4) return '';
+    if (xCss < 0 || xCss > cssW) return '';
 
-    const isA       = topEdge;
     const col       = e.isOG ? '#f87171' : isA ? '#4ade80' : '#60a5fa';
-    const borderCol = e.isOG ? 'rgba(248,113,113,.5)' : isA ? 'rgba(57,211,83,.45)' : 'rgba(96,165,250,.45)';
+    const borderCol = e.isOG ? 'rgba(248,113,113,.5)' : isA ? 'rgba(57,211,83,.5)' : 'rgba(96,165,250,.5)';
     const name      = (e.isOG && e.assister) ? e.assister : e.scorer;
     const mins      = e.time ? e.time.split(':')[0].replace(/^0/, '') : '?';
     const ogTag     = e.isOG ? `<span style="color:#f87171;font-size:.52rem"> OG</span>` : '';
-    const assist    = (!e.isOG && e.assister) ? `<span style="opacity:.55;font-size:.52rem"> (${e.assister})</span>` : '';
+    const assist    = (!e.isOG && e.assister) ? `<span style="opacity:.6;font-size:.52rem"> (${e.assister})</span>` : '';
     const matchKey  = matchId.replace(/[#,]/g, '_');
     const ytSecs    = ytId && e.time ? `timeToYtSeconds('${e.time}','${e.half}')` : null;
     const clickAttr = ytSecs ? `onclick="seekYtVideo('${matchKey}','${ytId}',${ytSecs})"` : '';
+    const ytIcon    = ytSecs ? `<span style="color:var(--amber);font-size:.5rem"> ▶</span>` : '';
 
-    // Team A: anchored to top edge, rotated 45° right (pointing down-right)
-    // Team B: anchored to bottom edge, rotated -45° (pointing up-left)
-    const angle  = isA ? 45 : -45;
-    const top    = isA ? 2 : 'auto';
-    const bottom = isA ? 'auto' : 2;
-    const origin = isA ? 'top left' : 'bottom left';
-
-    return `<div ${clickAttr}
-      title="${mins}' ${name}${e.isOG?' OG':''}${e.assister&&!e.isOG?' ('+e.assister+')':''}"
-      style="position:absolute;left:${xCss.toFixed(1)}px;${isA?'top:2px':'bottom:2px'};
-             pointer-events:${ytSecs?'auto':'none'};cursor:${ytSecs?'pointer':'default'};z-index:5">
-      <div style="
-        background:rgba(6,16,10,.92);
-        border:1px solid ${borderCol};
-        border-radius:3px;
-        padding:1px 5px;
-        white-space:nowrap;
-        font-family:'Barlow Condensed',sans-serif;
-        font-size:.6rem;
-        line-height:1.5;
-        color:${col};
-        transform:rotate(${angle}deg);
-        transform-origin:${origin};
-        letter-spacing:.2px">
-        ${mins}' <b>${name}</b>${ogTag}${assist}${ytSecs?`<span style="color:var(--amber);font-size:.5rem"> ▶</span>`:''}
-      </div>
-    </div>`;
+    // Both teams: chip rotates 45° upward-right
+    // Team A: bottom-left of chip sits on top edge of canvas → chip fans upward-right above canvas
+    // Team B: bottom-right of chip sits on bottom edge of canvas → chip fans upward-right from bottom
+    if (isA) {
+      // Anchor: left edge of chip at xCss, bottom of chip at top of canvas (top:0)
+      // transform-origin: bottom left so it rotates up-right from that anchor
+      return `<div ${clickAttr}
+        title="${mins}' ${name}${e.isOG?' OG':''}${e.assister&&!e.isOG?' ('+e.assister+')':''}"
+        style="position:absolute;left:${xCss.toFixed(1)}px;top:0;
+               transform:rotate(-45deg);transform-origin:bottom left;
+               pointer-events:${ytSecs?'auto':'none'};cursor:${ytSecs?'pointer':'default'};
+               z-index:5"
+        onmouseenter="this.style.zIndex=20" onmouseleave="this.style.zIndex=5">
+        <div style="background:rgba(6,16,10,.92);border:1px solid ${borderCol};border-radius:3px;
+                    padding:1px 6px;white-space:nowrap;font-family:'Barlow Condensed',sans-serif;
+                    font-size:.6rem;line-height:1.5;color:${col};letter-spacing:.2px">
+          ${mins}' <b>${name}</b>${ogTag}${assist}${ytIcon}
+        </div>
+      </div>`;
+    } else {
+      // Team B: right edge of chip at xCss, bottom of chip at bottom of canvas
+      // transform-origin: bottom right, rotate -45° so chip fans up-right from bottom-right anchor
+      return `<div ${clickAttr}
+        title="${mins}' ${name}${e.isOG?' OG':''}${e.assister&&!e.isOG?' ('+e.assister+')':''}"
+        style="position:absolute;right:${(cssW - xCss).toFixed(1)}px;bottom:0;
+               transform:rotate(-45deg);transform-origin:bottom right;
+               pointer-events:${ytSecs?'auto':'none'};cursor:${ytSecs?'pointer':'default'};
+               z-index:5"
+        onmouseenter="this.style.zIndex=20" onmouseleave="this.style.zIndex=5">
+        <div style="background:rgba(6,10,18,.92);border:1px solid ${borderCol};border-radius:3px;
+                    padding:1px 6px;white-space:nowrap;font-family:'Barlow Condensed',sans-serif;
+                    font-size:.6rem;line-height:1.5;color:${col};letter-spacing:.2px">
+          ${mins}' <b>${name}</b>${ogTag}${assist}${ytIcon}
+        </div>
+      </div>`;
+    }
   };
 
   overlay.innerHTML = [
@@ -6797,9 +6803,9 @@ function renderMatches() {
           return '<div style="margin-bottom:14px">'
             +'<div style="font-size:.62rem;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-bottom:6px;font-family:\'Barlow Condensed\',sans-serif">Score Worm'+(ytId?' · click dot to seek video':'')+'</div>'
             +'<div style="display:grid;grid-template-columns:1fr 200px;gap:10px;align-items:start">'
-            +'<div style="position:relative;width:100%">'
+            +'<div style="position:relative;width:100%;overflow:visible">'
             +'<canvas id="'+canvasId+'" style="width:100%;height:280px;display:block;border-radius:8px"></canvas>'
-            +'<div id="chips-'+canvasId+'" style="position:absolute;top:0;left:0;right:0;bottom:0;pointer-events:none;overflow:hidden"></div>'
+            +'<div id="chips-'+canvasId+'" style="position:absolute;top:0;left:0;right:0;bottom:0;pointer-events:none;overflow:visible;z-index:10"></div>'
             +'</div>'
             +statsPanel
             +'</div>'
