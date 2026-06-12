@@ -4430,30 +4430,34 @@ function drawWormChips(canvasId, matchId, ytId) {
   const rows = canvas._wormRows;
   if (!meta || !rows?.length) return;
 
-  // meta.W/H are the DPR-scaled pixel dims; overlay is sized to CSS dims
-  // toX/toY return DPR-scaled canvas coords — convert to CSS % by dividing by meta.W/H
+  // CSS dimensions of the canvas (not DPR-scaled)
+  const cssW = canvas.offsetWidth  || 700;
+  const cssH = canvas.offsetHeight || 280;
+  const dpr  = meta.W / cssW; // DPR ratio
+
+  // Convert DPR canvas coords to CSS pixels
+  const toCssX = canvasX => canvasX / dpr;
+  const toCssY = canvasY => canvasY / dpr;
+
   const { pad, cW, matchDur, toX, toY } = meta;
-  const midYCanvas = toY(0);                       // DPR-scaled Y of zero line
-  const midYPct    = midYCanvas / meta.H * 100;    // as % of canvas height
+  const midCssY = toCssY(toY(0)); // CSS y of zero line
 
   const teamCounters = { A: 0, B: 0 };
   const sorted = [...rows].sort((a, b) => a.secs - b.secs);
 
   overlay.innerHTML = sorted.map(e => {
-    const xCanvas = pad.left + (e.secs / matchDur) * cW;
-    const xPct    = xCanvas / meta.W * 100;
-    if (xPct < 1 || xPct > 99) return '';
+    const xCss = toCssX(pad.left + (e.secs / matchDur) * cW);
+    if (xCss < 10 || xCss > cssW - 10) return '';
 
     const isA    = e.team === 'A';
     const idx    = teamCounters[e.team]++;
-    const stagger = (idx % 3) * 12; // three rows of stagger
+    const stagger = (idx % 3) * 14;
 
-    // Position chip: A above centreline, B below
-    const CHIP_HEIGHT = 18;
-    const GAP = 8; // px gap between centreline and nearest chip
-    const topPct = isA
-      ? (midYPct - (GAP + CHIP_HEIGHT + stagger) / meta.H * 100)
-      : (midYPct + GAP / meta.H * 100 + stagger / meta.H * 100);
+    // Anchor point is at the zero line, chips fan upward (A) or downward (B)
+    const GAP = 6;
+    const topCss = isA
+      ? midCssY - GAP - 16 - stagger
+      : midCssY + GAP + stagger;
 
     const col       = e.isOG ? '#f87171' : isA ? '#4ade80' : '#60a5fa';
     const borderCol = e.isOG ? 'rgba(248,113,113,.4)' : isA ? 'rgba(57,211,83,.35)' : 'rgba(96,165,250,.35)';
@@ -4463,26 +4467,28 @@ function drawWormChips(canvasId, matchId, ytId) {
     const assist    = (!e.isOG && e.assister) ? `<span style="opacity:.55;font-size:.55rem"> (${e.assister})</span>` : '';
     const matchKey  = matchId.replace(/[#,]/g, '_');
     const ytSecs    = ytId && e.time ? `timeToYtSeconds('${e.time}','${e.half}')` : null;
-    const clickAttr = ytSecs ? `onclick="seekYtVideo('${matchKey}','${ytId}',${ytSecs})" style="cursor:pointer"` : '';
-    const angle     = isA ? -30 : 30;
+    const clickAttr = ytSecs ? `onclick="seekYtVideo('${matchKey}','${ytId}',${ytSecs})"` : '';
+    const angle     = isA ? -40 : 40;
+    const origin    = isA ? 'bottom left' : 'top left';
 
     return `<div ${clickAttr}
-      style="position:absolute;left:${xPct}%;top:${topPct}%;transform:translateX(-50%);pointer-events:auto;z-index:5"
-      title="${mins}' ${name}${e.isOG?' OG':''}${e.assister&&!e.isOG?' ('+e.assister+')':''}">
+      title="${mins}' ${name}${e.isOG?' OG':''}${e.assister&&!e.isOG?' ('+e.assister+')':''}"
+      style="position:absolute;left:${xCss.toFixed(1)}px;top:${topCss.toFixed(1)}px;
+             pointer-events:${ytSecs?'auto':'none'};z-index:5;cursor:${ytSecs?'pointer':'default'}">
       <div style="
-        background:rgba(6,16,10,.88);
+        background:rgba(6,16,10,.9);
         border:1px solid ${borderCol};
         border-radius:3px;
         padding:1px 5px;
         white-space:nowrap;
         font-family:'Barlow Condensed',sans-serif;
-        font-size:.62rem;
+        font-size:.6rem;
         line-height:1.5;
         color:${col};
         transform:rotate(${angle}deg);
-        transform-origin:${isA ? 'bottom' : 'top'} center;
+        transform-origin:${origin};
         letter-spacing:.2px">
-        ${mins}' <b>${name}</b>${ogTag}${assist}${ytId ? `<span style="color:var(--amber);font-size:.5rem"> ▶</span>` : ''}
+        ${mins}' <b>${name}</b>${ogTag}${assist}${ytSecs ? `<span style="color:var(--amber);font-size:.5rem"> ▶</span>` : ''}
       </div>
     </div>`;
   }).join('');
@@ -4495,7 +4501,15 @@ function drawWormCanvas(canvasId, matchId) {
   const { rows, fA, fB, matchDur, htSecs, ytId } = data;
 
   const dpr = window.devicePixelRatio || 1;
-  const W = canvas.offsetWidth || canvas.parentElement?.offsetWidth || 700;
+  // Walk up to find the actual available width — subtract the 200px stats panel + gap
+  let W = canvas.offsetWidth;
+  if (!W || W < 100) {
+    // Try parent (position:relative wrapper), then grid container, then match detail panel
+    let el = canvas.parentElement;
+    while (el && (!el.offsetWidth || el.offsetWidth < 100)) el = el.parentElement;
+    const containerW = el?.offsetWidth || 900;
+    W = Math.max(containerW - 220, 400); // subtract 200px stats + 10px gap + buffer
+  }
   const H = 280;
   canvas.width = W * dpr; canvas.height = H * dpr;
   canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
@@ -6786,9 +6800,9 @@ function renderMatches() {
           return '<div style="margin-bottom:14px">'
             +'<div style="font-size:.62rem;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-bottom:6px;font-family:\'Barlow Condensed\',sans-serif">Score Worm'+(ytId?' · click dot to seek video':'')+'</div>'
             +'<div style="display:grid;grid-template-columns:1fr 200px;gap:10px;align-items:start">'
-            +'<div style="position:relative">'
+            +'<div style="position:relative;width:100%">'
             +'<canvas id="'+canvasId+'" style="width:100%;height:280px;display:block;border-radius:8px"></canvas>'
-            +'<div id="chips-'+canvasId+'" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;overflow:hidden"></div>'
+            +'<div id="chips-'+canvasId+'" style="position:absolute;top:0;left:0;right:0;bottom:0;pointer-events:none;overflow:visible"></div>'
             +'</div>'
             +statsPanel
             +'</div>'
@@ -7162,7 +7176,7 @@ function toggleMatchDetail(id) {
   el.classList.toggle('open');
   if (el.classList.contains('open')) {
     setTimeout(() => {
-      // Draw score worm
+      // Draw score worm — delay allows grid to paint and canvas to get correct offsetWidth
       el.querySelectorAll('canvas[id^="timeline-"]').forEach(c => {
         const rawId = c.id.replace('timeline-', '');
         // canvasId was built with mid.replace(/[#,]/g,'_')
@@ -7177,7 +7191,7 @@ function toggleMatchDetail(id) {
         }
       });
       // Draw momentum is now handled inside drawWormCanvas as background layer
-    }, 30);
+    }, 100);
   }
 }
 
