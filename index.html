@@ -4512,6 +4512,71 @@ function drawMomentumCanvas(canvasId, matchId) {
   ctx.fillText('B: '+Math.round(totalB/1.5)+' shots', W-pad.right, H-pad.bottom-4);
 }
 
+function drawWormChips(canvasId, matchId, ytId) {
+  const canvas = document.getElementById(canvasId);
+  const overlay = document.getElementById('chips-' + canvasId);
+  if (!canvas || !overlay) return;
+  const meta = canvas._wormMeta;
+  const rows = canvas._wormRows;
+  if (!meta || !rows?.length) return;
+
+  const W = canvas.offsetWidth || 700;
+  const H = canvas.offsetHeight || 280;
+  const { pad, cW, matchDur, toX, toY } = meta;
+  const midY = toY(0); // centreline in canvas coords
+  const midYPct = (midY / meta.H) * 100; // as % of canvas height
+
+  // Alternate top/bottom within same team to avoid overlap
+  const teamCounters = { A: 0, B: 0 };
+
+  // Sort by time so staggering is predictable
+  const sorted = [...rows].sort((a,b) => a.secs - b.secs);
+
+  overlay.innerHTML = sorted.map(e => {
+    const xPct = ((pad.left + (e.secs / matchDur) * cW) / meta.W) * 100;
+    if (xPct < 2 || xPct > 98) return '';
+
+    const isA = e.team === 'A';
+    const idx = teamCounters[e.team]++;
+    const stagger = (idx % 2) * 14; // alternate row stagger in px
+
+    // A: above centreline — position from top, B: below — position from bottom
+    const chipH = 18 + stagger;
+    const topPct = isA
+      ? (midYPct * H / 100 - 28 - stagger) / H * 100
+      : (midYPct * H / 100 + 10 + stagger) / H * 100;
+
+    const col      = e.isOG ? 'rgba(240,96,96,.9)' : isA ? '#4ade80' : '#60a5fa';
+    const borderCol= e.isOG ? 'rgba(240,96,96,.5)' : isA ? 'rgba(57,211,83,.4)' : 'rgba(96,165,250,.4)';
+    const name     = e.isOG && e.assister ? e.assister : e.scorer;
+    const mins     = e.time ? e.time.split(':')[0].replace(/^0/,'') : '?';
+    const ogTag    = e.isOG ? ' OG' : '';
+    const assist   = (!e.isOG && e.assister) ? ` (${e.assister})` : '';
+    const matchKey = matchId.replace(/[#,]/g,'_');
+    const ytSecs   = ytId && e.time ? `timeToYtSeconds('${e.time}','${e.half}')` : null;
+    const clickStr = ytSecs
+      ? `onclick="seekYtVideo('${matchKey}','${ytId}',${ytSecs})" style="cursor:pointer"`
+      : '';
+
+    // Vertical line from chip down/up to centreline
+    const lineTop  = isA ? '100%' : '-100%';
+
+    return `<div ${clickStr} title="${mins}' ${name}${ogTag}${assist}"
+      style="position:absolute;left:${xPct}%;top:${topPct}%;transform:translateX(-50%);
+             pointer-events:auto;
+             display:flex;flex-direction:column;align-items:center;
+             ${isA ? '' : 'flex-direction:column-reverse;'}">
+      <div style="background:rgba(8,18,12,.85);border:1px solid ${borderCol};border-radius:4px;
+                  padding:1px 5px;white-space:nowrap;font-family:'Barlow Condensed',sans-serif;
+                  font-size:.6rem;line-height:1.4;transform:rotate(${isA ? -35 : 35}deg);transform-origin:${isA?'bottom':'top'} left;
+                  color:${col};letter-spacing:.3px">
+        ${mins}' <b>${name}</b>${ogTag ? `<span style="color:var(--red)"> OG</span>` : ''}${assist ? `<span style="opacity:.6"> ${e.assister}</span>` : ''}
+        ${ytId ? `<span style="color:var(--amber);font-size:.5rem"> ▶</span>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
 function drawWormCanvas(canvasId, matchId) {
   const canvas = document.getElementById(canvasId);
   const data = window._wormData[matchId];
@@ -4539,68 +4604,7 @@ function drawWormCanvas(canvasId, matchId) {
   const toX = s => pad.left + (s / matchDur) * cW;
   const toY = d => pad.top + cH / 2 - (d / yRange) * (cH / 2);
 
-  // ── Momentum background layer — Sky Sports style ─────────────────────
-  // Each 2-min window: whichever team has more activity draws a spike from
-  // the centre line. Green up for Team A, blue down for Team B.
-  // Both teams are always drawn but the dominant team at full opacity,
-  // the other at near-zero — giving clean separation like broadcast graphs.
-  const mom = window._momentumData?.[matchId];
-  if (mom) {
-    const { aB, bB, nBuckets, BUCKET } = mom;
-    const midY = toY(0);
-    const MAX_VAL = 10;
-    const momScale = (cH / 2) * 0.65 / MAX_VAL;
-    const bucketToX = i => toX((i + 0.5) * BUCKET);
-
-    const drawTeamCurve = (buckets, upward, fillCol, lineCol, clipY, clipH) => {
-      const pts = Array.from({ length: nBuckets }, (_, i) => {
-        const v = Math.min(buckets[i] || 0, MAX_VAL);
-        const h = v * momScale;
-        return { x: bucketToX(i), y: upward ? midY - h : midY + h };
-      });
-
-      ctx.save();
-      // Clip strictly to own half so fills never bleed across midline
-      ctx.beginPath();
-      ctx.rect(pad.left, clipY, cW, clipH);
-      ctx.clip();
-
-      // Filled area
-      ctx.beginPath();
-      ctx.moveTo(pts[0].x, midY);
-      for (let i = 0; i < pts.length - 1; i++) {
-        const mx = (pts[i].x + pts[i+1].x) / 2;
-        const my = (pts[i].y + pts[i+1].y) / 2;
-        ctx.quadraticCurveTo(pts[i].x, pts[i].y, mx, my);
-      }
-      ctx.lineTo(pts[pts.length-1].x, pts[pts.length-1].y);
-      ctx.lineTo(pts[pts.length-1].x, midY);
-      ctx.closePath();
-      ctx.fillStyle = fillCol;
-      ctx.fill();
-
-      // Smooth line
-      ctx.beginPath();
-      ctx.moveTo(pts[0].x, pts[0].y);
-      for (let i = 0; i < pts.length - 1; i++) {
-        const mx = (pts[i].x + pts[i+1].x) / 2;
-        const my = (pts[i].y + pts[i+1].y) / 2;
-        ctx.quadraticCurveTo(pts[i].x, pts[i].y, mx, my);
-      }
-      ctx.lineTo(pts[pts.length-1].x, pts[pts.length-1].y);
-      ctx.strokeStyle = lineCol;
-      ctx.lineWidth = 1.5;
-      ctx.stroke();
-      ctx.restore();
-    };
-
-    // Team A: green, above midline only
-    drawTeamCurve(aB, true,  'rgba(57,211,83,.2)',  'rgba(57,211,83,.8)',  pad.top,  midY - pad.top);
-    // Team B: blue, below midline only
-    drawTeamCurve(bB, false, 'rgba(96,165,250,.2)', 'rgba(96,165,250,.8)', midY, pad.top + cH - midY);
-  }
-
-  // Grid lines only — no Y labels (axis is now momentum scale not goal diff)
+  // Grid lines only — no Y labels
   for (let g = -maxLead; g <= maxLead; g++) {
     const y = toY(g);
     ctx.strokeStyle = g === 0 ? 'rgba(255,255,255,.18)' : 'rgba(255,255,255,.06)';
@@ -6859,28 +6863,11 @@ function renderMatches() {
           return '<div style="margin-bottom:14px">'
             +'<div style="font-size:.62rem;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-bottom:6px;font-family:\'Barlow Condensed\',sans-serif">Score Worm'+(ytId?' · click dot to seek video':'')+'</div>'
             +'<div style="display:grid;grid-template-columns:1fr 200px;gap:10px;align-items:start">'
+            +'<div style="position:relative">'
             +'<canvas id="'+canvasId+'" style="width:100%;height:280px;display:block;border-radius:8px"></canvas>'
-            +statsPanel
+            +'<div id="chips-'+canvasId+'" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;overflow:hidden"></div>'
             +'</div>'
-            +'<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:8px">'
-            +rows.map(e=>{
-              const ytSecs=ytId&&e.time?timeToYtSeconds(e.time,e.half):null;
-              const matchKey=m.id.replace(/[#,]/g,'_');
-              const mins=e.time?e.time.split(':')[0].replace(/^0/,''):'?';
-              const ogLabel = e.isOG ? '<span style="color:var(--red);font-size:.58rem;font-weight:700"> OG</span>' : '';
-              // For OGs: show the assister (actual OG scorer) as the name, with OG badge
-              const displayName = e.isOG && e.assister ? e.assister : e.scorer;
-              const displayAssister = e.isOG ? null : e.assister; // don't show assister separately for OGs
-              return '<div style="display:inline-flex;align-items:center;gap:3px;background:var(--card2);border:1px solid '+(e.isOG?'rgba(240,96,96,.4)':e.team==='A'?'rgba(57,211,83,.3)':'rgba(96,165,250,.3)')
-                +';border-radius:5px;padding:2px 8px;font-size:.68rem;'+(ytSecs?'cursor:pointer':'')+'"'
-                +(ytSecs?' onclick="seekYtVideo(\''+matchKey+'\',\''+ytId+'\','+ytSecs+')" title="▶ Watch"':'')+'>'
-                +'<span style="color:var(--muted);font-size:.6rem">'+mins+"'</span>"
-                +'<span style="color:'+(e.isOG?'var(--red)':e.team==='A'?'#4ade80':'#60a5fa')+';font-weight:600;margin-left:2px">'+displayName+'</span>'
-                +ogLabel
-                +(displayAssister?'<span style="color:var(--muted);font-size:.6rem"> ('+displayAssister+')</span>':'')
-                +(ytSecs?'<span style="color:var(--amber);font-size:.55rem;margin-left:2px">▶</span>':'')
-                +'</div>';
-            }).join('')
+            +statsPanel
             +'</div>'
             +(insights.length?'<details style="margin-top:8px" onclick="event.stopPropagation()"><summary style="cursor:pointer;font-size:.68rem;color:var(--muted);font-family:\'Barlow Condensed\',sans-serif;letter-spacing:.5px;list-style:none;display:inline-flex;align-items:center;gap:4px;padding:2px 8px;background:var(--card2);border:1px solid var(--border);border-radius:5px;user-select:none">▶ Match Insights ('+insights.length+')</summary><div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:6px">'+insights.map(ins=>'<div style="background:var(--card2);border:1px solid var(--border);border-radius:5px;padding:2px 9px;font-size:.68rem;color:'+ins.col+'">'+ins.text+'</div>').join('')+'</div></details>':'')
             +(() => {
@@ -6889,24 +6876,7 @@ function renderMatches() {
                 const logs = JSON.parse(localStorage.getItem('aero_event_logs') || '{}');
                 const log = logs[m.id];
                 if (!log?.events?.length) return '';
-                const SHOT_W = { 'Goals': 10, 'On Target': 10, 'Post': 10, 'Off Target': 5 };
-                const BUCKET = 15; // 15-second windows
-                const matchDur = totalDurSecs || 3000;
-                const nBuckets = Math.ceil(matchDur / BUCKET) + 1;
-                const aB = new Array(nBuckets).fill(0);
-                const bB = new Array(nBuckets).fill(0);
-                log.events.forEach(e => {
-                  const w = SHOT_W[e.event];
-                  if (!w) return;
-                  const idx = Math.min(Math.floor(e.tsSecsRaw / BUCKET), nBuckets - 1);
-                  if (e.team === 'A') aB[idx] += w;
-                  else bB[idx] += w;
-                });
-                const momId = 'momentum-' + m.id.replace(/[#,]/g,'_');
-                // Store for canvas draw
-                window._momentumData = window._momentumData || {};
-                window._momentumData[m.id] = { aB, bB, matchDur, htSecs, nBuckets, BUCKET };
-                return ''; // drawn on worm canvas as background layer
+                return ''; // momentum overlay removed
               } catch(e) { return ''; }
             })()
             +'</div>';
@@ -7275,7 +7245,12 @@ function toggleMatchDetail(id) {
         const mid = Object.keys(window._wormData||{}).find(k =>
           k.replace(/[#,]/g,'_') === c.id.replace('timeline-','') || k === matchId
         );
-        if (mid) drawWormCanvas(c.id, mid);
+        if (mid) {
+          drawWormCanvas(c.id, mid);
+          // Get ytId from the stored worm data
+          const ytId = window._wormData?.[mid]?.ytId || null;
+          drawWormChips(c.id, mid, ytId);
+        }
       });
       // Draw momentum is now handled inside drawWormCanvas as background layer
     }, 30);
