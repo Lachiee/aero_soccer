@@ -6644,7 +6644,7 @@ function renderMatches() {
         <!-- Goal Timeline -->
         ${(() => {
           const combos = goalCombos[m.id];
-          // Build goal events from combos or fall back to data.csv rows
+          // Build goal events from combos, event log, or empty (canvas always renders)
           let all = [];
           if (combos) {
             all = [
@@ -6652,11 +6652,7 @@ function renderMatches() {
               ...(combos.h2||[]).map(p=>({...p,half:'2H'}))
             ].filter(p=>p.time);
           }
-          // Fallback: derive from match rows if no combos
           if (!all.length) {
-            const scorerTeam = {};
-            [...m.teamA,...m.teamB].forEach(r=>{ scorerTeam[r.player]=r.team; });
-            // Use event log goals if available
             try {
               const logs = JSON.parse(localStorage.getItem('aero_event_logs') || '{}');
               const log = logs[m.id];
@@ -6668,7 +6664,7 @@ function renderMatches() {
             } catch(ex) {}
           }
 
-          // Supplement with OG events from event log (not stored in combos)
+          // Supplement with OG events from event log
           try {
             const logs = JSON.parse(localStorage.getItem('aero_event_logs') || '{}');
             const log = logs[m.id];
@@ -6681,10 +6677,8 @@ function renderMatches() {
             }
           } catch(ex) {}
 
-          if (!all.length) return '';
-
-          const toSecs = time => { const [min,sec]=time.split(':').map(Number); return min*60+(sec||0); };
-          const matchDur = Math.max(...all.map(p=>toSecs(p.time)), 50*60) + 60;
+          const toSecs = time => { if (!time) return 0; const [min,sec]=time.split(':').map(Number); return min*60+(sec||0); };
+          const matchDur = all.length ? Math.max(...all.map(p=>toSecs(p.time)), 50*60) + 60 : 3600;
           const scorerTeam = {};
           [...m.teamA,...m.teamB].forEach(r=>{ scorerTeam[r.player]=r.team; });
           const events = all.map(p=>({
@@ -14747,6 +14741,15 @@ document.addEventListener('DOMContentLoaded', () => {
       saveGoalCombos();
       _tagCache = null; window._strikerRatingScale = null; window._staminaGroupAvg = null;
       console.log(`✅ Built goalCombos from event logs — ${Object.keys(built).length} matches`);
+      // Redraw any open worm canvases now that combos are available
+      document.querySelectorAll('canvas[id^="timeline-"]').forEach(c => {
+        const rawId = c.id.replace('timeline-', '');
+        const mid = Object.keys(window._wormData || {}).find(k => k.replace(/[#,]/g, '_') === rawId);
+        if (mid) {
+          drawWormCanvas(c.id, mid);
+          drawWormChips(c.id, mid, window._wormData[mid]?.ytId || null);
+        }
+      });
     } catch(e) {
       console.warn('buildGoalCombosFromEventLogs failed:', e);
     }
