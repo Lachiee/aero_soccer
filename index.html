@@ -4558,7 +4558,7 @@ function drawWormCanvas(canvasId, matchId) {
   ctx.fillStyle = 'rgba(255,255,255,.75)'; ctx.font = 'bold 11px Barlow Condensed, sans-serif'; ctx.textAlign = 'left';
   ctx.fillText('MATCH TIMELINE', pad.left, 18);
   ctx.fillStyle = 'rgba(255,255,255,.3)'; ctx.font = '9px Barlow Condensed, sans-serif';
-  ctx.fillText('GOAL DIFFERENTIAL · ' + (mom ? 'shading = shot momentum' : 'OVER ' + totalMins + "'"), pad.left + 112, 18);
+  ctx.fillText("GOAL DIFFERENTIAL · OVER " + totalMins + "'", pad.left + 112, 18);
 
   // Legend
   ctx.textAlign = 'right';
