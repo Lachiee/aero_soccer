@@ -4422,96 +4422,6 @@ function setMomStyle(ev, style) {
   });
 }
 
-function drawMomentumCanvas(canvasId, matchId) {
-  const canvas = document.getElementById(canvasId);
-  const data = window._momentumData?.[matchId];
-  if (!canvas || !data) return;
-
-  const { aB, bB, matchDur, htSecs, nBuckets, BUCKET } = data;
-  const dpr = window.devicePixelRatio || 1;
-  const W = canvas.offsetWidth || 700, H = 160;
-  canvas.width = W * dpr; canvas.height = H * dpr;
-  canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
-  const ctx = canvas.getContext('2d');
-  ctx.scale(dpr, dpr);
-
-  // Background
-  ctx.fillStyle = 'rgba(0,0,0,.3)';
-  if (ctx.roundRect) ctx.roundRect(0,0,W,H,8); else ctx.rect(0,0,W,H);
-  ctx.fill();
-
-  const pad = { top: 20, right: 16, bottom: 20, left: 16 };
-  const cW = W - pad.left - pad.right;
-  const cY = H / 2; // centre line
-  const maxVal = Math.max(...aB, ...bB, 1);
-  const halfH = (H - pad.top - pad.bottom) / 2;
-
-  const toX = i => pad.left + (i / (nBuckets - 1)) * cW;
-
-  // Centre line
-  ctx.strokeStyle = 'rgba(255,255,255,.15)'; ctx.lineWidth = 1;
-  ctx.beginPath(); ctx.moveTo(pad.left, cY); ctx.lineTo(pad.left+cW, cY); ctx.stroke();
-
-  // HT line
-  if (htSecs) {
-    const htX = toX(htSecs / BUCKET);
-    ctx.strokeStyle = 'rgba(255,255,255,.25)'; ctx.setLineDash([4,4]);
-    ctx.beginPath(); ctx.moveTo(htX, pad.top); ctx.lineTo(htX, H-pad.bottom); ctx.stroke();
-    ctx.setLineDash([]);
-    ctx.font = '9px Barlow Condensed, sans-serif'; ctx.fillStyle = 'rgba(255,255,255,.3)'; ctx.textAlign = 'center';
-    ctx.fillText('HT', htX, pad.top - 2);
-  }
-
-  // Draw team area — Team A upward (green), Team B downward (blue)
-  const drawArea = (buckets, upward, color) => {
-    ctx.beginPath();
-    ctx.moveTo(toX(0), cY);
-    buckets.forEach((v, i) => {
-      const x = toX(i);
-      const h = (v / maxVal) * halfH;
-      ctx.lineTo(x, upward ? cY - h : cY + h);
-    });
-    ctx.lineTo(toX(nBuckets-1), cY);
-    ctx.closePath();
-    const grad = ctx.createLinearGradient(0, upward ? pad.top : cY, 0, upward ? cY : H-pad.bottom);
-    grad.addColorStop(0, color.replace(')', ', .7)').replace('rgb', 'rgba'));
-    grad.addColorStop(1, color.replace(')', ', .05)').replace('rgb', 'rgba'));
-    ctx.fillStyle = grad;
-    ctx.fill();
-    // Outline
-    ctx.beginPath();
-    ctx.moveTo(toX(0), cY);
-    buckets.forEach((v, i) => {
-      const x = toX(i), h = (v/maxVal)*halfH;
-      ctx.lineTo(x, upward ? cY-h : cY+h);
-    });
-    ctx.strokeStyle = color; ctx.lineWidth = 1.5;
-    ctx.stroke();
-  };
-
-  drawArea(aB, true,  'rgb(57,211,83)');   // Team A — green upward
-  drawArea(bB, false, 'rgb(96,165,250)');  // Team B — blue downward
-
-  // Labels
-  ctx.font = 'bold 9px Barlow Condensed, sans-serif'; ctx.textAlign = 'left';
-  ctx.fillStyle = 'rgba(57,211,83,.8)'; ctx.fillText('NON-BIBS ▲', pad.left+3, pad.top+10);
-  ctx.fillStyle = 'rgba(96,165,250,.8)'; ctx.fillText('BIBS ▼', pad.left+3, H-pad.bottom-4);
-
-  // Time labels
-  ctx.textAlign = 'center'; ctx.fillStyle = 'rgba(255,255,255,.25)'; ctx.font = '9px Barlow Condensed, sans-serif';
-  [0, 10, 20, 30, 40, 50].forEach(min => {
-    const i = (min*60) / BUCKET;
-    if (i < nBuckets) { const x = toX(i); ctx.fillText(min+"'", x, H-4); }
-  });
-
-  // Total shots summary
-  const totalA = aB.reduce((s,v)=>s+v,0), totalB = bB.reduce((s,v)=>s+v,0);
-  ctx.textAlign = 'right'; ctx.fillStyle = 'rgba(57,211,83,.7)';
-  ctx.fillText('A: '+Math.round(totalA/1.5)+' shots', W-pad.right, pad.top+10);
-  ctx.fillStyle = 'rgba(96,165,250,.7)';
-  ctx.fillText('B: '+Math.round(totalB/1.5)+' shots', W-pad.right, H-pad.bottom-4);
-}
-
 function drawWormChips(canvasId, matchId, ytId) {
   const canvas = document.getElementById(canvasId);
   const overlay = document.getElementById('chips-' + canvasId);
@@ -4520,58 +4430,59 @@ function drawWormChips(canvasId, matchId, ytId) {
   const rows = canvas._wormRows;
   if (!meta || !rows?.length) return;
 
-  const W = canvas.offsetWidth || 700;
-  const H = canvas.offsetHeight || 280;
+  // meta.W/H are the DPR-scaled pixel dims; overlay is sized to CSS dims
+  // toX/toY return DPR-scaled canvas coords — convert to CSS % by dividing by meta.W/H
   const { pad, cW, matchDur, toX, toY } = meta;
-  const midY = toY(0); // centreline in canvas coords
-  const midYPct = (midY / meta.H) * 100; // as % of canvas height
+  const midYCanvas = toY(0);                       // DPR-scaled Y of zero line
+  const midYPct    = midYCanvas / meta.H * 100;    // as % of canvas height
 
-  // Alternate top/bottom within same team to avoid overlap
   const teamCounters = { A: 0, B: 0 };
-
-  // Sort by time so staggering is predictable
-  const sorted = [...rows].sort((a,b) => a.secs - b.secs);
+  const sorted = [...rows].sort((a, b) => a.secs - b.secs);
 
   overlay.innerHTML = sorted.map(e => {
-    const xPct = ((pad.left + (e.secs / matchDur) * cW) / meta.W) * 100;
-    if (xPct < 2 || xPct > 98) return '';
+    const xCanvas = pad.left + (e.secs / matchDur) * cW;
+    const xPct    = xCanvas / meta.W * 100;
+    if (xPct < 1 || xPct > 99) return '';
 
-    const isA = e.team === 'A';
-    const idx = teamCounters[e.team]++;
-    const stagger = (idx % 2) * 14; // alternate row stagger in px
+    const isA    = e.team === 'A';
+    const idx    = teamCounters[e.team]++;
+    const stagger = (idx % 3) * 12; // three rows of stagger
 
-    // A: above centreline — position from top, B: below — position from bottom
-    const chipH = 18 + stagger;
+    // Position chip: A above centreline, B below
+    const CHIP_HEIGHT = 18;
+    const GAP = 8; // px gap between centreline and nearest chip
     const topPct = isA
-      ? (midYPct * H / 100 - 28 - stagger) / H * 100
-      : (midYPct * H / 100 + 10 + stagger) / H * 100;
+      ? (midYPct - (GAP + CHIP_HEIGHT + stagger) / meta.H * 100)
+      : (midYPct + GAP / meta.H * 100 + stagger / meta.H * 100);
 
-    const col      = e.isOG ? 'rgba(240,96,96,.9)' : isA ? '#4ade80' : '#60a5fa';
-    const borderCol= e.isOG ? 'rgba(240,96,96,.5)' : isA ? 'rgba(57,211,83,.4)' : 'rgba(96,165,250,.4)';
-    const name     = e.isOG && e.assister ? e.assister : e.scorer;
-    const mins     = e.time ? e.time.split(':')[0].replace(/^0/,'') : '?';
-    const ogTag    = e.isOG ? ' OG' : '';
-    const assist   = (!e.isOG && e.assister) ? ` (${e.assister})` : '';
-    const matchKey = matchId.replace(/[#,]/g,'_');
-    const ytSecs   = ytId && e.time ? `timeToYtSeconds('${e.time}','${e.half}')` : null;
-    const clickStr = ytSecs
-      ? `onclick="seekYtVideo('${matchKey}','${ytId}',${ytSecs})" style="cursor:pointer"`
-      : '';
+    const col       = e.isOG ? '#f87171' : isA ? '#4ade80' : '#60a5fa';
+    const borderCol = e.isOG ? 'rgba(248,113,113,.4)' : isA ? 'rgba(57,211,83,.35)' : 'rgba(96,165,250,.35)';
+    const name      = (e.isOG && e.assister) ? e.assister : e.scorer;
+    const mins      = e.time ? e.time.split(':')[0].replace(/^0/, '') : '?';
+    const ogTag     = e.isOG ? `<span style="color:#f87171;font-size:.55rem"> OG</span>` : '';
+    const assist    = (!e.isOG && e.assister) ? `<span style="opacity:.55;font-size:.55rem"> (${e.assister})</span>` : '';
+    const matchKey  = matchId.replace(/[#,]/g, '_');
+    const ytSecs    = ytId && e.time ? `timeToYtSeconds('${e.time}','${e.half}')` : null;
+    const clickAttr = ytSecs ? `onclick="seekYtVideo('${matchKey}','${ytId}',${ytSecs})" style="cursor:pointer"` : '';
+    const angle     = isA ? -30 : 30;
 
-    // Vertical line from chip down/up to centreline
-    const lineTop  = isA ? '100%' : '-100%';
-
-    return `<div ${clickStr} title="${mins}' ${name}${ogTag}${assist}"
-      style="position:absolute;left:${xPct}%;top:${topPct}%;transform:translateX(-50%);
-             pointer-events:auto;
-             display:flex;flex-direction:column;align-items:center;
-             ${isA ? '' : 'flex-direction:column-reverse;'}">
-      <div style="background:rgba(8,18,12,.85);border:1px solid ${borderCol};border-radius:4px;
-                  padding:1px 5px;white-space:nowrap;font-family:'Barlow Condensed',sans-serif;
-                  font-size:.6rem;line-height:1.4;transform:rotate(${isA ? -35 : 35}deg);transform-origin:${isA?'bottom':'top'} left;
-                  color:${col};letter-spacing:.3px">
-        ${mins}' <b>${name}</b>${ogTag ? `<span style="color:var(--red)"> OG</span>` : ''}${assist ? `<span style="opacity:.6"> ${e.assister}</span>` : ''}
-        ${ytId ? `<span style="color:var(--amber);font-size:.5rem"> ▶</span>` : ''}
+    return `<div ${clickAttr}
+      style="position:absolute;left:${xPct}%;top:${topPct}%;transform:translateX(-50%);pointer-events:auto;z-index:5"
+      title="${mins}' ${name}${e.isOG?' OG':''}${e.assister&&!e.isOG?' ('+e.assister+')':''}">
+      <div style="
+        background:rgba(6,16,10,.88);
+        border:1px solid ${borderCol};
+        border-radius:3px;
+        padding:1px 5px;
+        white-space:nowrap;
+        font-family:'Barlow Condensed',sans-serif;
+        font-size:.62rem;
+        line-height:1.5;
+        color:${col};
+        transform:rotate(${angle}deg);
+        transform-origin:${isA ? 'bottom' : 'top'} center;
+        letter-spacing:.2px">
+        ${mins}' <b>${name}</b>${ogTag}${assist}${ytId ? `<span style="color:var(--amber);font-size:.5rem"> ▶</span>` : ''}
       </div>
     </div>`;
   }).join('');
