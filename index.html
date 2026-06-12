@@ -6644,11 +6644,29 @@ function renderMatches() {
         <!-- Goal Timeline -->
         ${(() => {
           const combos = goalCombos[m.id];
-          if (!combos) return '';
-          const all = [
-            ...(combos.h1||[]).map(p=>({...p,half:'1H'})),
-            ...(combos.h2||[]).map(p=>({...p,half:'2H'}))
-          ].filter(p=>p.time);
+          // Build goal events from combos or fall back to data.csv rows
+          let all = [];
+          if (combos) {
+            all = [
+              ...(combos.h1||[]).map(p=>({...p,half:'1H'})),
+              ...(combos.h2||[]).map(p=>({...p,half:'2H'}))
+            ].filter(p=>p.time);
+          }
+          // Fallback: derive from match rows if no combos
+          if (!all.length) {
+            const scorerTeam = {};
+            [...m.teamA,...m.teamB].forEach(r=>{ scorerTeam[r.player]=r.team; });
+            // Use event log goals if available
+            try {
+              const logs = JSON.parse(localStorage.getItem('aero_event_logs') || '{}');
+              const log = logs[m.id];
+              if (log?.events) {
+                log.events.filter(e => e.event === 'Goals' || e.event === 'OG').forEach(e => {
+                  all.push({ scorer: e.player, assister: e.assistBy||'', time: e.ts, half: e.half, isOG: e.event==='OG' });
+                });
+              }
+            } catch(ex) {}
+          }
 
           // Supplement with OG events from event log (not stored in combos)
           try {
@@ -7152,13 +7170,14 @@ function toggleMatchDetail(id) {
     setTimeout(() => {
       // Draw score worm
       el.querySelectorAll('canvas[id^="timeline-"]').forEach(c => {
-        const matchId = c.id.replace('timeline-','').replace(/__/g,'#').replace(/_/g,',');
-        const mid = Object.keys(window._wormData||{}).find(k =>
-          k.replace(/[#,]/g,'_') === c.id.replace('timeline-','') || k === matchId
+        const rawId = c.id.replace('timeline-', '');
+        // canvasId was built with mid.replace(/[#,]/g,'_')
+        // so find the matching key in _wormData directly
+        const mid = Object.keys(window._wormData || {}).find(k =>
+          k.replace(/[#,]/g, '_') === rawId
         );
         if (mid) {
           drawWormCanvas(c.id, mid);
-          // Get ytId from the stored worm data
           const ytId = window._wormData?.[mid]?.ytId || null;
           drawWormChips(c.id, mid, ytId);
         }
