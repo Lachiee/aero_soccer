@@ -4433,54 +4433,42 @@ function drawWormChips(canvasId, matchId, ytId) {
   const cssW = canvas.offsetWidth  || 700;
   const cssH = canvas.offsetHeight || 280;
   const dpr  = meta.W / cssW;
-
   const toCssX = cx => cx / dpr;
-  const toCssY = cy => cy / dpr;
 
-  const { pad, cW, matchDur, toX, toY } = meta;
+  const { pad, cW, matchDur } = meta;
 
-  const teamCounters = { A: 0, B: 0 };
-  const sorted = [...rows].sort((a, b) => a.secs - b.secs);
+  // Separate by team, sort by time
+  const teamA = rows.filter(e => e.team === 'A').sort((a,b) => a.secs - b.secs);
+  const teamB = rows.filter(e => e.team === 'B' || e.team !== 'A').sort((a,b) => a.secs - b.secs);
 
-  overlay.innerHTML = sorted.map(e => {
-    const xCss   = toCssX(pad.left + (e.secs / matchDur) * cW);
-    if (xCss < 10 || xCss > cssW - 10) return '';
+  const makeChip = (e, topEdge) => {
+    const xCss = toCssX(pad.left + (e.secs / matchDur) * cW);
+    if (xCss < 4 || xCss > cssW - 4) return '';
 
-    // Use score BEFORE this goal so chip is anchored to worm position at moment of goal
-    const prevDiff = e.team === 'A' ? (e.scoreA - 1) - e.scoreB : e.scoreA - (e.scoreB - 1);
-    const wormYCss = toCssY(toY(prevDiff));
-
-    const isA    = e.team === 'A';
-    const idx    = teamCounters[e.team]++;
-    const stagger = (idx % 4) * 13;
-
-    const GAP = 16;
-    let topCss = isA
-      ? wormYCss - GAP - stagger
-      : wormYCss + GAP + stagger;
-
-    // Clamp within canvas
-    const CHIP_H = 14;
-    topCss = Math.max(4, Math.min(cssH - CHIP_H - 4, topCss));
-
+    const isA       = topEdge;
     const col       = e.isOG ? '#f87171' : isA ? '#4ade80' : '#60a5fa';
-    const borderCol = e.isOG ? 'rgba(248,113,113,.4)' : isA ? 'rgba(57,211,83,.35)' : 'rgba(96,165,250,.35)';
+    const borderCol = e.isOG ? 'rgba(248,113,113,.5)' : isA ? 'rgba(57,211,83,.45)' : 'rgba(96,165,250,.45)';
     const name      = (e.isOG && e.assister) ? e.assister : e.scorer;
     const mins      = e.time ? e.time.split(':')[0].replace(/^0/, '') : '?';
-    const ogTag     = e.isOG ? `<span style="color:#f87171;font-size:.55rem"> OG</span>` : '';
-    const assist    = (!e.isOG && e.assister) ? `<span style="opacity:.55;font-size:.55rem"> (${e.assister})</span>` : '';
+    const ogTag     = e.isOG ? `<span style="color:#f87171;font-size:.52rem"> OG</span>` : '';
+    const assist    = (!e.isOG && e.assister) ? `<span style="opacity:.55;font-size:.52rem"> (${e.assister})</span>` : '';
     const matchKey  = matchId.replace(/[#,]/g, '_');
     const ytSecs    = ytId && e.time ? `timeToYtSeconds('${e.time}','${e.half}')` : null;
     const clickAttr = ytSecs ? `onclick="seekYtVideo('${matchKey}','${ytId}',${ytSecs})"` : '';
-    const angle     = isA ? -40 : 40;
-    const origin    = isA ? 'bottom left' : 'top left';
+
+    // Team A: anchored to top edge, rotated 45° right (pointing down-right)
+    // Team B: anchored to bottom edge, rotated -45° (pointing up-left)
+    const angle  = isA ? 45 : -45;
+    const top    = isA ? 2 : 'auto';
+    const bottom = isA ? 'auto' : 2;
+    const origin = isA ? 'top left' : 'bottom left';
 
     return `<div ${clickAttr}
       title="${mins}' ${name}${e.isOG?' OG':''}${e.assister&&!e.isOG?' ('+e.assister+')':''}"
-      style="position:absolute;left:${xCss.toFixed(1)}px;top:${topCss.toFixed(1)}px;
-             pointer-events:${ytSecs?'auto':'none'};z-index:5;cursor:${ytSecs?'pointer':'default'}">
+      style="position:absolute;left:${xCss.toFixed(1)}px;${isA?'top:2px':'bottom:2px'};
+             pointer-events:${ytSecs?'auto':'none'};cursor:${ytSecs?'pointer':'default'};z-index:5">
       <div style="
-        background:rgba(6,16,10,.9);
+        background:rgba(6,16,10,.92);
         border:1px solid ${borderCol};
         border-radius:3px;
         padding:1px 5px;
@@ -4492,10 +4480,15 @@ function drawWormChips(canvasId, matchId, ytId) {
         transform:rotate(${angle}deg);
         transform-origin:${origin};
         letter-spacing:.2px">
-        ${mins}' <b>${name}</b>${ogTag}${assist}${ytSecs ? `<span style="color:var(--amber);font-size:.5rem"> ▶</span>` : ''}
+        ${mins}' <b>${name}</b>${ogTag}${assist}${ytSecs?`<span style="color:var(--amber);font-size:.5rem"> ▶</span>`:''}
       </div>
     </div>`;
-  }).join('');
+  };
+
+  overlay.innerHTML = [
+    ...teamA.map(e => makeChip(e, true)),
+    ...teamB.map(e => makeChip(e, false)),
+  ].join('');
 }
 
 function drawWormCanvas(canvasId, matchId) {
