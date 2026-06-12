@@ -14741,7 +14741,10 @@ document.addEventListener('DOMContentLoaded', () => {
       saveGoalCombos();
       _tagCache = null; window._strikerRatingScale = null; window._staminaGroupAvg = null;
       console.log(`✅ Built goalCombos from event logs — ${Object.keys(built).length} matches`);
-      // Redraw any open worm canvases now that combos are available
+      // Re-render matches so _wormData gets rebuilt with real goal rows
+      if (currentPage === 'matches') renderMatches();
+      else renderAll(); // rebuild _wormData even if not on matches page
+      // Redraw any open worm canvases
       document.querySelectorAll('canvas[id^="timeline-"]').forEach(c => {
         const rawId = c.id.replace('timeline-', '');
         const mid = Object.keys(window._wormData || {}).find(k => k.replace(/[#,]/g, '_') === rawId);
