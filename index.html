@@ -4452,12 +4452,16 @@ function drawWormChips(canvasId, matchId, ytId) {
 
     const isA    = e.team === 'A';
     const idx    = teamCounters[e.team]++;
-    const stagger = idx * 14;
+    const stagger = (idx % 4) * 13;
 
-    const GAP = 18; // clear gap from worm line
-    const topCss = isA
-      ? wormYCss - GAP - stagger        // above worm
-      : wormYCss + GAP + stagger;       // below worm
+    const GAP = 16;
+    let topCss = isA
+      ? wormYCss - GAP - stagger
+      : wormYCss + GAP + stagger;
+
+    // Clamp within canvas
+    const CHIP_H = 14;
+    topCss = Math.max(4, Math.min(cssH - CHIP_H - 4, topCss));
 
     const col       = e.isOG ? '#f87171' : isA ? '#4ade80' : '#60a5fa';
     const borderCol = e.isOG ? 'rgba(248,113,113,.4)' : isA ? 'rgba(57,211,83,.35)' : 'rgba(96,165,250,.35)';
@@ -6802,7 +6806,7 @@ function renderMatches() {
             +'<div style="display:grid;grid-template-columns:1fr 200px;gap:10px;align-items:start">'
             +'<div style="position:relative;width:100%">'
             +'<canvas id="'+canvasId+'" style="width:100%;height:280px;display:block;border-radius:8px"></canvas>'
-            +'<div id="chips-'+canvasId+'" style="position:absolute;top:0;left:0;right:0;bottom:0;pointer-events:none;overflow:visible"></div>'
+            +'<div id="chips-'+canvasId+'" style="position:absolute;top:0;left:0;right:0;bottom:0;pointer-events:none;overflow:hidden"></div>'
             +'</div>'
             +statsPanel
             +'</div>'
