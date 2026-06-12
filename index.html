@@ -4446,17 +4446,18 @@ function drawWormChips(canvasId, matchId, ytId) {
     const xCss   = toCssX(pad.left + (e.secs / matchDur) * cW);
     if (xCss < 10 || xCss > cssW - 10) return '';
 
-    // Y position of worm at this goal's score differential
-    const wormYCss = toCssY(toY(e.scoreA - e.scoreB));
+    // Use score BEFORE this goal so chip is anchored to worm position at moment of goal
+    const prevDiff = e.team === 'A' ? (e.scoreA - 1) - e.scoreB : e.scoreA - (e.scoreB - 1);
+    const wormYCss = toCssY(toY(prevDiff));
 
     const isA    = e.team === 'A';
     const idx    = teamCounters[e.team]++;
-    const stagger = (idx % 3) * 13;
+    const stagger = idx * 14;
 
-    const GAP = 8;
+    const GAP = 18; // clear gap from worm line
     const topCss = isA
-      ? wormYCss - GAP - 16 - stagger   // above worm line
-      : wormYCss + GAP + stagger;        // below worm line
+      ? wormYCss - GAP - stagger        // above worm
+      : wormYCss + GAP + stagger;       // below worm
 
     const col       = e.isOG ? '#f87171' : isA ? '#4ade80' : '#60a5fa';
     const borderCol = e.isOG ? 'rgba(248,113,113,.4)' : isA ? 'rgba(57,211,83,.35)' : 'rgba(96,165,250,.35)';
