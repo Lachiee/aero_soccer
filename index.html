@@ -4430,34 +4430,33 @@ function drawWormChips(canvasId, matchId, ytId) {
   const rows = canvas._wormRows;
   if (!meta || !rows?.length) return;
 
-  // CSS dimensions of the canvas (not DPR-scaled)
   const cssW = canvas.offsetWidth  || 700;
   const cssH = canvas.offsetHeight || 280;
-  const dpr  = meta.W / cssW; // DPR ratio
+  const dpr  = meta.W / cssW;
 
-  // Convert DPR canvas coords to CSS pixels
-  const toCssX = canvasX => canvasX / dpr;
-  const toCssY = canvasY => canvasY / dpr;
+  const toCssX = cx => cx / dpr;
+  const toCssY = cy => cy / dpr;
 
   const { pad, cW, matchDur, toX, toY } = meta;
-  const midCssY = toCssY(toY(0)); // CSS y of zero line
 
   const teamCounters = { A: 0, B: 0 };
   const sorted = [...rows].sort((a, b) => a.secs - b.secs);
 
   overlay.innerHTML = sorted.map(e => {
-    const xCss = toCssX(pad.left + (e.secs / matchDur) * cW);
+    const xCss   = toCssX(pad.left + (e.secs / matchDur) * cW);
     if (xCss < 10 || xCss > cssW - 10) return '';
+
+    // Y position of worm at this goal's score differential
+    const wormYCss = toCssY(toY(e.scoreA - e.scoreB));
 
     const isA    = e.team === 'A';
     const idx    = teamCounters[e.team]++;
-    const stagger = (idx % 3) * 14;
+    const stagger = (idx % 3) * 13;
 
-    // Anchor point is at the zero line, chips fan upward (A) or downward (B)
-    const GAP = 6;
+    const GAP = 8;
     const topCss = isA
-      ? midCssY - GAP - 16 - stagger
-      : midCssY + GAP + stagger;
+      ? wormYCss - GAP - 16 - stagger   // above worm line
+      : wormYCss + GAP + stagger;        // below worm line
 
     const col       = e.isOG ? '#f87171' : isA ? '#4ade80' : '#60a5fa';
     const borderCol = e.isOG ? 'rgba(248,113,113,.4)' : isA ? 'rgba(57,211,83,.35)' : 'rgba(96,165,250,.35)';
