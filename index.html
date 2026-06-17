@@ -14723,7 +14723,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Build goalCombos from event logs (replaces combos.csv)
   // Called after events are loaded so localStorage is populated
-  function buildGoalCombosFromEventLogs() {
+  window.buildGoalCombosFromEventLogs = function buildGoalCombosFromEventLogs() {
     try {
       const stored = JSON.parse(localStorage.getItem('aero_event_logs') || '{}');
       const built = {};
