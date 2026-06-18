@@ -9484,8 +9484,7 @@ function adjustPlayerBuff(name, delta) {
   savePlayerBuffs();
   renderTeamBuilder();
   if (teamA.length || teamB.length) {
-    if (selectedForTeams.size >= 2) autoBalance(true);
-    else renderTeamResult(teamA, teamB);
+    renderTeamResult(teamA, teamB);
   }
 }
 
