@@ -253,6 +253,10 @@ body::after{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;opac
   border-radius:5px;padding:6px 10px;font-size:.78rem;font-family:'Barlow',sans-serif;outline:none}
 .note-input:focus{border-color:var(--amber)}
 .note-input::placeholder{color:var(--muted)}
+.buff-stepper{display:flex;align-items:center;gap:4px;background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:2px 4px}
+.buff-btn{width:22px;height:22px;border:none;border-radius:4px;background:var(--card2);color:var(--text);font-size:.9rem;cursor:pointer;display:flex;align-items:center;justify-content:center;line-height:1;transition:background .1s}
+.buff-btn:hover{background:var(--border)}
+.buff-val{min-width:32px;text-align:center;font-family:'Barlow Condensed',sans-serif;font-size:.82rem;font-weight:600;letter-spacing:.5px}
 
 /* ===== PLAYER PROFILE PAGE ===== */
 .profile-back{display:flex;align-items:center;gap:8px;cursor:pointer;color:var(--muted);
@@ -648,7 +652,10 @@ canvas.spider{display:block;margin:0 auto}
   </div>
 
   <div class="notes-section" id="notes-section" style="display:none">
-    <div class="notes-title">Player Notes (injuries, fitness, etc.)</div>
+    <div class="notes-title" style="display:flex;align-items:center;justify-content:space-between">
+      <span>Player Notes &amp; Buffs</span>
+      <span style="font-size:.68rem;color:var(--muted);font-family:'Barlow',sans-serif;text-transform:none;letter-spacing:0;font-weight:400">Buff adjusts rating for balancing only</span>
+    </div>
     <div id="notes-rows"></div>
   </div>
 
@@ -2046,6 +2053,7 @@ let playerStats = {};
 let matchList = [];
 let customStats = {};
 let playerNotes = {};
+let playerBuffs = {}; // name → flat rating bonus (can be negative)
 let playerGifs = {};
 let selectedForTeams = new Set();
 let teamA = [], teamB = [];
@@ -9080,7 +9088,11 @@ function renderTeamBuilder() {
   const sel = [...selectedForTeams];
   if (sel.length > 0 && notesSec) {
     notesSec.style.display = 'block';
-    notesRows.innerHTML = sel.map(name => `
+    notesRows.innerHTML = sel.map(name => {
+      const buff = playerBuffs[name] || 0;
+      const buffCol = buff > 0 ? 'var(--green)' : buff < 0 ? 'var(--red,#f87171)' : 'var(--muted)';
+      const buffDisplay = buff > 0 ? `+${buff}` : `${buff}`;
+      return `
       <div class="note-row">
         <span class="note-player-name">${name}</span>
         <input class="note-input" placeholder="e.g. injured, 50% fit, doubtful…"
@@ -9088,7 +9100,13 @@ function renderTeamBuilder() {
           oninput="savePlayerNote('${name}',this.value)"
           onblur="savePlayerNote('${name}',this.value,true)"
           onkeydown="if(event.key==='Enter'){savePlayerNote('${name}',this.value,true);this.blur()}">
-      </div>`).join('');
+        <div class="buff-stepper" data-tip="Rating buff/nerf — adds flat points to this player's effective rating for balancing only">
+          <button class="buff-btn" onclick="adjustPlayerBuff('${name}',-1)">−</button>
+          <span class="buff-val" style="color:${buffCol}">${buffDisplay}</span>
+          <button class="buff-btn" onclick="adjustPlayerBuff('${name}',+1)">+</button>
+        </div>
+      </div>`;
+    }).join('');
   } else if (notesSec) {
     notesSec.style.display = 'none';
   }
@@ -9124,7 +9142,18 @@ function savePlayerNote(name, val, rebalance = false) {
   }
 }
 
-function clearTeams() {
+function adjustPlayerBuff(name, delta) {
+  const current = playerBuffs[name] || 0;
+  const next = Math.max(-20, Math.min(20, current + delta));
+  if (next === 0) delete playerBuffs[name];
+  else playerBuffs[name] = next;
+  savePlayerBuffs();
+  renderTeamBuilder();
+  if (teamA.length || teamB.length) {
+    if (selectedForTeams.size >= 2) autoBalance(true);
+    else renderTeamResult(teamA, teamB);
+  }
+}
   selectedForTeams.clear();
   teamA = []; teamB = [];
   document.getElementById('teams-grid').style.display = 'none';
@@ -9612,11 +9641,13 @@ function shuffleTeams() {
       const wr = total >= 3 ? wins/total : 0.5;
       streakMod = 1 + ((wr - 0.5) * winRateAugStrength * 2);
     }
+    const buff = playerBuffs[name] || 0;
     return {
       ...p,
-      effectiveRating: weightedRating * (1 - pen) * streakMod,
+      effectiveRating: weightedRating * (1 - pen) * streakMod + buff,
       weightedRating,
       streakMod,
+      playerBuff: buff,
       enforcer: n(cs.enforcer || 0) * (1 - pen),
       enforcerRaw: n(cs.enforcer || 0),
       role: getPlayerRole(p)
@@ -9775,12 +9806,14 @@ function autoBalance(rebalanceOnly = false) {
       }
     }
 
+    const buff = playerBuffs[name] || 0;
     return {
       ...p,
-      effectiveRating: weightedRating * (1 - pen) * streakMod,
+      effectiveRating: weightedRating * (1 - pen) * streakMod + buff,
       weightedRating,
       streakMod,
       streakLabel,
+      playerBuff: buff,
       enforcer: n((customStats[name] || {}).enforcer || 0) * (1 - pen),
       enforcerRaw: n((customStats[name] || {}).enforcer || 0),
       role: getPlayerRole(p)
@@ -10056,8 +10089,10 @@ function renderTeamResult(tA, tB) {
       ? (p._ratingOverride || computeRating(p, customStats[p.player] || {}))
       : computeWeightedRating(p.player);
     const streakMod = p._isCustom ? 1.0 : (p.streakMod || 1.0);
-    p.effectiveRating = weightedRating * (1 - pen) * streakMod;
+    const buff = playerBuffs[p.player] || 0;
+    p.effectiveRating = weightedRating * (1 - pen) * streakMod + buff;
     p.weightedRating = weightedRating;
+    p.playerBuff = buff;
     p.enforcerRaw = n((customStats[p.player] || {}).enforcer || 0);
     p.enforcer = p.enforcerRaw * (1 - pen);
   };
@@ -10154,6 +10189,7 @@ function renderTeamResult(tA, tB) {
       <span class="tp-name" onclick="nav('profile','${p.player}')" style="cursor:pointer">${p.player}</span>
       <span style="font-size:.7rem;opacity:.55">${roleIcon[role]} ${roleLabel[role]}</span>
       ${p.streakLabel ? `<span style="font-size:.65rem;font-weight:600;padding:1px 6px;border-radius:4px;${p.streakLabel.type==='buff'?'background:rgba(96,165,250,.15);color:#60a5fa':'background:rgba(239,68,68,.12);color:#f87171'}" title="${p.streakLabel.type==='buff'?'Win rate is low — rating buffed to help balance teams':'Win rate is high — rating slightly nerfed to help balance teams'}">WR ${p.streakLabel.text}</span>` : ''}
+      ${p.playerBuff ? `<span style="font-size:.65rem;font-weight:600;padding:1px 6px;border-radius:4px;${p.playerBuff>0?'background:rgba(74,222,128,.12);color:#4ade80':'background:rgba(248,113,113,.12);color:#f87171'}" data-tip="Manual buff applied — adjustable in Player Notes &amp; Buffs above">${p.playerBuff>0?'+':''}${p.playerBuff} buff</span>` : ''}
       ${(() => {
         const ps = playerStats[p.player];
         if (!ps || ps.momentum == null || isNaN(ps.momentum)) return '';
@@ -10194,7 +10230,8 @@ function renderTeamResult(tA, tB) {
         const penNote = (1 - (p.effectiveRating / (p.weightedRating * p.streakMod || 1))) > 0.01
           ? ` · injury ${Math.round((1-(p.effectiveRating/(p.weightedRating*p.streakMod||1)))*100)}% off` : '';
         const wrNote = p.streakMod !== 1 ? ` · WR ${p.streakMod > 1 ? '+' : ''}${Math.round((p.streakMod-1)*100)}%` : '';
-        const tip = p._isCustom ? `Custom player · Effective: ${eff}` : `Base: ${base}${wrNote}${penNote} → Effective: ${eff}`;
+        const buffNote = p.playerBuff ? ` · buff ${p.playerBuff > 0 ? '+' : ''}${p.playerBuff}` : '';
+        const tip = p._isCustom ? `Custom player · Effective: ${eff}` : `Base: ${base}${wrNote}${penNote}${buffNote} → Effective: ${eff}`;
         const display = p._isCustom ? parseFloat(eff).toFixed(1) : eff;
         return `<span data-tip="${tip}" style="cursor:help">${display}</span>`;
       })() : ''}</span>
@@ -14350,6 +14387,7 @@ const LS_EXTRA = 'aeroSoccer_extraRows';
 const LS_VIDEOS = 'aeroSoccer_videos';
 const LS_CUSTOM = 'aeroSoccer_customStats';
 const LS_GIFS = 'aeroSoccer_gifs';
+const LS_BUFFS = 'aeroSoccer_playerBuffs';
 const CSV_HEADER = 'match_id,match_date,team,player,half,goals,assists,shots_on_target,shots_off_target,total_shots,goalkeeper_saves,blocks,total_saves,interceptions,tackles,nutmegs,post,key_passes,own_goals';
 
 function saveExtraRows() {
@@ -14421,14 +14459,27 @@ function loadCustomStats() {
   } catch(e) {}
 }
 
+function savePlayerBuffs() {
+  try { localStorage.setItem(LS_BUFFS, JSON.stringify(playerBuffs)); } catch(e) {}
+}
+
+function loadPlayerBuffs() {
+  try {
+    const saved = localStorage.getItem(LS_BUFFS);
+    if (saved) Object.assign(playerBuffs, JSON.parse(saved));
+  } catch(e) {}
+}
+
 function clearSavedData() {
   if (!confirm('This will remove all imported matches and saved settings. The hardcoded match history will remain. Are you sure?')) return;
   try {
     localStorage.removeItem(LS_EXTRA);
     localStorage.removeItem(LS_VIDEOS);
     localStorage.removeItem(LS_CUSTOM);
+    localStorage.removeItem(LS_BUFFS);
   } catch(e) {}
   matchVideos = {};
+  playerBuffs = {};
   // Reload from base
   const defaults = getDefaultCustomStats();
   Object.assign(customStats, defaults);
@@ -14482,6 +14533,7 @@ document.addEventListener('DOMContentLoaded', () => {
   Object.assign(customStats, getDefaultCustomStats());
   loadGoalCombos();
   loadCustomStats();
+  loadPlayerBuffs();
   loadVideos();
   loadGifs();
 
