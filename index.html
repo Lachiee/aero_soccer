@@ -2521,7 +2521,7 @@ function buildMatches(rows) {
 // =====================================================================
 function buildPlayerStats(rows) {
   const map = {};
-  const fullRows = rows.filter(r => r.half === 'FULL' && r.team !== 'DNP');
+  const fullRows = rows.filter(r => r.half === 'FULL' && r.team !== 'DNP' && r.team !== '-');
   fullRows.forEach(r => {
     const p = r.player;
     if (!p) return;
@@ -2550,7 +2550,7 @@ function buildPlayerStats(rows) {
   });
 
   // Accumulate 1H and 2H rows separately
-  const halfRows = rows.filter(r => (r.half === '1H' || r.half === '2H') && r.team !== 'DNP');
+  const halfRows = rows.filter(r => (r.half === '1H' || r.half === '2H') && r.team !== 'DNP' && r.team !== '-');
   halfRows.forEach(r => {
     if (!map[r.player]) return; // only accumulate for known players
     const hKey = r.half === '1H' ? 'h1' : 'h2';
@@ -3822,7 +3822,7 @@ function renderSeasonSummary() {
   // Build stats for the selected season directly from raw rows
   // Use playerStats as base but recompute games within the season
   const inSeason = d => seasonFilter === 'all' || (d||'').startsWith(seasonFilter);
-  const seasonRows = allRows.filter(r => r.half === 'FULL' && r.team !== 'DNP' && inSeason(r.match_date));
+  const seasonRows = allRows.filter(r => r.half === 'FULL' && r.team !== 'DNP' && r.team !== '-' && inSeason(r.match_date));
   const seasonGames = {}; // player → set of match IDs in season
   seasonRows.forEach(r => {
     if (!seasonGames[r.player]) seasonGames[r.player] = new Set();
@@ -6163,8 +6163,8 @@ function setGlobalFilter(f) {
 // Build filtered player stats based on globalFilter
 function computeFilteredStats() {
   _tagCache = null; window._strikerRatingScale = null; window._staminaGroupAvg = null; // Clear tag cache — filters changed
-  const allFull = allRows.filter(r => r.half === 'FULL' && r.team !== 'DNP');
-  const allHalf = allRows.filter(r => (r.half === '1H' || r.half === '2H') && r.team !== 'DNP');
+  const allFull = allRows.filter(r => r.half === 'FULL' && r.team !== 'DNP' && r.team !== '-');
+  const allHalf = allRows.filter(r => (r.half === '1H' || r.half === '2H') && r.team !== 'DNP' && r.team !== '-');
 
   // Apply season filter first
   const inSeason = (date) => seasonFilter === 'all' || (date || '').startsWith(seasonFilter);
@@ -9427,7 +9427,7 @@ function computeWeightedRating(playerName) {
 
   // Sort matches newest first, take last 10 — exclude DNP rows
   const sorted = [...p.matches]
-    .filter(r => r.match_date && r.half === 'FULL' && r.team !== 'DNP' && r.half !== 'DNP')
+    .filter(r => r.match_date && r.half === 'FULL' && r.team !== 'DNP' && r.team !== '-' && r.half !== 'DNP')
     .sort((a,b) => (b.match_date||'').localeCompare(a.match_date||''))
     .slice(0, 10);
 
@@ -14438,13 +14438,13 @@ function clearSavedData() {
 
 function getDefaultCustomStats() {
   return {
-    Amin:{enforcer:6,stamina:8},Gio:{enforcer:5,stamina:7},Jake:{enforcer:6,stamina:7},
-    James:{enforcer:5,stamina:6},Richard:{enforcer:7,stamina:8},Bailey:{enforcer:5,stamina:8},
-    Lachlan:{enforcer:5,stamina:8},Austin:{enforcer:5,stamina:7},Alberto:{enforcer:7,stamina:6},
-    Ines:{enforcer:4,stamina:6},David:{enforcer:5,stamina:6},Craig:{enforcer:7,stamina:5},
+    Amin:{enforcer:10,stamina:8},Gio:{enforcer:10,stamina:8},Jake:{enforcer:10,stamina:7},
+    James:{enforcer:5,stamina:6},Richard:{enforcer:7,stamina:6},Bailey:{enforcer:6,stamina:9},
+    Lachlan:{enforcer:5,stamina:10},Austin:{enforcer:9,stamina:10},Alberto:{enforcer:7,stamina:5},
+    Ines:{enforcer:6,stamina:5},David:{enforcer:5,stamina:6},Craig:{enforcer:7,stamina:5},
     Carlos:{enforcer:6,stamina:6},Dexter:{enforcer:5,stamina:5},Ross:{enforcer:5,stamina:5},
-    Will:{enforcer:7,stamina:6},James2:{enforcer:5,stamina:6},Xavier:{enforcer:6,stamina:7},
-    Andres:{enforcer:6,stamina:7},Lach2:{enforcer:11,stamina:6},
+    Will:{enforcer:7,stamina:6},James2:{enforcer:7,stamina:7},Xavier:{enforcer:10,stamina:7},
+    Andres:{enforcer:8,stamina:8},Lach2:{enforcer:11,stamina:11},Vijit:{enforcer:6,stamina:8},
   };
 }
 
