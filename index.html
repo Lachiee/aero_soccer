@@ -9445,7 +9445,7 @@ function computeWeightedRating(playerName) {
       n(r.assists) * 3 +
       n(r.total_shots) * 0.25 +
       (n(r.interceptions) + n(r.tackles)) * 0.4 +
-      n(r.total_saves) * 0.3 +
+      n(r.goalkeeper_saves) * 0.3 +
       n(r.key_passes) * 0.35 +
       n(r.blocks) * 0.3 +
       n(cs.enforcer || 0) * 0.5 +
