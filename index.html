@@ -9446,7 +9446,7 @@ function computeWeightedRating(playerName) {
       (n(r.interceptions) + n(r.tackles)) * 0.4 +
       n(r.goalkeeper_saves) * 0.3 +
       n(r.key_passes) * 0.35 +
-      n(r.blocks) * 0.45 +
+      n(r.blocks) * 0.3 +
       n(cs.enforcer || 0) * 0.5 +
       n(cs.stamina || 0) * 0.4;
     weightedSum += matchScore * w;
@@ -14440,11 +14440,11 @@ function getDefaultCustomStats() {
   return {
     Amin:{enforcer:6,stamina:8},Gio:{enforcer:5,stamina:7},Jake:{enforcer:6,stamina:7},
     James:{enforcer:5,stamina:6},Richard:{enforcer:7,stamina:8},Bailey:{enforcer:5,stamina:8},
-    Lachlan:{enforcer:6,stamina:8},Austin:{enforcer:5,stamina:7},Alberto:{enforcer:7,stamina:6},
+    Lachlan:{enforcer:5,stamina:8},Austin:{enforcer:5,stamina:7},Alberto:{enforcer:7,stamina:6},
     Ines:{enforcer:4,stamina:6},David:{enforcer:5,stamina:6},Craig:{enforcer:7,stamina:5},
     Carlos:{enforcer:6,stamina:6},Dexter:{enforcer:5,stamina:5},Ross:{enforcer:5,stamina:5},
     Will:{enforcer:7,stamina:6},James2:{enforcer:5,stamina:6},Xavier:{enforcer:6,stamina:7},
-    Andres:{enforcer:6,stamina:7},Lach2:{enforcer:5,stamina:6},
+    Andres:{enforcer:6,stamina:7},Lach2:{enforcer:11,stamina:6},
   };
 }
 
