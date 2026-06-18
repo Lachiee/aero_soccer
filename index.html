@@ -9488,6 +9488,8 @@ function adjustPlayerBuff(name, delta) {
     else renderTeamResult(teamA, teamB);
   }
 }
+
+function clearTeams() {
   selectedForTeams.clear();
   teamA = []; teamB = [];
   document.getElementById('teams-grid').style.display = 'none';
