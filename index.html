@@ -2649,8 +2649,7 @@ function computeRating(s, cs) {
     (s.assists / g) * 3 +
     (s.total_shots / g) * 0.25 +
     ((s.interceptions + s.tackles) / g) * 0.4 +
-    (s.total_saves / g) * 0.3 +
-    (s.nutmegs / g) * 0.5 +
+    (s.goalkeeper_saves / g) * 0.3 +
     (s.key_passes / g) * 0.35 +
     (s.blocks / g) * 0.3 +
     enforcer * 0.5 +
@@ -9447,7 +9446,7 @@ function computeWeightedRating(playerName) {
       (n(r.interceptions) + n(r.tackles)) * 0.4 +
       n(r.goalkeeper_saves) * 0.3 +
       n(r.key_passes) * 0.35 +
-      n(r.blocks) * 0.3 +
+      n(r.blocks) * 0.45 +
       n(cs.enforcer || 0) * 0.5 +
       n(cs.stamina || 0) * 0.4;
     weightedSum += matchScore * w;
