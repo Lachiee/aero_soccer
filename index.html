@@ -9044,8 +9044,8 @@ function renderTeamBuilder() {
   const pool = document.getElementById('avail-pool');
   if (!pool) return;
   const players = Object.values(playerStats).sort((a,b) => a.player.localeCompare(b.player));
-  players.forEach(p => { p.rating = computeRating(p, customStats[p.player]); });
-  Object.values(customPlayers).forEach(p => { p.rating = computeRating(p, customStats[p.player]); });
+  players.forEach(p => { p.rating = computeWeightedRating(p.player); });
+  Object.values(customPlayers).forEach(p => { p.rating = computeRating(p, customStats[p.player]); }); // custom players have no match history
 
   const regularChips = players.map(p => {
     const note = playerNotes[p.player];
@@ -9107,7 +9107,7 @@ function savePlayerNote(name, val, rebalance = false) {
   const pool = document.getElementById('avail-pool');
   if (pool) {
     const players = Object.values(playerStats).sort((a,b) => a.player.localeCompare(b.player));
-    players.forEach(p => { p.rating = computeRating(p, customStats[p.player]); });
+    players.forEach(p => { p.rating = computeWeightedRating(p.player); });
     pool.innerHTML = players.map(p => {
       const note = playerNotes[p.player];
       const cls = selectedForTeams.has(p.player) ? 'pchip sel-a' : 'pchip';
