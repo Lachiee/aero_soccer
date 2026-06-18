@@ -9431,7 +9431,7 @@ function computeWeightedRating(playerName) {
     .sort((a,b) => (b.match_date||'').localeCompare(a.match_date||''))
     .slice(0, 10);
 
-  if (!sorted.length) return computeRating(p, cs);
+  if (!sorted.length || sorted.length < 5) return computeRating(p, cs);
 
   // Last 5 get weight 1.5, earlier (6-10) get weight 1.0
   let totalWeight = 0, weightedSum = 0;
