@@ -15070,12 +15070,21 @@ document.addEventListener('DOMContentLoaded', () => {
             foot:      e['Foot']  || null,
           }));
 
+          // Deduplicate events — guard against the same match being imported twice
+          const seen = new Set();
+          const dedupedEvents = events.filter(e => {
+            const key = `${e.ts}|${e.half}|${e.team}|${e.player}|${e.event}`;
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+          });
+
           // Rebuild gkRotation from GK On/Removed events
           const gkRotation = { '1H': [], '2H': [] };
           ['1H','2H'].forEach(half => {
-            const ons  = events.filter(e => e.event === 'GK On'      && e.half === half).sort((a,b)=>a.tsSecsRaw-b.tsSecsRaw);
-            const offs = events.filter(e => e.event === 'GK Removed' && e.half === half).sort((a,b)=>a.tsSecsRaw-b.tsSecsRaw);
-            const maxT = Math.max(...events.filter(e=>e.half===half).map(e=>e.tsSecsRaw), 0);
+            const ons  = dedupedEvents.filter(e => e.event === 'GK On'      && e.half === half).sort((a,b)=>a.tsSecsRaw-b.tsSecsRaw);
+            const offs = dedupedEvents.filter(e => e.event === 'GK Removed' && e.half === half).sort((a,b)=>a.tsSecsRaw-b.tsSecsRaw);
+            const maxT = Math.max(...dedupedEvents.filter(e=>e.half===half).map(e=>e.tsSecsRaw), 0);
             ons.forEach(on => {
               const off = offs.find(o => o.player === on.player && o.tsSecsRaw >= on.tsSecsRaw);
               gkRotation[half].push({ player: on.player, team: on.team, fromSecs: on.tsSecsRaw, toSecs: off ? off.tsSecsRaw : maxT });
@@ -15083,10 +15092,10 @@ document.addEventListener('DOMContentLoaded', () => {
           });
 
           // Recompute timeStats fresh from events
-          const goalEvts = events.filter(e => e.event === 'Goals');
-          const timeStats = computeTimeStats(events, goalEvts, gkRotation, 0);
+          const goalEvts = dedupedEvents.filter(e => e.event === 'Goals');
+          const timeStats = computeTimeStats(dedupedEvents, goalEvts, gkRotation, 0);
 
-          importData[mid] = { ...existing, date, events, gkRotation, timeStats };
+          importData[mid] = { ...existing, date, events: dedupedEvents, gkRotation, timeStats };
         });
 
         Object.entries(importData).forEach(([mid, log]) => {
