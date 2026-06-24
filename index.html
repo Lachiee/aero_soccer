@@ -14970,7 +14970,9 @@ document.addEventListener('DOMContentLoaded', () => {
   // This means: update data.csv on GitHub → everyone gets new data on refresh
 
   Object.assign(customStats, getDefaultCustomStats());
-  loadGoalCombos();
+  // Don't load stale goalCombos cache — always rebuild fresh from event logs after fetch
+  // loadGoalCombos() was here but the cache can contain duplicates from old imports
+  try { localStorage.removeItem(LS_COMBOS); } catch(e) {}
   loadCustomStats();
   loadPlayerBuffs();
   loadVideos();
@@ -15319,8 +15321,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Wait for all three, then initialise
   Promise.all([fetchEvents, fetchSettings, fetchData]).then(([,, csv]) => {
-    initWithCSV(csv || RAW_CSV, csv ? 'data.csv (GitHub)' : 'RAW_CSV (baked)');
     buildGoalCombosFromEventLogs();
+    initWithCSV(csv || RAW_CSV, csv ? 'data.csv (GitHub)' : 'RAW_CSV (baked)');
   });
 });
 </script>
