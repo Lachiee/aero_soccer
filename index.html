@@ -15099,10 +15099,9 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         Object.entries(importData).forEach(([mid, log]) => {
-          if (!stored[mid] || (log?.events?.length || 0) >= (stored[mid]?.events?.length || 0)) {
-            stored[mid] = log;
-            merged++;
-          }
+          // Always take the freshly-deduped version from events.csv — it's the source of truth
+          stored[mid] = log;
+          merged++;
         });
         // Normalise event rows — new format uses CSV-style keys (Timestamp, Player etc)
         const normaliseLog = (log) => {
