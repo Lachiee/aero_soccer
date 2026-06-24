@@ -9,7 +9,7 @@
     "goalkeeper_saves": 1.1,
     "shots_on_target": 0.5,
     "shots_off_target": 0.1,
-    "nutmegs": 0.3,
+    "nutmegs": 0.1,
     "post": 0.2
   },
   "customStats": {
