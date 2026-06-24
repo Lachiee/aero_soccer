@@ -15041,9 +15041,16 @@ document.addEventListener('DOMContentLoaded', () => {
           return 0;
         };
         // Group CSV rows by date into per-match logs
+        const normDate = d => {
+          if (!d) return '';
+          // Convert D/MM/YYYY or DD/MM/YYYY → YYYY-MM-DD
+          const slash = d.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+          if (slash) return `${slash[3]}-${slash[2].padStart(2,'0')}-${slash[1].padStart(2,'0')}`;
+          return d;
+        };
         const byDate = {};
         data.forEach(row => {
-          const date = row['Date'] || '';
+          const date = normDate(row['Date'] || '');
           if (!date) return;
           if (!byDate[date]) byDate[date] = [];
           byDate[date].push(row);
@@ -15230,7 +15237,16 @@ document.addEventListener('DOMContentLoaded', () => {
   // Called after events are loaded so localStorage is populated
   window.buildGoalCombosFromEventLogs = function buildGoalCombosFromEventLogs() {
     try {
-      const stored = JSON.parse(localStorage.getItem('aero_event_logs') || '{}');
+      const raw = JSON.parse(localStorage.getItem('aero_event_logs') || '{}');
+
+      // Normalise any wrong-format keys (D/MM/YYYY#1 → YYYY-MM-DD#1)
+      const normKey = k => k.replace(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/, (_,d,mo,y) => `${y}-${mo.padStart(2,'0')}-${d.padStart(2,'0')}`);
+      const stored = {};
+      Object.entries(raw).forEach(([k, v]) => { stored[normKey(k)] = v; });
+      // Persist normalised keys back if anything changed
+      if (Object.keys(stored).some((k,i) => k !== Object.keys(raw)[i])) {
+        try { localStorage.setItem('aero_event_logs', JSON.stringify(stored)); } catch(e) {}
+      }
       const built = {};
       Object.entries(stored).forEach(([matchId, log]) => {
         if (!log.events?.length) return;
