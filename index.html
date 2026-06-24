@@ -15232,8 +15232,18 @@ document.addEventListener('DOMContentLoaded', () => {
       const built = {};
       Object.entries(stored).forEach(([matchId, log]) => {
         if (!log.events?.length) return;
+
+        // Deduplicate events in this log before processing (guards against stale duplicated localStorage)
+        const seen = new Set();
+        const events = log.events.filter(e => {
+          const key = `${e.ts}|${e.half}|${e.team}|${e.player}|${e.event}`;
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
+
         built[matchId] = { h1: [], h2: [] };
-        log.events.forEach(e => {
+        events.forEach(e => {
           if (e.event !== 'Goals') return;
           const key = e.half === '2H' ? 'h2' : 'h1';
           // Preserve existing sx/sy/ax/ay from localStorage goalCombos (user-pinned positions)
@@ -15261,6 +15271,22 @@ document.addEventListener('DOMContentLoaded', () => {
       });
       goalCombos = built;
       saveGoalCombos();
+      // Persist deduped event logs back so localStorage is clean for future loads
+      try {
+        const clean = JSON.parse(localStorage.getItem('aero_event_logs') || '{}');
+        let changed = false;
+        Object.entries(clean).forEach(([mid, log]) => {
+          if (!log.events?.length) return;
+          const s = new Set();
+          const deduped = log.events.filter(e => {
+            const k = `${e.ts}|${e.half}|${e.team}|${e.player}|${e.event}`;
+            if (s.has(k)) { changed = true; return false; }
+            s.add(k); return true;
+          });
+          if (deduped.length !== log.events.length) clean[mid] = { ...log, events: deduped };
+        });
+        if (changed) localStorage.setItem('aero_event_logs', JSON.stringify(clean));
+      } catch(e) {}
       _tagCache = null; window._strikerRatingScale = null; window._staminaGroupAvg = null;
       console.log(`✅ Built goalCombos from event logs — ${Object.keys(built).length} matches`);
       // Re-render matches so _wormData gets rebuilt with real goal rows
