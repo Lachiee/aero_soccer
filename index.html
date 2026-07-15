@@ -8080,7 +8080,7 @@ function renderMatches() {
                 const tStyle = `padding:5px 8px;font-size:.72rem;font-weight:700;border-top:2px solid rgba(255,255,255,.1);background:rgba(0,0,0,.2)`;
                 return `<tr>
                   <td style="${tStyle};color:${nameColor}">TOTAL</td>
-                  <td style="${tStyle};${oCol};color:${nameColor}">${tG}${oppOwnGoals>0?`<span style="color:var(--red);font-size:.6rem;margin-left:2px" title="Includes ${oppOwnGoals} own goal(s) by opponents">+${oppOwnGoals}OG</span>`:''}</td>
+                  <td style="${tStyle};${oCol};color:${nameColor}">${tG}${oppOwnGoals>0?`<span style="color:var(--red);font-size:.6rem;margin-left:2px" title="Includes ${oppOwnGoals} own goal(s) by opponents">(+${oppOwnGoals} OG)</span>`:''}</td>
                   <td style="${tStyle};${oCol}">${sum('assists')}</td>
                   <td style="${tStyle};${oCol}">${sum('key_passes')}</td>
                   <td style="${tStyle};${oCol}">${tS}</td>
