@@ -8250,10 +8250,7 @@ function buildSingleMatchCardHtml(m) {
               const isMB = (key, val) => val > 0 && val >= matchBest[key] && matchBest[key] > 0;
 
               // Build suffix badges: match-best badge, then ★ PB or 💎 all-time.
-              // Record checks always use the player's combined full-match total (fullRowByPlayer),
-              // so a swapped player's badges reflect their whole-match performance. If the cell's own
-              // half value differs from that combined total, show the combined total in brackets too,
-              // so the badge on a split row is understandable at a glance.
+              // Record checks always use the player's combined full-match total (fullRowByPlayer).
               const badges = (player, key, val) => {
                 const combinedVal = fullRowByPlayer[player] ? n(fullRowByPlayer[player][key]) : val;
                 if (!combinedVal || combinedVal === 0) return '';
@@ -8262,11 +8259,20 @@ function buildSingleMatchCardHtml(m) {
                 const pb = isPB(player, key, combinedVal);
                 const at = isAT(key, combinedVal);
                 if (!mb && !pb && !at) return '';
-                if (combinedVal !== val) s += `<span style="opacity:.6;font-size:.6rem;margin-left:2px">(${combinedVal} match total)</span>`;
                 if (mb && MATCH_BADGE[key]) s += `<span title="Match best" style="font-size:.6rem;margin-left:2px;opacity:.85">${MATCH_BADGE[key]}</span>`;
                 if (at) s += `<span title="All-time record!" style="color:#a78bfa;font-size:.65rem;margin-left:1px">💎</span>`;
                 else if (pb) s += `<span title="Personal best!" style="color:var(--amber);font-size:.65rem;margin-left:1px">★</span>`;
                 return s;
+              };
+
+              // Whenever a split half-row's own value differs from the player's combined
+              // match total (i.e. a swapped player), show the match total in a short
+              // "Σ" (sum) bracket — independent of whether it's badge-worthy, so the
+              // total is always visible for swapped players, not just record-setters.
+              const matchTotalTag = (player, key, val) => {
+                const combinedVal = fullRowByPlayer[player] ? n(fullRowByPlayer[player][key]) : val;
+                return combinedVal !== val
+                  ? `<span style="opacity:.6;font-size:.6rem;margin-left:2px" title="Match total (both halves)">(Σ${combinedVal})</span>` : '';
               };
 
 
@@ -8291,16 +8297,16 @@ function buildSingleMatchCardHtml(m) {
                 const combinedConvRate = combinedShots >= 3 ? combinedGoals/combinedShots : 0;
                 const combinedConvPct = combinedShots > 0 ? (combinedGoals/combinedShots*100).toFixed(1)+'%' : '0%';
                 const convBracket = combinedConvPct !== conv
-                  ? `<span style="opacity:.6;font-size:.6rem;margin-left:2px">(${combinedConvPct} match total)</span>` : '';
+                  ? `<span style="opacity:.6;font-size:.6rem;margin-left:2px" title="Match total conversion (both halves)">(Σ${combinedConvPct})</span>` : '';
                 const convBadge = combinedConvRate > 0 && matchBestConv > 0 && combinedConvRate >= matchBestConv
                   ? `<span title="Match best conversion" style="font-size:.6rem;margin-left:2px">🔥</span>` : '';
                 const gkS   = n(r.goalkeeper_saves);
                 const mvpScore = mvpEntry ? `<span style="font-size:.6rem;color:var(--muted);margin-left:3px">${mvpEntry.score}pts</span>` : '';
                 const rs   = rowStyle(r);
-                const v    = (key, val) => `${val}${badges(p, key, val)}`;
+                const v    = (key, val) => `${val}${matchTotalTag(p, key, val)}${badges(p, key, val)}`;
                 return `<tr ${rs}>
                   <td class="${r.team==='A'?'team-a-cell':'team-b-cell'}" onclick="event.stopPropagation();nav('profile','${p}')" style="cursor:pointer">${medalSpan}${p}${halfTag}${mvpScore}</td>
-                  <td style="${oCol}"><b>${goals}</b>${badges(p,'goals',goals)}</td>
+                  <td style="${oCol}"><b>${goals}</b>${matchTotalTag(p,'goals',goals)}${badges(p,'goals',goals)}</td>
                   <td style="${oCol}">${v('assists',n(r.assists)||0)}</td>
                   <td style="${oCol}">${v('key_passes',n(r.key_passes)||0)}</td>
                   <td style="${oCol}">${v('total_shots',shots)}</td>
