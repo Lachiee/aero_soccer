@@ -8267,12 +8267,12 @@ function buildSingleMatchCardHtml(m) {
 
               // Whenever a split half-row's own value differs from the player's combined
               // match total (i.e. a swapped player), show the match total in a short
-              // "Σ" (sum) bracket — independent of whether it's badge-worthy, so the
-              // total is always visible for swapped players, not just record-setters.
+              // bracket — independent of whether it's badge-worthy, so the total is
+              // always visible for swapped players, not just record-setters.
               const matchTotalTag = (player, key, val) => {
                 const combinedVal = fullRowByPlayer[player] ? n(fullRowByPlayer[player][key]) : val;
                 return combinedVal !== val
-                  ? `<span style="opacity:.6;font-size:.6rem;margin-left:2px" title="Match total (both halves)">(Σ${combinedVal})</span>` : '';
+                  ? `<span style="opacity:.6;font-size:.6rem;margin-left:2px" title="Match total (both halves)">(${combinedVal} total)</span>` : '';
               };
 
 
@@ -8297,7 +8297,7 @@ function buildSingleMatchCardHtml(m) {
                 const combinedConvRate = combinedShots >= 3 ? combinedGoals/combinedShots : 0;
                 const combinedConvPct = combinedShots > 0 ? (combinedGoals/combinedShots*100).toFixed(1)+'%' : '0%';
                 const convBracket = combinedConvPct !== conv
-                  ? `<span style="opacity:.6;font-size:.6rem;margin-left:2px" title="Match total conversion (both halves)">(Σ${combinedConvPct})</span>` : '';
+                  ? `<span style="opacity:.6;font-size:.6rem;margin-left:2px" title="Match total conversion (both halves)">(${combinedConvPct} total)</span>` : '';
                 const convBadge = combinedConvRate > 0 && matchBestConv > 0 && combinedConvRate >= matchBestConv
                   ? `<span title="Match best conversion" style="font-size:.6rem;margin-left:2px">🔥</span>` : '';
                 const gkS   = n(r.goalkeeper_saves);
