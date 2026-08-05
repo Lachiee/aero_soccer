@@ -2823,6 +2823,14 @@ function parseCSV(csv) {
 
 function n(v) { return (v === null || v === undefined) ? 0 : Number(v) || 0; }
 
+// Chemistry "games together" can now be fractional (0.5 = one shared half,
+// e.g. when a player swaps sides at half-time). Round to the nearest 0.5
+// to kill float noise, then print without a trailing ".0".
+function fmtGames(v) {
+  const r = Math.round((v || 0) * 2) / 2;
+  return r % 1 === 0 ? String(r) : r.toFixed(1);
+}
+
 // =====================================================================
 // BUILD MATCH LIST
 // =====================================================================
@@ -2876,6 +2884,52 @@ function buildMatches(rows) {
   });
 
   return Object.values(matchMap).sort((a, b) => b.date.localeCompare(a.date));
+}
+
+// =====================================================================
+// HALF-AWARE TEAM SNAPSHOTS (for chemistry) — if a player swapped sides
+// at half-time, they should only get chemistry credit with the
+// teammates they actually shared a half with, not the whole match.
+// Returns an array of { players:[names], won:bool, weight:number }
+// covering both sides of both halves. For matches with real 1H/2H data,
+// each half is weighted 0.5 game; for matches with no half breakdown at
+// all, the whole match is weighted as 1 game (old behaviour preserved).
+// =====================================================================
+function getHalfTeamSnapshots(m) {
+  const halfRows = m.rows.filter(r => r.half === '1H' || r.half === '2H');
+  const winnerTeam = m.winnerTeam;
+
+  if (!halfRows.length) {
+    // No half data at all — fall back to full-match rosters, full weight
+    return [
+      { players: m.teamA.map(r => r.player), won: winnerTeam === 'A', weight: 1 },
+      { players: m.teamB.map(r => r.player), won: winnerTeam === 'B', weight: 1 },
+    ];
+  }
+
+  // Determine each player's team for each half. Prefer an explicit
+  // half-row's team; if a player has no row logged for a given half
+  // (e.g. stats only tracked as FULL for that player), fall back to
+  // their FULL-row team so they still count for both halves of their match.
+  const fullTeamOf = {};
+  [...m.teamA, ...m.teamB].forEach(r => { fullTeamOf[r.player] = r.team === 'A' ? 'A' : 'B'; });
+
+  const halfTeamOf = { '1H': {}, '2H': {} };
+  halfRows.forEach(r => { halfTeamOf[r.half][r.player] = r.team; });
+
+  const allPlayers = new Set([...Object.keys(fullTeamOf), ...halfRows.map(r => r.player)]);
+
+  const roster = (half, team) => [...allPlayers].filter(p => {
+    const t = halfTeamOf[half][p] || fullTeamOf[p];
+    return t === team;
+  });
+
+  return [
+    { players: roster('1H', 'A'), won: winnerTeam === 'A', weight: 0.5 },
+    { players: roster('1H', 'B'), won: winnerTeam === 'B', weight: 0.5 },
+    { players: roster('2H', 'A'), won: winnerTeam === 'A', weight: 0.5 },
+    { players: roster('2H', 'B'), won: winnerTeam === 'B', weight: 0.5 },
+  ];
 }
 
 // =====================================================================
@@ -7388,15 +7442,17 @@ function computeFilteredStats() {
 
   const filtChemMap = {};
   filteredMatches.forEach(m => {
-    [m.teamA, m.teamB].forEach(team => {
-      const names = team.map(r => r.player);
-      const won = m.winnerTeam === (team === m.teamA ? 'A' : 'B');
+    // Half-aware, same as main chemistry builder — swapped players only
+    // get credit with the teammates they actually shared a half with.
+    getHalfTeamSnapshots(m).forEach(snap => {
+      const names = snap.players;
+      const won = snap.won;
       for (let i = 0; i < names.length; i++) {
         for (let j = i+1; j < names.length; j++) {
           const key = [names[i], names[j]].sort().join('|||');
           if (!filtChemMap[key]) filtChemMap[key] = { p1: names[i], p2: names[j], games: 0, wins: 0 };
-          filtChemMap[key].games++;
-          if (won) filtChemMap[key].wins++;
+          filtChemMap[key].games += snap.weight;
+          if (won) filtChemMap[key].wins += snap.weight;
         }
       }
     });
@@ -8206,7 +8262,7 @@ function buildSingleMatchCardHtml(m) {
                 const pb = isPB(player, key, combinedVal);
                 const at = isAT(key, combinedVal);
                 if (!mb && !pb && !at) return '';
-                if (combinedVal !== val) s += `<span style="opacity:.6;font-size:.6rem;margin-left:2px">(${combinedVal})</span>`;
+                if (combinedVal !== val) s += `<span style="opacity:.6;font-size:.6rem;margin-left:2px">(${combinedVal} match total)</span>`;
                 if (mb && MATCH_BADGE[key]) s += `<span title="Match best" style="font-size:.6rem;margin-left:2px;opacity:.85">${MATCH_BADGE[key]}</span>`;
                 if (at) s += `<span title="All-time record!" style="color:#a78bfa;font-size:.65rem;margin-left:1px">💎</span>`;
                 else if (pb) s += `<span title="Personal best!" style="color:var(--amber);font-size:.65rem;margin-left:1px">★</span>`;
@@ -8235,7 +8291,7 @@ function buildSingleMatchCardHtml(m) {
                 const combinedConvRate = combinedShots >= 3 ? combinedGoals/combinedShots : 0;
                 const combinedConvPct = combinedShots > 0 ? (combinedGoals/combinedShots*100).toFixed(1)+'%' : '0%';
                 const convBracket = combinedConvPct !== conv
-                  ? `<span style="opacity:.6;font-size:.6rem;margin-left:2px">(${combinedConvPct})</span>` : '';
+                  ? `<span style="opacity:.6;font-size:.6rem;margin-left:2px">(${combinedConvPct} match total)</span>` : '';
                 const convBadge = combinedConvRate > 0 && matchBestConv > 0 && combinedConvRate >= matchBestConv
                   ? `<span title="Match best conversion" style="font-size:.6rem;margin-left:2px">🔥</span>` : '';
                 const gkS   = n(r.goalkeeper_saves);
@@ -10080,7 +10136,7 @@ function renderProfile(name) {
         </div>
         <div style="text-align:right;flex-shrink:0">
           <div style="font-family:&#x27;Bebas Neue&#x27;,sans-serif;font-size:1.1rem;color:${col};line-height:1">${d > 0 ? '+' : ''}${d}%</div>
-          <div style="font-size:.6rem;color:var(--muted)">${c.games}g</div>
+          <div style="font-size:.6rem;color:var(--muted)">${fmtGames(c.games)}g</div>
         </div>
       </div>`;
     }).join('');
@@ -10619,7 +10675,7 @@ function renderProfile(name) {
               <span style="width:22px;height:22px;border-radius:50%;background:rgba(240,192,64,.15);color:var(--gold);font-family:'Bebas Neue',sans-serif;font-size:.85rem;display:flex;align-items:center;justify-content:center;flex-shrink:0">${i+1}</span>
               <div style="flex:1;min-width:0">
                 <div style="font-size:.78rem;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${c.partner}</div>
-                <div style="font-size:.58rem;color:var(--muted)">${c.winRate}% win rate · ${c.games} games together</div>
+                <div style="font-size:.58rem;color:var(--muted)">${c.winRate}% win rate · ${fmtGames(c.games)} games together</div>
               </div>
               <div style="text-align:right;flex-shrink:0">
                 <div style="font-family:'Bebas Neue',sans-serif;font-size:1.05rem;color:${col}">${c.delta>0?'+':''}${c.delta}%</div>
@@ -12691,7 +12747,7 @@ function renderTeamSynergy(tA, tB) {
           <span style="font-size:.8rem;color:var(--text2);font-weight:500">${p.p1} <span style="color:var(--muted);font-size:.72rem">&amp;</span> ${p.p2}</span>
           <div style="text-align:right">
             <span style="font-family:'Bebas Neue',sans-serif;font-size:1rem;color:${col}">${sign}${p.delta}%</span>
-            <span style="font-size:.65rem;color:var(--muted);margin-left:4px">${p.winRate}% WR · ${p.games}G</span>
+            <span style="font-size:.65rem;color:var(--muted);margin-left:4px">${p.winRate}% WR · ${fmtGames(p.games)}G</span>
           </div>
         </div>
         <div style="background:var(--bg2);border-radius:2px;height:3px;overflow:hidden;position:relative">
@@ -13336,33 +13392,33 @@ function computeAnalytics() {
   });
 
   matchList.forEach(m => {
-    [m.teamA, m.teamB].forEach(team => {
-      const names = team.map(r=>r.player);
-      const teamIdx = team === m.teamA ? 'A' : 'B';
-      const won = m.winnerTeam === teamIdx;
+    // Half-aware: a pair only gets chemistry credit for the half(s) they
+    // actually shared a team in. A full match together = 1 game; a single
+    // shared half (e.g. one of them swapped sides at half-time) = 0.5 game.
+    getHalfTeamSnapshots(m).forEach(snap => {
+      const names = snap.players;
+      const won = snap.won;
       for (let i=0;i<names.length;i++) for (let j=i+1;j<names.length;j++) {
         const key = [names[i],names[j]].sort().join('|||');
         if (!chemMap[key]) chemMap[key] = {p1:names[i],p2:names[j],games:0,wins:0};
-        chemMap[key].games++;
-        if (won) chemMap[key].wins++;
+        chemMap[key].games += snap.weight;
+        if (won) chemMap[key].wins += snap.weight;
       }
     });
-    // Track games apart (opposite teams)
-    const allNames = [...m.teamA.map(r=>r.player), ...m.teamB.map(r=>r.player)];
-    const teamANames = new Set(m.teamA.map(r=>r.player));
-    allNames.forEach(pa => allNames.forEach(pb => {
-      if (pa >= pb) return;
-      const key = [pa,pb].sort().join('|||');
-      if (!chemMap[key]) return; // only track apart for pairs who've played together
-      // They're on opposite teams this match
-      if ((teamANames.has(pa)) !== (teamANames.has(pb))) {
+    // Track games apart (opposite teams) — also half-aware, so a player
+    // who swapped sides only counts as "apart" from someone for the
+    // half(s) they were actually on opposing teams.
+    const snaps = getHalfTeamSnapshots(m);
+    // Pair up 1H's two sides and 2H's two sides so we compare within the same half
+    const halfPairs = [[snaps[0], snaps[1]], [snaps[2], snaps[3]]].filter(([a,b]) => a && b);
+    halfPairs.forEach(([sideA, sideB]) => {
+      sideA.players.forEach(pa => sideB.players.forEach(pb => {
+        const key = [pa,pb].sort().join('|||');
+        if (!chemMap[key]) return; // only track apart for pairs who've played together
         if (!chemMap[key].gamesApart) chemMap[key].gamesApart = 0;
-        if (!chemMap[key].winsApart) chemMap[key].winsApart = 0;
-        // "wins apart" = how many times their side won when on opposite teams
-        // (ambiguous — track just games apart count)
-        chemMap[key].gamesApart++;
-      }
-    }));
+        chemMap[key].gamesApart += sideA.weight; // sideA.weight === sideB.weight (0.5 or 1)
+      }));
+    });
   });
 
   window._chemistry = Object.values(chemMap)
@@ -13976,7 +14032,7 @@ function renderStatsPage() {
                     <div style="position:absolute;left:0;top:0;height:100%;width:${c.winRate}%;background:${winRateColor(c.winRate)};opacity:.7;border-radius:3px;transition:width .3s"></div>
                   </div>
                   <div style="display:flex;justify-content:space-between;font-size:.68rem;color:var(--muted)">
-                    <span>${c.wins}W · ${c.games-c.wins}L from ${c.games} game${c.games!==1?'s':''} together</span>
+                    <span>${fmtGames(c.wins)}W · ${fmtGames(c.games-c.wins)}L from ${fmtGames(c.games)} game${c.games!==1?'s':''} together</span>
                     <span style="opacity:.7">expected ${c.baseline}%</span>
                   </div>
                 </div>
