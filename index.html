@@ -135,6 +135,67 @@ body::after{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;opac
 .mp-chip.mp-b{border-color:rgba(79,163,232,.3);color:rgba(79,163,232,.85)}
 .match-detail-panel{display:none;margin-top:10px;border-top:1px solid var(--border);padding-top:14px;overflow:visible}
 .match-detail-panel.open{display:block;overflow:visible}
+
+/* ===== Formation tab (added) ===== */
+.matchtab-bar{display:flex;gap:4px;border-bottom:1px solid var(--border);margin-bottom:12px}
+.half-toggle{display:flex;gap:4px;margin-bottom:14px;background:var(--card2);border-radius:8px;padding:3px;width:fit-content}
+.half-btn{background:none;border:none;color:var(--muted);font-family:'Barlow Condensed',sans-serif;
+  font-size:.78rem;font-weight:600;letter-spacing:.5px;text-transform:uppercase;
+  padding:7px 16px;cursor:pointer;border-radius:6px;transition:all .15s}
+.half-btn:hover{color:var(--text)}
+.half-btn.active{color:#06210c;background:var(--gold)}
+.matchtab-btn{background:none;border:none;color:var(--muted);font-family:'Barlow Condensed',sans-serif;
+  font-size:.8rem;font-weight:600;letter-spacing:.5px;text-transform:uppercase;
+  padding:8px 14px;cursor:pointer;border-bottom:2px solid transparent}
+.matchtab-btn:hover{color:var(--text)}
+.matchtab-btn.active{color:var(--green);border-bottom-color:var(--green)}
+.matchtab-panel{display:none}
+.matchtab-panel.active{display:block}
+.two-pitch{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.pitch-col{display:flex;flex-direction:column;gap:8px}
+.pitch-col-label{font-family:'Bebas Neue',sans-serif;font-size:1rem;letter-spacing:2px;text-align:center}
+.pitch-col-label.a{color:var(--green)} .pitch-col-label.b{color:var(--blue)}
+.mini-pitch-wrap{position:relative;border-radius:10px;overflow:hidden;background:#0a1408}
+canvas.mini-canvas{width:100%;display:block}
+.mini-players{position:absolute;inset:0;pointer-events:none}
+.pplayer{position:absolute;display:flex;flex-direction:column;align-items:center;gap:2px;cursor:pointer;transform:translate(-50%,-50%);z-index:2;width:70px;pointer-events:auto}
+.pplayer-avatar{width:38px;height:38px;border-radius:50%;background:var(--card2);border:2px solid rgba(255,255,255,.6);
+  display:flex;align-items:center;justify-content:center;font-family:'Bebas Neue',sans-serif;font-size:.82rem;color:var(--text);position:relative;
+  box-shadow:0 3px 8px rgba(0,0,0,.5);transition:transform .15s;margin:0 auto}
+.pplayer-avatar.team-a{border-color:var(--green)}
+.pplayer-avatar.team-b{border-color:var(--blue)}
+.pplayer:hover .pplayer-avatar{transform:scale(1.15);border-color:var(--gold)}
+.pplayer-badge{position:absolute;top:-7px;right:-8px;color:#1a1206;font-family:'Bebas Neue',sans-serif;
+  font-size:.5rem;padding:1px 4px;border-radius:8px;font-weight:700;box-shadow:0 1px 4px rgba(0,0,0,.5)}
+.pplayer-badge.mvp-1{background:linear-gradient(135deg,var(--gold),#f8d84a)}
+.pplayer-badge.mvp-2{background:linear-gradient(135deg,#c0c8c0,#e4e8e4)}
+.pplayer-badge.mvp-3{background:linear-gradient(135deg,#c08040,#e0a868)}
+.pplayer-name{font-size:.6rem;font-weight:600;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.7);white-space:nowrap;text-align:center}
+.pplayer-role{font-size:.52rem;color:rgba(255,255,255,.6);text-transform:uppercase;letter-spacing:.5px;text-align:center}
+.formation-legend{display:flex;flex-wrap:wrap;gap:10px;margin-top:14px;padding-top:12px;border-top:1px solid var(--border);font-size:.7rem;color:var(--text2)}
+.formation-legend span{display:inline-flex;align-items:center;gap:5px}
+.formation-legend i{width:12px;height:12px;border-radius:50%;display:inline-block}
+.pp-tip{position:fixed;z-index:999;background:#0d1a0f;border:1px solid rgba(57,211,83,.3);border-radius:8px;padding:9px 13px;
+  font-family:'Barlow Condensed',sans-serif;pointer-events:none;opacity:0;transition:opacity .1s;font-size:.75rem;line-height:1.5;
+  box-shadow:0 4px 20px rgba(0,0,0,.8);min-width:170px;max-width:240px}
+.pp-tip .tip-name{color:var(--text);font-size:.9rem;font-weight:700;font-family:'Bebas Neue',sans-serif;letter-spacing:.5px}
+.pp-tip .tip-role{color:var(--muted);font-size:.6rem;text-transform:uppercase;letter-spacing:.6px;margin-bottom:5px}
+.pp-tip .stat-row{display:flex;justify-content:space-between;gap:16px}
+.pp-tip .stat-row span:last-child{color:var(--lime);font-weight:600}
+.pp-tip .stat-row.highlighted{color:var(--gold)}
+.pp-tip .stat-row.highlighted span:first-child{color:var(--gold);font-weight:700}
+.pp-tip .stat-row.highlighted span:last-child{color:var(--gold)}
+
+/* ===== Goal Locations tab (added) ===== */
+.goals-direction-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;font-family:'Barlow Condensed',sans-serif;font-size:.72rem;letter-spacing:1px;text-transform:uppercase}
+.goals-dir-team.a{color:var(--green)} .goals-dir-team.b{color:var(--blue)}
+.goals-pitch-wrap{position:relative;border-radius:12px;overflow:hidden;background:#0a1408}
+canvas.goals-canvas{width:100%;display:block;cursor:crosshair}
+.goal-hint{font-size:.68rem;color:var(--muted);text-align:center;margin-top:8px;font-family:'Barlow Condensed',sans-serif;letter-spacing:.5px}
+.goal-tip{position:fixed;z-index:999;background:#0d1a0f;border:1px solid rgba(251,191,36,.4);border-radius:8px;padding:8px 12px;
+  font-family:'Barlow Condensed',sans-serif;pointer-events:none;opacity:0;transition:opacity .12s;font-size:.75rem;line-height:1.5;
+  box-shadow:0 4px 20px rgba(0,0,0,.8);min-width:150px}
+
 .detail-table{width:100%;border-collapse:collapse;font-size:.8rem}
 .detail-table th{padding:6px 10px;text-align:left;color:var(--muted);font-weight:500;
   font-family:'Barlow Condensed',sans-serif;letter-spacing:.5px;text-transform:uppercase;border-bottom:1px solid var(--border)}
@@ -275,6 +336,10 @@ body::after{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;opac
 .pstat-lbl{font-size:.68rem;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;margin-top:3px}
 .profile-body{display:grid;grid-template-columns:1fr 1fr;gap:20px}
 @media(max-width:800px){.profile-body{grid-template-columns:1fr}}
+@media(max-width:800px){
+  #page-profile > div{flex-direction:column}
+  #profile-sidebar{flex:none;width:100%;max-height:220px;position:static}
+}
 
 /* Spider chart */
 .spider-wrap{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:20px}
@@ -609,7 +674,10 @@ canvas.spider{display:block;margin:0 auto}
 <!-- ===== PAGE: PLAYER PROFILE ===== -->
 <div class="page" id="page-profile">
   <div class="profile-back" onclick="nav('players')">← Back to Players</div>
-  <div id="profile-content"></div>
+  <div style="display:flex;gap:20px;align-items:flex-start">
+    <div id="profile-sidebar" style="flex:0 0 200px;position:sticky;top:16px;max-height:calc(100vh - 32px);overflow-y:auto;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:10px"></div>
+    <div id="profile-content" style="flex:1;min-width:0"></div>
+  </div>
 </div>
 
 <!-- ===== PAGE: LEADERBOARD ===== -->
@@ -7866,6 +7934,10 @@ function renderMatches() {
 }
 
 function buildSingleMatchCardHtml(m) {
+    // Registers this match object by its DOM-safe id so the Formation tab (added below) can
+    // retrieve teamA/teamB and other match fields without re-fetching or duplicating data.
+    window.__matchById = window.__matchById || {};
+    window.__matchById[m.id.replace(/[#]/g,'__')] = m;
     const goalsA = m.goalsA;
     const goalsB = m.goalsB;
     const ogList = [...m.teamA,...m.teamB].filter(r=>n(r.own_goals)>0).map(r=>`${r.player} (OG)`);
@@ -7943,7 +8015,20 @@ function buildSingleMatchCardHtml(m) {
 
     // Build swap-aware team rows — m.teamA/teamB are pre-corrected in buildMatches
     const buildInlineTeamRows = (teamLetter) => {
-      return teamLetter === 'A' ? m.teamA : m.teamB;
+      // half is read from a per-match UI state, defaulting to the full match. For FULL, the
+      // existing swap-corrected m.teamA/m.teamB are used unchanged. For 1H/2H, filter m.rows to
+      // that half and resolve each player's team for that half using match.swappedPlayers (the
+      // same swap detection already used to build m.teamA/m.teamB), so a player who switched
+      // sides at halftime is still attributed to the correct team for each half.
+      const half = window.__matchHalfView?.[m.id] || 'FULL';
+      if (half === 'FULL') return teamLetter === 'A' ? m.teamA : m.teamB;
+      const halfRows = (m.rows || []).filter(r => r.half === half && r.team !== 'DNP' && r.team !== '-');
+      const swaps = m.swappedPlayers || [];
+      return halfRows.filter(r => {
+        const swap = swaps.find(s => s.player === r.player);
+        const effectiveTeam = swap ? (half === '1H' ? swap.from : swap.to) : r.team;
+        return effectiveTeam === teamLetter;
+      });
     };
     const rowStyle = r => {
       const idx = m.mvpList ? m.mvpList.findIndex(e => e.player === r.player) : -1;
@@ -8114,31 +8199,59 @@ function buildSingleMatchCardHtml(m) {
 
           window._momStyle = 'line';
           const statsPanel = (() => {
+            const half = window.__matchHalfView?.[m.id] || 'FULL';
+            const halfTeamRows = (teamLetter) => {
+              if (half === 'FULL') return teamLetter === 'A' ? m.teamA : m.teamB;
+              const halfRows = (m.rows || []).filter(r => r.half === half && r.team !== 'DNP' && r.team !== '-');
+              const swaps = m.swappedPlayers || [];
+              return halfRows.filter(r => {
+                const swap = swaps.find(s => s.player === r.player);
+                const effectiveTeam = swap ? (half === '1H' ? swap.from : swap.to) : r.team;
+                return effectiveTeam === teamLetter;
+              });
+            };
+            const rowsA = halfTeamRows('A'), rowsB = halfTeamRows('B');
             const s = (rows, key) => rows.reduce((t,r) => t + n(r[key]), 0);
-            const aShots = s(m.teamA,'total_shots'),   bShots = s(m.teamB,'total_shots');
-            const aOT    = s(m.teamA,'shots_on_target'),bOT   = s(m.teamB,'shots_on_target');
-            const aKP    = s(m.teamA,'key_passes'),     bKP   = s(m.teamB,'key_passes');
-            const aTkl   = s(m.teamA,'tackles'),        bTkl  = s(m.teamB,'tackles');
-            const aInt   = s(m.teamA,'interceptions'),  bInt  = s(m.teamB,'interceptions');
-            const aBlk   = s(m.teamA,'blocks'),         bBlk  = s(m.teamB,'blocks');
-            const aNM    = s(m.teamA,'nutmegs'),        bNM   = s(m.teamB,'nutmegs');
+            const aShots = s(rowsA,'total_shots'),   bShots = s(rowsB,'total_shots');
+            const aOT    = s(rowsA,'shots_on_target'),bOT   = s(rowsB,'shots_on_target');
+            const aKP    = s(rowsA,'key_passes'),     bKP   = s(rowsB,'key_passes');
+            const aTkl   = s(rowsA,'tackles'),        bTkl  = s(rowsB,'tackles');
+            const aInt   = s(rowsA,'interceptions'),  bInt  = s(rowsB,'interceptions');
+            const aBlk   = s(rowsA,'blocks'),         bBlk  = s(rowsB,'blocks');
+            const aNM    = s(rowsA,'nutmegs'),        bNM   = s(rowsB,'nutmegs');
             const tot    = aShots + bShots || 1;
             const pct    = Math.round(aShots/tot*100);
             const row = (lbl, a, b) => {
               const t = a+b||1, ap = Math.round(a/t*100);
-              const ac = a>b?'var(--green)':a===b?'rgba(255,255,255,.4)':'rgba(255,255,255,.3)';
-              const bc = b>a?'#60a5fa':b===a?'rgba(255,255,255,.4)':'rgba(255,255,255,.3)';
+              const aWins = a>b, bWins = b>a, tied = a===b;
+              const ac = aWins?'var(--green)':tied?'rgba(255,255,255,.4)':'#6b7280';
+              const bc = bWins?'#60a5fa':tied?'rgba(255,255,255,.4)':'#6b7280';
+              // Only the side that actually leads gets its team color in the bar; the trailing
+              // side's segment is greyed out instead of staying dim white, so it reads clearly
+              // as "not the leader" rather than just a fainter version of the same color. A tie
+              // colors neither side, since nobody actually leads.
+              const GREY = '#4b5563';
+              let barHtml;
+              if (tied) {
+                barHtml = '<div style="height:100%;width:100%;background:'+GREY+'"></div>';
+              } else if (aWins) {
+                barHtml = '<div style="height:100%;width:'+ap+'%;background:var(--green)"></div>'
+                        + '<div style="height:100%;width:'+(100-ap)+'%;background:'+GREY+'"></div>';
+              } else {
+                barHtml = '<div style="height:100%;width:'+ap+'%;background:'+GREY+'"></div>'
+                        + '<div style="height:100%;width:'+(100-ap)+'%;background:#60a5fa"></div>';
+              }
               return '<div style="margin-bottom:7px">'
                 +'<div style="font-size:.56rem;letter-spacing:.7px;text-transform:uppercase;color:var(--muted);text-align:center;margin-bottom:2px">'+lbl+'</div>'
                 +'<div style="display:flex;align-items:center;gap:4px">'
                 +'<span style="font-family:Bebas Neue,sans-serif;font-size:.88rem;color:'+ac+';min-width:16px;text-align:right">'+a+'</span>'
-                +'<div style="flex:1;height:4px;border-radius:2px;overflow:hidden;background:rgba(96,165,250,.2)">'
-                +'<div style="height:100%;width:'+ap+'%;background:var(--green);border-radius:2px 0 0 2px"></div>'
+                +'<div style="flex:1;height:4px;border-radius:2px;overflow:hidden;display:flex;background:rgba(255,255,255,.08)">'
+                +barHtml
                 +'</div>'
                 +'<span style="font-family:Bebas Neue,sans-serif;font-size:.88rem;color:'+bc+';min-width:16px">'+b+'</span>'
                 +'</div></div>';
             };
-            return '<div style="background:rgba(0,0,0,.3);border-radius:8px;padding:10px;font-family:Barlow Condensed,sans-serif">'
+            return '<div id="top-stats-panel-'+m.id.replace(/[#]/g,'__')+'" style="background:rgba(0,0,0,.3);border-radius:8px;padding:10px;font-family:Barlow Condensed,sans-serif">'
               +'<div style="font-size:.78rem;letter-spacing:1px;color:var(--text);text-align:center;margin-bottom:8px;padding-bottom:5px;border-bottom:1px solid rgba(255,255,255,.08)">Top Stats</div>'
               +'<div style="margin-bottom:8px">'
               +'<div style="font-size:.56rem;text-transform:uppercase;letter-spacing:.7px;color:var(--muted);text-align:center;margin-bottom:3px">Shot Share</div>'
@@ -8180,9 +8293,24 @@ function buildSingleMatchCardHtml(m) {
 
 
 
+        <!--MATCHTAB-SECTION-START-->
+        <div class="matchtab-bar" onclick="event.stopPropagation()">
+          <button class="matchtab-btn active" onclick="switchMatchTab('${m.id.replace(/[#]/g,'__')}','overview',this)">Overview</button>
+          <button class="matchtab-btn" onclick="switchMatchTab('${m.id.replace(/[#]/g,'__')}','formation',this)">⚽ Formation</button>
+          <button class="matchtab-btn" onclick="switchMatchTab('${m.id.replace(/[#]/g,'__')}','goals',this)">🎯 Goal Locations</button>
+        </div>
+
+        <div class="matchtab-panel active" id="matchtab-overview-${m.id.replace(/[#]/g,'__')}">
+
+        <div class="half-toggle" onclick="event.stopPropagation()">
+          <button class="half-btn${(window.__matchHalfView?.[m.id]||'FULL')==='FULL'?' active':''}" onclick="setStatsHalf('${m.id.replace(/[#]/g,'__')}','${m.id}','FULL',this)">Full Match</button>
+          <button class="half-btn${window.__matchHalfView?.[m.id]==='1H'?' active':''}" onclick="setStatsHalf('${m.id.replace(/[#]/g,'__')}','${m.id}','1H',this)">1st Half</button>
+          <button class="half-btn${window.__matchHalfView?.[m.id]==='2H'?' active':''}" onclick="setStatsHalf('${m.id.replace(/[#]/g,'__')}','${m.id}','2H',this)">2nd Half</button>
+        </div>
+
         <!-- Desktop stats table -->
         <div class="mobile-hide" style="overflow-x:auto">
-          <table class="detail-table" style="min-width:700px">
+          <table class="detail-table" style="min-width:700px" id="stats-table-${m.id.replace(/[#]/g,'__')}">
             ${(() => {
               const allRows = [...m.teamA, ...m.teamB];
               // Players who swapped teams at half-time — used so we always show the
@@ -8352,12 +8480,12 @@ function buildSingleMatchCardHtml(m) {
               };
 
               return allStatsTH + `<tbody>
-                ${teamHeader('TEAM A', 'var(--green)', goalsA)}
+                ${teamHeader('TEAM A', 'var(--green)', buildInlineTeamRows('A').reduce((s,r)=>s+n(r.goals),0) + buildInlineTeamRows('B').reduce((s,r)=>s+n(r.own_goals),0))}
                 ${buildInlineTeamRows('A').map(renderRow).join('')}
-                ${totalRowHtml(m.teamA, m.teamB, 'var(--green)')}
-                ${teamHeader('TEAM B', 'var(--blue)', goalsB)}
+                ${totalRowHtml(buildInlineTeamRows('A'), buildInlineTeamRows('B'), 'var(--green)')}
+                ${teamHeader('TEAM B', 'var(--blue)', buildInlineTeamRows('B').reduce((s,r)=>s+n(r.goals),0) + buildInlineTeamRows('A').reduce((s,r)=>s+n(r.own_goals),0))}
                 ${buildInlineTeamRows('B').map(renderRow).join('')}
-                ${totalRowHtml(m.teamB, m.teamA, 'var(--blue)')}
+                ${totalRowHtml(buildInlineTeamRows('B'), buildInlineTeamRows('A'), 'var(--blue)')}
               </tbody>`;
             })()}
           </table>
@@ -8445,24 +8573,69 @@ function buildSingleMatchCardHtml(m) {
           <button class="print-btn" onclick="event.stopPropagation();deleteMatch('${m.id.replace(/'/g,"\\'")}','${m.date}')" style="color:var(--red);border-color:rgba(240,96,96,.3)">🗑 Delete</button>
           ` : ''}
         </div>
-      </div>
-    </div>`;
+
+        </div>
+
+        <div class="matchtab-panel" id="matchtab-formation-${m.id.replace(/[#]/g,'__')}">
+          <div class="two-pitch">
+            <div class="pitch-col">
+              <div class="pitch-col-label a">TEAM A ▲</div>
+              <div class="mini-pitch-wrap" id="wrapA-${m.id.replace(/[#]/g,'__')}">
+                <canvas class="mini-canvas" id="canvasA-${m.id.replace(/[#]/g,'__')}"></canvas>
+                <div class="mini-players" id="playersA-${m.id.replace(/[#]/g,'__')}"></div>
+              </div>
+            </div>
+            <div class="pitch-col">
+              <div class="pitch-col-label b">TEAM B ▲</div>
+              <div class="mini-pitch-wrap" id="wrapB-${m.id.replace(/[#]/g,'__')}">
+                <canvas class="mini-canvas" id="canvasB-${m.id.replace(/[#]/g,'__')}"></canvas>
+                <div class="mini-players" id="playersB-${m.id.replace(/[#]/g,'__')}"></div>
+              </div>
+            </div>
+          </div>
+          <div class="formation-legend">
+            <span>👑 🥈 🥉 Top 3 MVP</span>
+            <span>Hover a player to see which stats they led the team in this match (highlighted in gold)</span>
+          </div>
+        </div>
+
+        <div class="matchtab-panel" id="matchtab-goals-${m.id.replace(/[#]/g,'__')}">
+          <div class="goals-direction-row">
+            <span class="goals-dir-team a">● Team A ▶</span>
+            <span class="goals-dir-team b">◀ Team B ●</span>
+          </div>
+          <div class="goals-pitch-wrap" id="goalsWrap-${m.id.replace(/[#]/g,'__')}">
+            <canvas class="goals-canvas" id="goalsCanvas-${m.id.replace(/[#]/g,'__')}"></canvas>
+          </div>
+          <div class="goal-hint">Hover a dot for scorer info · click to reveal the assist origin and pass line</div>
+          <div class="formation-legend">
+            <span><i style="background:var(--green)"></i> Team A goal</span>
+            <span><i style="background:var(--blue)"></i> Team B goal</span>
+            <span><i style="background:#f06060"></i> Own goal</span>
+          </div>
+        </div>
+      </div><!--END-MATCH-DETAIL-PANEL-->
+    </div><!--END-MATCH-CARD-->`;
 }
 
 function buildTwoGameCardHtml(m1, m2) {
   const wormSection = buildCombinedWormSection(m1, m2);
   const gameSection = (m, label) => {
     const oldCard = buildSingleMatchCardHtml(m);
-    // Pull everything from the stats table onward (table, mobile cards, DNP/swap note,
-    // video section, and the print/report/edit/delete buttons) out of the normal
-    // single-match card — we only skip its own Goal Timeline/momentum chart, since the
-    // pair card supplies ONE combined chart above instead. Strip the two outer closing
-    // </div> tags (match-detail-panel, match-card) that belonged to that standalone card,
-    // since this content is being nested inside the pair card's own wrappers instead.
-    const startMarker = '<!-- Desktop stats table -->';
+    // Pull everything from the tabbed stats section onward (tab bar, table, mobile cards,
+    // DNP/swap note, video section, print/report/edit/delete buttons, and the Formation tab)
+    // out of the normal single-match card — we only skip its own Goal Timeline/momentum chart,
+    // since the pair card supplies ONE combined chart above instead. The two outer closing
+    // </div> tags (match-detail-panel, match-card) that belonged to that standalone card are
+    // removed by their explicit END markers rather than by counting trailing </div> tags —
+    // counting broke once the Formation tab added its own extra closing divs.
+    const startMarker = '<!--MATCHTAB-SECTION-START-->';
     const startIdx = oldCard.indexOf(startMarker);
     let tablesHtml = startIdx >= 0 ? oldCard.slice(startIdx) : '';
-    tablesHtml = tablesHtml.replace(/\s*<\/div>\s*<\/div>\s*$/, '');
+    tablesHtml = tablesHtml
+      .replace('<!--END-MATCH-DETAIL-PANEL-->', '')
+      .replace('<!--END-MATCH-CARD-->', '')
+      .replace(/<\/div>\s*<\/div>\s*$/, ''); // still strip the (now unlabeled) trailing tags themselves
     return `<div style="margin-top:18px;padding-top:14px;border-top:1px solid var(--border)">
       <div style="font-family:'Barlow Condensed',sans-serif;font-size:.9rem;letter-spacing:1.5px;text-transform:uppercase;color:var(--lime);margin-bottom:10px">${label} — ${m.date}${m.swappedPlayers?.length ? ` <span style="font-size:.68rem;background:rgba(96,165,250,.12);border:1px solid rgba(96,165,250,.3);color:#60a5fa;border-radius:4px;padding:1px 7px;margin-left:6px">🔄 SWAP</span>` : ''}</div>
       ${tablesHtml}
@@ -8492,6 +8665,561 @@ function buildTwoGameCardHtml(m1, m2) {
       </div>
     </div>`;
 }
+
+// ============================================================
+// FORMATION TAB — added. Reads m.teamA/m.teamB (already correctly shaped) via
+// window.__matchById, and real per-player GK time from log.timeStats.playerStats[player]
+// .gkTimeSecs (already computed by computeTimeStats() from your GK On/GK Removed events —
+// no new data collection or reconstruction needed).
+// ============================================================
+const FORM_STAT_ICONS = {
+  goals:'⚽', assists:'🅰️', key_passes:'🔑', total_shots:'💥', shots_on_target:'🎪',
+  tackles:'🛡', interceptions:'✋', blocks:'◆', goalkeeper_saves:'🧤', nutmegs:'🌀'
+};
+const FORM_STAT_LABELS = {
+  goals:'Goals', assists:'Assists', key_passes:'Key Passes', total_shots:'Shots',
+  shots_on_target:'On Target', tackles:'Tackles', interceptions:'Interceptions',
+  blocks:'Blocks', goalkeeper_saves:'GK Saves', nutmegs:'Nutmegs'
+};
+
+function switchMatchTab(safeId, tabName, btn){
+  const bar = btn.closest('.matchtab-bar');
+  const panelHost = bar.parentElement;
+  bar.querySelectorAll('.matchtab-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  panelHost.querySelectorAll('.matchtab-panel').forEach(p=>p.classList.remove('active'));
+  const target = document.getElementById(`matchtab-${tabName}-${safeId}`);
+  if (target) target.classList.add('active');
+  if (tabName === 'formation') renderFormationTab(safeId);
+  if (tabName === 'goals') renderGoalsTab(safeId);
+}
+
+function formGkSecondsMap(matchId){
+  try {
+    const logs = JSON.parse(localStorage.getItem('aero_event_logs') || '{}');
+    const ps = logs[matchId]?.timeStats?.playerStats || {};
+    const out = {};
+    Object.entries(ps).forEach(([player, stat]) => { out[player] = stat.gkTimeSecs || 0; });
+    return out;
+  } catch(e) { return {}; }
+}
+
+function formAttackScore(p){
+  const off = n(p.goals)*2 + n(p.shots_on_target)*0.6 + n(p.assists)*1.4 + n(p.key_passes)*0.5;
+  const def = n(p.tackles)*0.8 + n(p.interceptions)*0.35 + n(p.blocks)*0.8 + n(p.goalkeeper_saves)*0.5;
+  return off - def;
+}
+
+// Split what used to be one combined "attacking" score into two separate signals, since goals
+// and creativity are different roles, not different amounts of the same thing. A player heavy
+// on assists/key passes but light on goals is a creator (Midfield trait), not "less of a
+// forward" — lumping them together pushed high-key-pass players toward Forward just because
+// their overall attacking number was high.
+function formFinishScore(p){ return n(p.goals)*2 + n(p.shots_on_target)*0.6; }
+// Weight raised from 0.5 to 0.6 — matches shots_on_target's weight in formFinishScore, so a
+// key pass (a pass that created a shot) is treated as comparably valuable to the shot itself.
+// At 0.5 it was under-weighted enough that a real playmaking stat line (e.g. 3 assists, 15 key
+// passes) could still lose to a finishing score built mostly from shot volume rather than goals.
+function formCreativityScore(p){ return n(p.assists)*1.4 + n(p.key_passes)*0.6; }
+
+function formComputeMatchHighs(teamRows){
+  const highs = {};
+  Object.keys(FORM_STAT_ICONS).forEach(stat=>{
+    const max = Math.max(...teamRows.map(p=>n(p[stat])));
+    highs[stat] = max > 0 ? max : null;
+  });
+  return highs;
+}
+
+// Real season shot-side data: bucket every one of a player's Goals/OG shots (across ALL
+// matches, from aero_event_logs) into left(<0.4)/mid(0.4-0.6)/right(>=0.6) using Shot Y, and
+// return their most frequent zone (MODE, not average — averaging a bimodal shooter who shoots
+// mostly from both edges and rarely the middle collapses into a fake center position). Cached
+// per player since this scans every match's event log.
+const _formShotZoneCache = {};
+function formGetPlayerShotZone(playerName){
+  if (_formShotZoneCache[playerName] !== undefined) return _formShotZoneCache[playerName];
+  let logs;
+  try { logs = JSON.parse(localStorage.getItem('aero_event_logs') || '{}'); }
+  catch(e) { _formShotZoneCache[playerName] = null; return null; }
+
+  const ys = [];
+  Object.values(logs).forEach(log => {
+    (log.events || []).forEach(e => {
+      if ((e.event === 'Goals' || e.event === 'OG') && e.player === playerName && e.shotY != null) {
+        ys.push(e.shotY);
+      }
+    });
+  });
+
+  const MIN_SAMPLE = 3; // a "usual side" from 1-2 shots isn't a real tendency
+  if (ys.length < MIN_SAMPLE) { _formShotZoneCache[playerName] = null; return null; }
+
+  let left = 0, mid = 0, right = 0;
+  ys.forEach(y => { if (y < 0.4) left++; else if (y < 0.6) mid++; else right++; });
+  const counts = { left, mid, right };
+  const zone = Object.entries(counts).sort((a,b)=>b[1]-a[1])[0][0];
+  const result = { zone, count: counts[zone], sampleN: ys.length };
+  _formShotZoneCache[playerName] = result;
+  return result;
+}
+
+function formPlaceTeam(teamRowsRaw, matchId, pitchW, pitchH){
+  const teamRows = teamRowsRaw.filter(r => r.team !== 'DNP' && r.team !== '-');
+  const scored = teamRows.map(p => ({ ...p, score: formAttackScore(p), _shotZone: formGetPlayerShotZone(p.player) }));
+  const min = Math.min(...scored.map(p=>p.score));
+  const max = Math.max(...scored.map(p=>p.score));
+  const range = (max-min) || 1;
+  scored.forEach(p => p.norm = (p.score-min)/range);
+
+  // No dedicated GK on either pitch (per earlier decision) — everyone is classified purely by
+  // Forward/Midfield/Defence. Real GK saves / time-in-goal stats are unaffected and still show
+  // in the hover tooltip, this only stops a GK role from being assigned on the pitch.
+  scored.forEach(p => p.isGK = false);
+
+  const outfield = scored.filter(p=>!p.isGK);
+  const gk = scored.find(p=>p.isGK);
+
+  // Role decision: overall attacking level (norm, relative to the team this match) still
+  // decides who counts as an attacking player at all vs a defender — that part is unchanged.
+  // But among attacking players, WHICH kind of attacker they are (finisher vs creator) now
+  // comes from comparing their own finishing score against their own creativity score, not
+  // from the same blended number. A player whose creativity score is the bigger of the two
+  // is a creator and goes to Midfield, even if their overall attacking level is high enough
+  // that the old logic would have called them a Forward.
+  outfield.forEach(p=>{
+    if (p.norm <= 0.33) { p._role = 'Defence'; return; }
+    const finish = formFinishScore(p), creativity = formCreativityScore(p);
+    p._role = finish >= creativity ? 'Forward' : 'Midfield';
+  });
+
+  const arcR = pitchW*0.28;
+  const gkMaxFy = (pitchH-3-arcR)/pitchH;
+  const GK_FY = gkMaxFy - 0.008;
+  const ZONE_Y = { Forward:0.18, Midfield:0.50, Defence: gk?0.665:0.76 };
+  const ROLE_X_BANDS = { Defence:[0.30,0.70,0.5], Midfield:[0.5,0.25,0.75], Forward:[0.32,0.68,0.5] };
+  const ZONE_VALUE = { left:0, mid:1, right:2 };
+  const FORWARD_ZONE_X_SOLO = { left:0.3, mid:0.5, right:0.7 };
+  const byRole = { Defence:[], Midfield:[], Forward:[] };
+  outfield.forEach(p => byRole[p._role].push(p));
+
+  Object.entries(byRole).forEach(([role, group])=>{
+    group.sort((a,b)=>b.norm-a.norm);
+    const bandXs = ROLE_X_BANDS[role];
+    if (role === 'Forward') {
+      // Real season shot-zone mode drives left-right position (not the generic role band) —
+      // players with too few tracked shots (<3) fall back to the role band below.
+      const withZone = group.filter(p => p._shotZone != null);
+      const withoutZone = group.filter(p => p._shotZone == null);
+      if (withZone.length > 0) {
+        withZone.sort((a,b)=> ZONE_VALUE[a._shotZone.zone]-ZONE_VALUE[b._shotZone.zone] || a._shotZone.count-b._shotZone.count);
+        if (withZone.length === 1) {
+          withZone[0]._fx = FORWARD_ZONE_X_SOLO[withZone[0]._shotZone.zone];
+        } else if (withZone.length === 2) {
+          const SLOTS_2 = [0.34, 0.66];
+          withZone.forEach((p,i)=>{ p._fx = SLOTS_2[i]; });
+        } else {
+          const xMin=0.16, xMax=0.84;
+          withZone.forEach((p,i)=>{ p._fx = xMin + i*((xMax-xMin)/(withZone.length-1)); });
+        }
+        withoutZone.forEach((p,i)=>{ p._fx = bandXs[i%bandXs.length]; p._yJitter = Math.floor(i/bandXs.length)*(70/pitchH); });
+        return;
+      }
+    }
+    group.forEach((p,i)=>{ p._fx = bandXs[i%bandXs.length]; p._yJitter = Math.floor(i/bandXs.length)*(70/pitchH); });
+  });
+
+  outfield.forEach(p=>{ p._fy = ZONE_Y[p._role] + (p._yJitter||0); });
+  if (gk){ gk._fx = 0.5; gk._fy = GK_FY; gk._role = 'GK'; }
+  return gk ? [...outfield, gk] : outfield;
+}
+
+function formDrawMiniCourt(ctx, W, H){
+  ctx.fillStyle = '#1a7a32';
+  ctx.beginPath();
+  if (ctx.roundRect) ctx.roundRect(0,0,W,H,6); else ctx.rect(0,0,W,H);
+  ctx.fill();
+  for (let i=0;i<12;i++){
+    ctx.fillStyle = i%2 ? 'rgba(0,0,0,0.04)' : 'rgba(255,255,255,0.015)';
+    ctx.fillRect(0, i*(H/12), W, H/12);
+  }
+  const sh = H*0.18;
+  ctx.fillStyle = '#080e1a';
+  ctx.fillRect(0, H*0.5-sh/2, W, sh);
+  ctx.strokeStyle = 'rgba(255,215,0,0.92)'; ctx.lineWidth = 2;
+  ctx.strokeRect(3,3,W-6,H-6);
+  const zy1 = H*0.5 - H*0.34*0.62, zy2 = H*0.5 + H*0.34*0.62;
+  ctx.beginPath(); ctx.moveTo(3,zy1); ctx.lineTo(W-3,zy1); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(3,zy2); ctx.lineTo(W-3,zy2); ctx.stroke();
+  const arcR = W*0.28;
+  ctx.lineWidth = 2.5;
+  ctx.beginPath(); ctx.arc(W/2,H-3,arcR,0,Math.PI); ctx.stroke();
+  ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.arc(W/2,H/2,W*0.09,0,Math.PI*2); ctx.stroke();
+  ctx.fillStyle = 'rgba(255,255,255,0.9)';
+  ctx.beginPath(); ctx.arc(W/2,H/2,3,0,Math.PI*2); ctx.fill();
+  const goalW = W*0.22, goalD = H*0.02;
+  ctx.strokeStyle = 'rgba(255,255,255,0.95)'; ctx.lineWidth = 2.5;
+  ctx.strokeRect(W/2-goalW/2, H-3-goalD, goalW, goalD);
+  ctx.fillStyle = 'rgba(57,211,83,0.75)';
+  ctx.font = `bold ${Math.max(7, Math.round(W*0.075))}px 'Barlow Condensed',sans-serif`;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+  ctx.fillText('ATTACK ▲', W/2, H*0.03);
+  ctx.textBaseline = 'alphabetic';
+}
+
+function formInitials(name){ return name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase(); }
+
+let formTipData = {};
+
+function formBuildTipHtml(p){
+  const highs = p._matchHighs || {};
+  const line = (statKey, val) => {
+    const meta = FORM_STAT_ICONS[statKey];
+    const label = FORM_STAT_LABELS[statKey];
+    const isHigh = meta && highs[statKey] != null && val === highs[statKey];
+    const prefix = isHigh ? `${meta} ` : '';
+    return `<div class="stat-row${isHigh?' highlighted':''}"${isHigh?` title="Match-high ${label}"`:''}><span>${prefix}${label}</span><span>${val}</span></div>`;
+  };
+  let h = `<div class="tip-name">${p.player}</div><div class="tip-role">${p._role}</div>`;
+  ['goals','assists','key_passes','total_shots','shots_on_target','tackles','interceptions','blocks'].forEach(stat=>{
+    h += line(stat, n(p[stat]));
+  });
+  if (n(p.goalkeeper_saves) > 0) h += line('goalkeeper_saves', n(p.goalkeeper_saves));
+  h += line('nutmegs', n(p.nutmegs));
+  return h;
+}
+
+function formShowTip(ev, tipId){
+  const p = formTipData[tipId];
+  if (!p) return;
+  let tip = document.getElementById('pp-tip-global');
+  if (!tip) {
+    tip = document.createElement('div');
+    tip.id = 'pp-tip-global';
+    tip.className = 'pp-tip';
+    document.body.appendChild(tip);
+  }
+  tip.innerHTML = formBuildTipHtml(p);
+  tip.style.opacity = '1';
+  const ow = tip.offsetWidth || 170;
+  let left = ev.clientX + 14;
+  if (left + ow > window.innerWidth) left = ev.clientX - ow - 8;
+  tip.style.left = left + 'px';
+  tip.style.top = (ev.clientY - 10) + 'px';
+}
+function formHideTip(){
+  const tip = document.getElementById('pp-tip-global');
+  if (tip) tip.style.opacity = '0';
+}
+
+function formRenderTeamPitch(matchId, safeId, teamKey, teamRows, mvpList, matchHighs){
+  const wrap = document.getElementById(`wrap${teamKey}-${safeId}`);
+  const cv = document.getElementById(`canvas${teamKey}-${safeId}`);
+  if (!wrap || !cv) return;
+  const dpr = window.devicePixelRatio || 1;
+  const W = wrap.getBoundingClientRect().width || 460;
+  const H = Math.round(W * 1.3);
+  cv.width = W*dpr; cv.height = H*dpr;
+  cv.style.width = W+'px'; cv.style.height = H+'px';
+  const ctx = cv.getContext('2d');
+  ctx.clearRect(0,0,cv.width,cv.height);
+  ctx.save(); ctx.scale(dpr,dpr);
+  formDrawMiniCourt(ctx, W, H);
+  ctx.restore();
+
+  if (!teamRows || !teamRows.length) { document.getElementById(`players${teamKey}-${safeId}`).innerHTML = ''; return; }
+
+  const placed = formPlaceTeam(teamRows, matchId, W, H);
+  const medals = ['👑','🥈','🥉'];
+  const container = document.getElementById(`players${teamKey}-${safeId}`);
+  let html = '';
+  placed.forEach(p=>{
+    // Match the same gold/silver/bronze medal ranking used everywhere else in the app
+    // (m.mvpList, index 0-2), instead of only ever highlighting the #1 MVP.
+    const mvpIdx = mvpList ? mvpList.findIndex(e => e.player === p.player) : -1;
+    const badges = mvpIdx >= 0 && mvpIdx < 3 ? `<span class="pplayer-badge mvp-${mvpIdx+1}">${medals[mvpIdx]}</span>` : '';
+    const tipId = `${safeId}_${teamKey}_${p.player}`.replace(/[^a-zA-Z0-9_]/g,'');
+    formTipData[tipId] = { ...p, _matchHighs: matchHighs };
+    const teamCls = teamKey==='A' ? 'team-a' : 'team-b';
+    html += `<div class="pplayer" style="left:${(p._fx*100).toFixed(2)}%;top:${(p._fy*100).toFixed(2)}%"
+      onmousemove="formShowTip(event,'${tipId}')" onmouseleave="formHideTip()">
+      <div class="pplayer-avatar ${teamCls}">${formInitials(p.player)}${badges}</div>
+      <div class="pplayer-name">${p.player}</div>
+      <div class="pplayer-role">${p._role}</div>
+    </div>`;
+  });
+  container.innerHTML = html;
+}
+
+function setStatsHalf(safeId, matchId, half, btn){
+  window.__matchHalfView = window.__matchHalfView || {};
+  window.__matchHalfView[matchId] = half;
+  btn.parentElement.querySelectorAll('.half-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+
+  // Rebuild just the stats table's contents rather than the whole card, so the Formation/Goal
+  // Locations tab state and the card's open/closed state aren't disturbed. buildSingleMatchCardHtml
+  // reads window.__matchHalfView inside buildInlineTeamRows, so calling it again with the same
+  // match object now produces the half-filtered table.
+  const m = window.__matchById?.[safeId];
+  if (!m) return;
+  const freshCardHtml = buildSingleMatchCardHtml(m);
+  const parser = new DOMParser();
+  const freshDoc = parser.parseFromString(`<div>${freshCardHtml}</div>`, 'text/html');
+  const freshTable = freshDoc.getElementById(`stats-table-${safeId}`);
+  const liveTable = document.getElementById(`stats-table-${safeId}`);
+  if (freshTable && liveTable) liveTable.innerHTML = freshTable.innerHTML;
+  // mobile cards use the same buildInlineTeamRows, rebuild those too if present
+  const freshMobile = freshDoc.querySelector(`#matchtab-overview-${safeId} .mobile-cards`);
+  const liveMobile = document.querySelector(`#matchtab-overview-${safeId} .mobile-cards`);
+  if (freshMobile && liveMobile) liveMobile.innerHTML = freshMobile.innerHTML;
+
+  // Top Stats sits next to the momentum chart, outside the tab structure entirely — replace it
+  // by its own id (not scoped under matchtab-overview) so the half toggle reaches it too.
+  const freshTopStats = freshDoc.getElementById(`top-stats-panel-${safeId}`);
+  const liveTopStats = document.getElementById(`top-stats-panel-${safeId}`);
+  if (freshTopStats && liveTopStats) liveTopStats.outerHTML = freshTopStats.outerHTML;
+}
+
+function renderFormationTab(safeId){
+  const m = window.__matchById?.[safeId];
+  if (!m) return;
+  // Match-high is now computed across BOTH teams together, not per team — "most tackles in the
+  // game" should mean the actual highest value across all 10 players, not "highest on their own
+  // team" (which could highlight someone with fewer tackles than an opponent).
+  const allRows = [...(m.teamA||[]), ...(m.teamB||[])];
+  const matchHighs = formComputeMatchHighs(allRows);
+  formRenderTeamPitch(m.id, safeId, 'A', m.teamA, m.mvpList, matchHighs);
+  formRenderTeamPitch(m.id, safeId, 'B', m.teamB, m.mvpList, matchHighs);
+}
+
+// ============================================================
+// GOAL LOCATIONS TAB — reads real Goals/OG events for THIS match from aero_event_logs
+// (same shotX/shotY/assistX/assistY/netX/netY fields your app already uses elsewhere).
+// Team A's dots draw attacking right, Team B's are mirrored (both axes) to attack left.
+// ============================================================
+let goalsTabState = {}; // safeId -> { events, hoveredIdx, selectedIdx }
+
+function goalsGetMatchEvents(matchId){
+  let logs;
+  try { logs = JSON.parse(localStorage.getItem('aero_event_logs') || '{}'); }
+  catch(e) { return []; }
+  const log = logs[matchId];
+  if (!log || !log.events) return [];
+  return log.events.filter(e => (e.event === 'Goals' || e.event === 'OG') && e.shotX != null && e.shotY != null);
+}
+
+function goalsDrawCourt(ctx, W, H){
+  ctx.fillStyle = '#1a7a32';
+  ctx.beginPath();
+  if (ctx.roundRect) ctx.roundRect(0,0,W,H,6); else ctx.rect(0,0,W,H);
+  ctx.fill();
+  for (let i=0;i<12;i++) {
+    ctx.fillStyle = i%2 ? 'rgba(0,0,0,0.04)' : 'rgba(255,255,255,0.015)';
+    ctx.fillRect(i*(W/12), 0, W/12, H);
+  }
+  const sh = H*0.18;
+  ctx.fillStyle = '#080e1a';
+  ctx.fillRect(0, H/2-sh/2, W, sh);
+  ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(W/2,0); ctx.lineTo(W/2,H); ctx.stroke();
+  ctx.strokeStyle = 'rgba(255,215,0,0.92)'; ctx.lineWidth = 2;
+  ctx.strokeRect(3,3,W-6,H-6);
+  const zx = W*0.34;
+  ctx.beginPath(); ctx.moveTo(zx,3); ctx.lineTo(zx,H-3); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(W-zx,3); ctx.lineTo(W-zx,H-3); ctx.stroke();
+  const arcR = H*0.28;
+  ctx.lineWidth = 2.5;
+  ctx.beginPath(); ctx.arc(3,H/2,arcR,-Math.PI*0.5,Math.PI*0.5); ctx.stroke();
+  ctx.beginPath(); ctx.arc(W-3,H/2,arcR,Math.PI*0.5,Math.PI*1.5); ctx.stroke();
+  ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.arc(W/2,H/2,H*0.09,0,Math.PI*2); ctx.stroke();
+  ctx.fillStyle = 'rgba(255,255,255,0.9)';
+  ctx.beginPath(); ctx.arc(W/2,H/2,3,0,Math.PI*2); ctx.fill();
+  const goalH = H*0.22, goalD = W*0.02;
+  ctx.strokeStyle = 'rgba(255,255,255,0.95)'; ctx.lineWidth = 2.5;
+  ctx.strokeRect(3, H/2-goalH/2, goalD, goalH);
+  ctx.strokeRect(W-3-goalD, H/2-goalH/2, goalD, goalH);
+  ctx.fillStyle = 'rgba(57,211,83,0.75)';
+  ctx.font = `bold ${Math.max(7, Math.round(H*0.075))}px 'Barlow Condensed',sans-serif`;
+  ctx.textAlign = 'right'; ctx.textBaseline = 'top';
+  ctx.fillText('A GOAL ▶', W-6, H*0.08);
+  ctx.fillStyle = 'rgba(79,163,232,0.75)';
+  ctx.textAlign = 'left';
+  ctx.fillText('◀ B GOAL', 6, H*0.08);
+  ctx.textBaseline = 'alphabetic';
+}
+
+function goalsDraw(safeId){
+  const state = goalsTabState[safeId];
+  if (!state) return;
+  const wrap = document.getElementById(`goalsWrap-${safeId}`);
+  const cv = document.getElementById(`goalsCanvas-${safeId}`);
+  if (!wrap || !cv) return;
+  const dpr = window.devicePixelRatio || 1;
+  const W = wrap.getBoundingClientRect().width || 600;
+  const H = Math.round(W * 0.52);
+  cv.width = W*dpr; cv.height = H*dpr;
+  cv.style.width = W+'px'; cv.style.height = H+'px';
+  const ctx = cv.getContext('2d');
+  ctx.clearRect(0,0,cv.width,cv.height);
+  ctx.save(); ctx.scale(dpr,dpr);
+  goalsDrawCourt(ctx, W, H);
+
+  const { events, selectedIdx, hoveredIdx } = state;
+
+  if (selectedIdx >= 0) {
+    const g = events[selectedIdx];
+    const gx = g._sx*W, gy = g._sy*H;
+    const goalD = W*0.02;
+    const goalFaceX = g.team === 'A' ? (W - 3 - goalD) : (3 + goalD);
+    const targetY = H/2;
+    if (g._ax != null) {
+      const ax = g._ax*W, ay = g._ay*H;
+      ctx.setLineDash([5,4]); ctx.strokeStyle='rgba(251,191,36,0.85)'; ctx.lineWidth=2.5;
+      ctx.beginPath(); ctx.moveTo(ax,ay); ctx.lineTo(gx,gy); ctx.stroke();
+      ctx.setLineDash([]);
+      const ang = Math.atan2(gy-ay,gx-ax);
+      ctx.fillStyle='rgba(251,191,36,0.85)';
+      ctx.beginPath(); ctx.moveTo(gx,gy);
+      ctx.lineTo(gx-10*Math.cos(ang-0.38),gy-10*Math.sin(ang-0.38));
+      ctx.lineTo(gx-10*Math.cos(ang+0.38),gy-10*Math.sin(ang+0.38));
+      ctx.closePath(); ctx.fill();
+      const pillR = Math.max(10, W*0.022);
+      ctx.beginPath(); ctx.arc(ax,ay,pillR+4,0,Math.PI*2); ctx.fillStyle='rgba(57,211,83,.15)'; ctx.fill();
+      ctx.strokeStyle='rgba(57,211,83,.8)'; ctx.lineWidth=1.5; ctx.stroke();
+      ctx.beginPath(); ctx.arc(ax,ay,pillR,0,Math.PI*2); ctx.fillStyle='#4ade80'; ctx.globalAlpha=0.92; ctx.fill(); ctx.globalAlpha=1;
+      ctx.strokeStyle='rgba(0,0,0,.4)'; ctx.lineWidth=1.2; ctx.stroke();
+      ctx.fillStyle='#071009'; ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.font=`bold ${Math.round(pillR*0.9)}px Barlow Condensed,sans-serif`;
+      ctx.fillText('A',ax,ay);
+      ctx.textAlign='left'; ctx.textBaseline='alphabetic';
+    }
+    ctx.setLineDash([5,4]); ctx.strokeStyle='rgba(248,113,113,0.6)'; ctx.lineWidth=1.5;
+    ctx.beginPath(); ctx.moveTo(gx,gy); ctx.lineTo(goalFaceX,targetY); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.globalAlpha = 0.5; ctx.fillStyle = 'white';
+    ctx.beginPath(); ctx.arc(goalFaceX, targetY, 6, 0, Math.PI*2); ctx.fill();
+    ctx.globalAlpha = 0.95; ctx.fillStyle = 'rgba(248,113,113,0.9)';
+    ctx.beginPath(); ctx.arc(goalFaceX, targetY, 4.5, 0, Math.PI*2); ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+
+  events.forEach((g,i)=>{
+    const px = g._sx*W, py = g._sy*H;
+    const isHovered = i===hoveredIdx, isSelected = i===selectedIdx;
+    const col = g.event === 'OG' ? '#f06060' : (g.team==='A' ? 'rgba(57,211,83,.9)' : 'rgba(79,163,232,.9)');
+    const r = (isHovered||isSelected) ? 12 : 8;
+    ctx.beginPath(); ctx.arc(px,py,r,0,Math.PI*2);
+    ctx.fillStyle=col; ctx.globalAlpha=0.92; ctx.fill(); ctx.globalAlpha=1;
+    if (isSelected) { ctx.strokeStyle='white'; ctx.lineWidth=3; ctx.stroke(); }
+    else if (isHovered) { ctx.strokeStyle='white'; ctx.lineWidth=2.5; ctx.stroke(); }
+    else { ctx.strokeStyle='rgba(0,0,0,.5)'; ctx.lineWidth=1.5; ctx.stroke(); }
+  });
+  ctx.restore();
+}
+
+function goalsGetHit(safeId, ev){
+  const cv = document.getElementById(`goalsCanvas-${safeId}`);
+  const rect = cv.getBoundingClientRect();
+  const W = rect.width, H = rect.height;
+  const mx = ev.clientX-rect.left, my = ev.clientY-rect.top;
+  const state = goalsTabState[safeId];
+  let best=-1, bestD=22;
+  state.events.forEach((g,i)=>{
+    const d = Math.hypot(g._sx*W-mx, g._sy*H-my);
+    if (d<bestD){bestD=d;best=i;}
+  });
+  return best;
+}
+
+function goalsShowTip(ev, safeId, idx){
+  const state = goalsTabState[safeId];
+  const g = state.events[idx];
+  let tip = document.getElementById('goal-tip-global');
+  if (!tip) {
+    tip = document.createElement('div');
+    tip.id = 'goal-tip-global';
+    tip.className = 'goal-tip';
+    document.body.appendChild(tip);
+  }
+  const col = g.event==='OG' ? '#f06060' : (g.team==='A' ? '#39d353' : '#4fa3e8');
+  const label = g.event === 'OG' ? `⚠ Own Goal — ${g.player}` : `⚽ ${g.player}`;
+  tip.innerHTML = `<div style="color:${col};font-weight:700;margin-bottom:2px">${label}</div>`
+    + (g.assistBy ? `<div style="color:rgba(168,224,80,.8);font-size:.7rem">&larr; assist: ${g.assistBy}</div>` : '<div style="color:var(--muted);font-size:.7rem">Unassisted</div>')
+    + `<div style="color:rgba(255,255,255,.6);font-size:.68rem;margin-top:3px">${g.half || ''} · ${g.ts || ''}</div>`
+    + `<div style="color:rgba(251,191,36,.7);font-size:.6rem;margin-top:4px">CLICK TO SEE ASSIST LOCATION</div>`;
+  tip.style.opacity = '1';
+  const ow = tip.offsetWidth || 150;
+  let left = ev.clientX + 14;
+  if (left + ow > window.innerWidth) left = ev.clientX - ow - 8;
+  tip.style.left = left + 'px';
+  tip.style.top = (ev.clientY - 10) + 'px';
+}
+function goalsHideTip(){
+  const tip = document.getElementById('goal-tip-global');
+  if (tip) tip.style.opacity = '0';
+}
+
+function renderGoalsTab(safeId){
+  const m = window.__matchById?.[safeId];
+  if (!m) return;
+  const rawEvents = goalsGetMatchEvents(m.id);
+  // Shot coordinates in this app's data are stored oriented toward each event's OWN scoring
+  // direction — mirror Team B's x AND y so both teams read correctly on one shared court with
+  // Team A attacking right and Team B attacking left (same convention verified earlier).
+  const events = rawEvents.map(e => {
+    if (e.team === 'B') {
+      return { ...e, _sx: 1-e.shotX, _sy: 1-e.shotY, _ax: e.assistX!=null?1-e.assistX:null, _ay: e.assistY!=null?1-e.assistY:null };
+    }
+    return { ...e, _sx: e.shotX, _sy: e.shotY, _ax: e.assistX, _ay: e.assistY };
+  });
+
+  goalsTabState[safeId] = { events, hoveredIdx: -1, selectedIdx: -1 };
+  goalsDraw(safeId);
+
+  const cv = document.getElementById(`goalsCanvas-${safeId}`);
+  if (!cv || cv._goalsWired) { if (cv) goalsDraw(safeId); return; }
+  cv._goalsWired = true;
+  cv.addEventListener('mousemove', ev=>{
+    const hit = goalsGetHit(safeId, ev);
+    const state = goalsTabState[safeId];
+    if (hit !== state.hoveredIdx) {
+      state.hoveredIdx = hit;
+      goalsDraw(safeId);
+      cv.style.cursor = hit>=0 ? 'pointer' : 'crosshair';
+      if (hit<0) { goalsHideTip(); return; }
+      goalsShowTip(ev, safeId, hit);
+    } else if (hit>=0) {
+      goalsShowTip(ev, safeId, hit);
+    }
+  });
+  cv.addEventListener('mouseleave', ()=>{
+    const state = goalsTabState[safeId];
+    state.hoveredIdx = -1; goalsDraw(safeId); goalsHideTip();
+  });
+  cv.addEventListener('click', ev=>{
+    const hit = goalsGetHit(safeId, ev);
+    const state = goalsTabState[safeId];
+    if (hit>=0) { state.selectedIdx = (state.selectedIdx===hit) ? -1 : hit; goalsDraw(safeId); }
+  });
+}
+
+window.addEventListener('resize', () => {
+  document.querySelectorAll('.matchtab-panel.active[id^="matchtab-formation-"]').forEach(panel=>{
+    const safeId = panel.id.replace('matchtab-formation-', '');
+    renderFormationTab(safeId);
+  });
+  document.querySelectorAll('.matchtab-panel.active[id^="matchtab-goals-"]').forEach(panel=>{
+    const safeId = panel.id.replace('matchtab-goals-', '');
+    if (goalsTabState[safeId]) goalsDraw(safeId);
+  });
+  if (currentPage === 'profile' && currentProfileName) {
+    const gifKey = currentProfileName.replace(/\s/g,'_');
+    if (document.getElementById(`trend-canvas-${gifKey}`)) drawTrendChart(currentProfileName, gifKey);
+  }
+});
 
 function editMatchDate(matchId, currentDate) {
   const modal = document.createElement('div');
@@ -8676,6 +9404,10 @@ function renderPlayers() {
     return (b[sort] ?? 0) - (a[sort] ?? 0);
   });
   document.getElementById('player-count').textContent = list.length + ' players' + (globalFilter==='last10'?' · Last 10 games':'');
+  // Cache the sorted player-name order so the profile page can offer prev/next navigation
+  // that follows whatever sort/search the person was actually browsing with, rather than a
+  // fixed order — this list is exactly what's currently on screen.
+  window._playersPageOrder = list.map(p => p.player);
   const grid = document.getElementById('player-grid');
   if (!grid) return;
   grid.innerHTML = list.map(p => {
@@ -8907,6 +9639,424 @@ function openMatchPanel(matchIdKey) {
     panel.style.display = 'block';
     setTimeout(() => panel.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80);
   }, 220);
+}
+
+// ============================================================
+// STAT TREND OVER TIME — one player, one chosen stat, plotted per match chronologically.
+// Reuses s.matches (already sorted-per-render call, FULL rows only) — no new data needed.
+// ============================================================
+const TREND_STATS = [
+  { key: 'goals', label: 'Goals', color: '#39d353' },
+  { key: 'assists', label: 'Assists', color: '#a8e050' },
+  { key: 'key_passes', label: 'Key Passes', color: '#f0c040' },
+  { key: 'total_shots', label: 'Shots', color: '#f0a030' },
+  { key: 'shots_on_target', label: 'On Target', color: '#e879f9' },
+  { key: 'tackles', label: 'Tackles', color: '#c090f8' },
+  { key: 'interceptions', label: 'Interceptions', color: '#4fa3e8' },
+  { key: 'blocks', label: 'Blocks', color: '#2dd4bf' },
+  { key: 'goalkeeper_saves', label: 'GK Saves', color: '#60a5fa' },
+  { key: 'nutmegs', label: 'Nutmegs', color: '#f06060' },
+];
+// "All Stats" isn't a real data field — it's each match's overall contribution, computed with
+// the SAME per-stat weights already used for MVP scoring elsewhere in the app (mvpWeights),
+// so this default view lines up with what the app already considers "how good was this game"
+// rather than introducing a second, unrelated formula.
+const ALL_STATS_META = { key: 'all', label: 'All Stats', color: '#f0c040' };
+
+window._trendState = window._trendState || {}; // gifKey -> selected stat key ('all' by default)
+
+// ============================================================
+// AUTOPLAY HIGHLIGHT BANNER — picks a random real goal of this player's, from a match that has
+// a linked YouTube video (matchVideos[matchId]), and auto-plays it muted for ~15 seconds using
+// the real YouTube IFrame API (not just URL params — those can start playback but can't
+// reliably stop it after N seconds, which needs actual player control).
+// ============================================================
+// Pulls from the player's ENTIRE real highlight pool across every match that has a linked
+// YouTube video — not just goals. Includes:
+//   - Goals (their own real Goals events)
+//   - Assists (Goal events by a TEAMMATE where assistBy === this player — the goal's own
+//     timestamp is used, since that's the actual highlight-worthy instant the assist led to)
+//   - Blocks and GK Saves (their own real Blocks / GK Saves events)
+// Tackles/Interceptions were left out — they're common enough events that most matches would
+// have dozens, which would dilute the pool with routine plays rather than genuine highlights.
+// Pulls from the player's ENTIRE real highlight pool across every match that has a linked
+// YouTube video — but ONLY events actually marked as a highlight in the data (e.highlight /
+// e.assistHL, real per-event fields already used elsewhere in this app for the same purpose,
+// e.g. isGoalHighlight/isAssistHighlight). A goal or block or save happening isn't automatically
+// "highlight-worthy" — most events in a match log are routine — so this now requires the same
+// explicit marking used everywhere else, rather than treating every Goals/Blocks/GK Saves row
+// as fair game just because it's a goal-shaped event.
+// Excludes 'lowlight' specifically — that's a real, separate marking used elsewhere in this
+// app for notable MISTAKES, not proud moments, and autoplaying someone's own error on their
+// profile banner would defeat the purpose of a highlight reel.
+const isMarkedHighlight = (val) => !!val && val !== 'none' && val !== '' && val !== 'lowlight';
+
+function getPlayerHighlightCandidates(name){
+  let logs;
+  try { logs = JSON.parse(localStorage.getItem('aero_event_logs') || '{}'); }
+  catch(e) { return []; }
+  const candidates = [];
+  Object.entries(logs).forEach(([matchId, log]) => {
+    const ytId = matchVideos[matchId] ? extractYtId(matchVideos[matchId]) : null;
+    if (!ytId) return; // only matches with a real linked video can be played
+    (log.events || []).forEach(e => {
+      if (!e.ts) return;
+      const seconds = timeToYtSeconds(e.ts, e.half);
+      if (seconds == null) return;
+      if (e.event === 'Goals' && e.player === name && isMarkedHighlight(e.highlight)) {
+        candidates.push({ matchId, ytId, seconds, half: e.half, ts: e.ts, type: 'goal' });
+      } else if (e.event === 'Goals' && e.assistBy === name && isMarkedHighlight(e.assistHL)) {
+        // The assist's own highlight flag (assistHL) is checked here, not the goal's — a goal
+        // can be marked highlight-worthy without the assist being, and vice versa.
+        candidates.push({ matchId, ytId, seconds, half: e.half, ts: e.ts, type: 'assist' });
+      } else if (e.event === 'Blocks' && e.player === name && isMarkedHighlight(e.highlight)) {
+        candidates.push({ matchId, ytId, seconds, half: e.half, ts: e.ts, type: 'block' });
+      } else if (e.event === 'GK Saves' && e.player === name && isMarkedHighlight(e.highlight)) {
+        candidates.push({ matchId, ytId, seconds, half: e.half, ts: e.ts, type: 'save' });
+      }
+    });
+  });
+  return candidates;
+}
+
+let _ytApiLoading = false;
+let _ytApiReadyCallbacks = [];
+function ensureYtApiLoaded(cb){
+  if (window.YT && window.YT.Player) { cb(); return; }
+  _ytApiReadyCallbacks.push(cb);
+  if (_ytApiLoading) return;
+  _ytApiLoading = true;
+  const prevReady = window.onYouTubeIframeAPIReady;
+  window.onYouTubeIframeAPIReady = () => {
+    if (typeof prevReady === 'function') prevReady();
+    _ytApiReadyCallbacks.forEach(fn => fn());
+    _ytApiReadyCallbacks = [];
+  };
+  const tag = document.createElement('script');
+  tag.src = 'https://www.youtube.com/iframe_api';
+  document.head.appendChild(tag);
+}
+
+let _ytPlayerInstances = {}; // gifKey -> live YT.Player instance, so we can destroy the old one
+                              // before creating a new one instead of re-targeting an element
+                              // that YT.Player already permanently replaced with an iframe —
+                              // that's what was causing repeated clicks to keep reusing the
+                              // same first video instead of picking a new random highlight.
+
+let _highlightActiveGifKeys = {}; // gifKey -> true while that profile's highlight banner should
+                                   // keep cycling; set false when navigating away so a delayed
+                                   // timer from a previous profile doesn't start a new video on
+                                   // whatever now occupies that DOM slot.
+let _highlightQueues = {}; // gifKey -> shuffled queue of remaining candidates for this profile
+                            // view. Only excluding the SINGLE last pick (the previous approach)
+                            // still let small pools cycle back to a clip shown just 2-3 picks
+                            // ago, which reads as "it keeps repeating" even though each pick was
+                            // technically random — a shuffled queue guarantees every candidate
+                            // is shown once before any repeat happens.
+
+function initHighlightBanner(name, gifKey){
+  const candidates = getPlayerHighlightCandidates(name);
+  if (!candidates.length) return false; // no video-linked goals — caller keeps the static banner
+
+  if (!_highlightQueues[gifKey] || !_highlightQueues[gifKey].length) {
+    // Fisher-Yates shuffle of the full real candidate pool.
+    const shuffled = [...candidates];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    _highlightQueues[gifKey] = shuffled;
+  }
+  const pick = _highlightQueues[gifKey].shift();
+  _highlightActiveGifKeys[gifKey] = true;
+
+  const wrapId = `highlight-wrap-${gifKey}`;
+  const bannerWrapId = `banner-wrap-${gifKey}`;
+
+  // Destroy any previous player instance for this exact banner slot before creating a new one.
+  // Without this, a second click on the same player (or navigating back to them) tried to hand
+  // YT.Player an element id that had already been permanently replaced by the FIRST call's
+  // iframe, which is unreliable — the old video just kept sitting there instead of a fresh,
+  // newly-randomized one loading in.
+  if (_ytPlayerInstances[gifKey]) {
+    try { _ytPlayerInstances[gifKey].destroy(); } catch(e) {}
+    delete _ytPlayerInstances[gifKey];
+  }
+  const wrap = document.getElementById(wrapId);
+  if (wrap) wrap.innerHTML = `<div id="highlight-player-${gifKey}" style="width:100%;height:100%"></div>`;
+  const mountId = `highlight-player-${gifKey}`;
+
+  // The static banner box is usually much wider and shorter than a 16:9 video (e.g. ~1400x220),
+  // so a plain "cover crop" fill would crop out most of the video's height. Instead of cropping,
+  // GROW the actual banner box to a real 16:9-derived height (based on its own current width)
+  // for as long as highlights are cycling — since we now cycle to a new clip instead of ending,
+  // there's no "pause" moment to restore the original height at, so it simply stays at this
+  // video-friendly size the whole time a highlight is showing.
+  const bannerWrapEl = document.getElementById(bannerWrapId);
+  if (bannerWrapEl && !bannerWrapEl.dataset.highlightGrown) {
+    bannerWrapEl.dataset.highlightGrown = '1';
+    const boxW = bannerWrapEl.getBoundingClientRect().width || 400;
+    const idealH = Math.min(Math.round(boxW * 9/16), 420); // capped to match the existing banner-height slider's own max (420px)
+    bannerWrapEl.style.height = idealH + 'px';
+  }
+
+  ensureYtApiLoaded(() => {
+    if (!_highlightActiveGifKeys[gifKey]) return; // navigated away before the API finished loading
+    const mount = document.getElementById(mountId);
+    if (!mount) return;
+    // 5 second lead-in so there's more context before the goal itself.
+    const startAt = Math.max(0, pick.seconds - 5);
+    const player = new YT.Player(mountId, {
+      width: '100%', height: '100%',
+      videoId: pick.ytId,
+      playerVars: {
+        autoplay: 1, mute: 1, controls: 0, disablekb: 1, modestbranding: 1,
+        rel: 0, playsinline: 1, start: startAt,
+        cc_load_policy: 0, // subtitles off by default
+        iv_load_policy: 3, // also suppress video annotations, same spirit as no subtitles
+      },
+      events: {
+        onReady: (ev) => {
+          // Now that the banner box itself has been grown to match 16:9, the iframe can just
+          // fill it directly — no more oversizing/cropping trick needed, since box and video
+          // ratio now genuinely match.
+          const iframe = ev.target.getIframe ? ev.target.getIframe() : null;
+          if (iframe) { iframe.style.width = '100%'; iframe.style.height = '100%'; iframe.style.position = 'absolute'; iframe.style.inset = '0'; }
+          player._stopTimerSet = false;
+          ev.target.mute();
+          // cc_load_policy:0 in playerVars only sets a LOAD-TIME preference — it can be
+          // silently overridden if the specific video has forced captions on, or if the
+          // viewer's own YouTube account/browser has a persistent captions preference saved,
+          // which is almost certainly why auto-generated captions kept showing despite the
+          // playerVar. unloadModule('captions') is a stronger, explicit runtime command that
+          // actually tears the captions module down after load, rather than just requesting
+          // it start disabled.
+          try { ev.target.unloadModule('captions'); } catch(e){}
+          // The `start` playerVar alone isn't reliably honored once playVideo() is called
+          // explicitly right after — some browsers resume from 0 instead of the requested
+          // offset, which is why the video was restarting from the beginning instead of the
+          // goal timestamp. Explicitly seeking here, immediately before playing, is the more
+          // reliable way to land on the actual moment.
+          ev.target.seekTo(startAt, true);
+          ev.target.playVideo();
+        },
+        onStateChange: (ev) => {
+          if (ev.data === YT.PlayerState.PLAYING) {
+            // Re-request captions off every time playback (re)starts, not just once in onReady.
+            // Honest caveat: this is a well-documented limitation of embedded YouTube players —
+            // caption display is tied to the VIEWER's own logged-in YouTube caption preference
+            // and can be applied almost server-side, essentially independent of what the
+            // embedding page requests. cc_load_policy and unloadModule are both real, correct
+            // API calls, but neither is guaranteed to override a viewer's own saved YouTube
+            // caption setting — there's no fully reliable client-side fix for that from inside
+            // an embed. Retrying here at least catches captions re-appearing after a seek.
+            try { ev.target.unloadModule('captions'); } catch(e){}
+            // Reveal the STABLE outer wrapper (not the mount div itself — YT.Player replaces
+            // that with an iframe, so it's not safe to keep referencing its id afterward) only
+            // once real playback has actually started, avoiding a black/buffering frame in
+            // place of the static banner while the video is still loading.
+            const wrap2 = document.getElementById(wrapId);
+            if (wrap2) wrap2.style.display = 'block';
+            // Request the best quality the stream actually reports as available, now that
+            // real playback has started and YouTube has picked adaptive streams to offer —
+            // requesting a fixed 'hd1080' in onReady (before any buffering) was often ignored
+            // since that quality level may not have been selectable yet. This is still a
+            // best-effort REQUEST, not a guarantee — YouTube can still downgrade based on the
+            // viewer's actual bandwidth.
+            try {
+              const levels = ev.target.getAvailableQualityLevels ? ev.target.getAvailableQualityLevels() : [];
+              if (levels && levels.length) ev.target.setPlaybackQuality(levels[0]); // highest is always first
+            } catch(e) {}
+            if (!player._stopTimerSet) {
+              player._stopTimerSet = true;
+              // After 15 real seconds of playback (timed from when it actually started, not
+              // page load), cycle to a DIFFERENT random highlight instead of stopping — this
+              // replaces the old pause-and-cover-icon behavior entirely, so the banner keeps
+              // showing fresh clips for as long as the profile stays open.
+              setTimeout(() => {
+                if (!_highlightActiveGifKeys[gifKey]) return; // navigated away in the meantime
+                initHighlightBanner(name, gifKey);
+              }, 15000);
+            }
+          }
+        }
+      }
+    });
+    _ytPlayerInstances[gifKey] = player;
+  });
+  return true;
+}
+
+function renderTrendToggle(name, gifKey){
+  const container = document.getElementById(`trend-toggle-${gifKey}`);
+  if (!container) return;
+  const current = window._trendState[gifKey] || 'all';
+  const allBtn = `<button onclick="setTrendStat('${name.replace(/'/g,"\\'")}','${gifKey}','all')"
+      style="font-family:'Barlow Condensed',sans-serif;font-size:.72rem;font-weight:700;letter-spacing:.4px;text-transform:uppercase;
+      padding:5px 12px;border-radius:6px;cursor:pointer;border:1.5px solid ${current==='all'?ALL_STATS_META.color:'var(--border)'};
+      background:${current==='all'?ALL_STATS_META.color+'22':'var(--card2)'};color:${current==='all'?ALL_STATS_META.color:'var(--muted)'}">${ALL_STATS_META.label}</button>`;
+  const statBtns = TREND_STATS.map(s => `
+    <button onclick="setTrendStat('${name.replace(/'/g,"\\'")}','${gifKey}','${s.key}')"
+      style="font-family:'Barlow Condensed',sans-serif;font-size:.72rem;font-weight:600;letter-spacing:.4px;text-transform:uppercase;
+      padding:5px 12px;border-radius:6px;cursor:pointer;border:1.5px solid ${s.key===current?s.color:'var(--border)'};
+      background:${s.key===current?s.color+'22':'var(--card2)'};color:${s.key===current?s.color:'var(--muted)'}">${s.label}</button>
+  `).join('');
+  container.innerHTML = allBtn + statBtns;
+}
+
+function setTrendStat(name, gifKey, statKey){
+  window._trendState[gifKey] = statKey;
+  renderTrendToggle(name, gifKey);
+  drawTrendChart(name, gifKey);
+}
+
+// Per-match overall contribution, using the same weights as MVP scoring (mvpWeights, admin-
+// configurable, defaults to MVP_WEIGHTS_DEFAULT) — so "All Stats" reflects the same notion of
+// "how good was this game" the rest of the app already uses, not a separate invented formula.
+function computeAllStatsScore(row){
+  const w = (typeof mvpWeights !== 'undefined' && mvpWeights) ? mvpWeights : MVP_WEIGHTS_DEFAULT;
+  return Object.keys(w).reduce((sum, key) => sum + n(row[key]) * (w[key]||0), 0);
+}
+
+function drawTrendChart(name, gifKey){
+  const cv = document.getElementById(`trend-canvas-${gifKey}`);
+  if (!cv) return;
+  const ds = getDisplayStats();
+  const s = ds[name] || playerStats[name];
+  if (!s || !s.matches || s.matches.length < 2) return;
+
+  const statKey = window._trendState[gifKey] || 'all';
+  const statMeta = statKey === 'all' ? ALL_STATS_META : (TREND_STATS.find(t => t.key === statKey) || TREND_STATS[0]);
+
+  const matches = [...s.matches]
+    .filter(r => r.half === 'FULL')
+    .sort((a,b) => (a.match_date||'').localeCompare(b.match_date||''));
+  if (matches.length < 2) return;
+
+  const dpr = window.devicePixelRatio || 1;
+  const rect = cv.getBoundingClientRect();
+  const W = rect.width || 600, H = 220;
+  cv.width = W*dpr; cv.height = H*dpr;
+  cv.style.height = H+'px';
+  const ctx = cv.getContext('2d');
+  ctx.clearRect(0,0,cv.width,cv.height);
+  ctx.save(); ctx.scale(dpr,dpr);
+
+  // "All Stats" isn't a raw field — it's each match's weighted contribution score (same
+  // weights as MVP). Everything else (raw field values) is unchanged.
+  const values = statKey === 'all'
+    ? matches.map(r => computeAllStatsScore(r))
+    : matches.map(r => n(r[statKey]));
+  const total = values.reduce((a,b)=>a+b, 0);
+  const average = total / values.length;
+  const maxV = Math.max(...values, average, 1);
+  const padL = 32, padR = 12, padT = 14, padB = 22;
+  const plotW = W - padL - padR, plotH = H - padT - padB;
+
+  // gridlines + y-axis labels (0, mid, max) — contribution scores are rarely whole numbers,
+  // raw stat counts usually are, so the decimal display adapts to which is being shown.
+  const isWholeNumberStat = statKey !== 'all';
+  ctx.strokeStyle = 'rgba(255,255,255,.08)'; ctx.lineWidth = 1;
+  ctx.fillStyle = 'rgba(255,255,255,.35)';
+  ctx.font = "10px 'Barlow Condensed',sans-serif";
+  ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+  [0, 0.5, 1].forEach(f => {
+    const y = padT + plotH*(1-f);
+    ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(W-padR, y); ctx.stroke();
+    const val = maxV*f;
+    ctx.fillText(isWholeNumberStat ? val.toFixed(val<3?1:0) : val.toFixed(1), padL-6, y);
+  });
+
+  // one bar per match, evenly spaced — this is the per-game view requested, replacing the
+  // previous line-only chart. Bar width leaves a real gap between bars so it reads as discrete
+  // games, not a continuous fill.
+  const n_ = matches.length;
+  const slot = plotW / n_;
+  const barW = Math.max(4, slot * 0.6);
+  const bars = values.map((v,i) => {
+    const cx = padL + slot*(i+0.5);
+    const barH = plotH * (v/maxV);
+    return { x: cx - barW/2, y: padT + plotH - barH, w: barW, h: barH, cx, v, match: matches[i] };
+  });
+
+  const hoveredIdx = cv._trendHoveredIdx;
+  bars.forEach((b,i) => {
+    const isHovered = i === hoveredIdx;
+    ctx.fillStyle = isHovered ? statMeta.color : statMeta.color + 'cc';
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(b.x, b.y, b.w, Math.max(b.h,1), [2,2,0,0]);
+    else ctx.rect(b.x, b.y, b.w, Math.max(b.h,1));
+    ctx.fill();
+    if (isHovered) { ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5; ctx.stroke(); }
+  });
+
+  // flat average line across the whole period, drawn over the bars so it's always readable
+  const avgY = padT + plotH*(1 - average/maxV);
+  ctx.setLineDash([5,4]);
+  ctx.strokeStyle = 'rgba(255,255,255,.85)'; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.moveTo(padL, avgY); ctx.lineTo(W-padR, avgY); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle = 'rgba(255,255,255,.85)';
+  ctx.font = "bold 10px 'Barlow Condensed',sans-serif";
+  ctx.textAlign = 'left'; ctx.textBaseline = 'bottom';
+  ctx.fillText(`avg ${average.toFixed(1)}`, padL+4, avgY-3);
+
+  ctx.restore();
+  cv._trendPts = bars;
+
+  // Total shown as a clean label above the chart rather than a second line/axis — keeps the
+  // plot itself uncluttered while still surfacing the season total at a glance. Contribution
+  // score gets a decimal and different wording since "total" reads oddly for a weighted score
+  // the way it doesn't for a plain stat count.
+  const totalLabel = document.getElementById(`trend-total-${gifKey}`);
+  if (totalLabel) {
+    const totalDisplay = isWholeNumberStat ? total : total.toFixed(1);
+    const totalWord = statKey === 'all' ? 'season contribution score' : `total ${statMeta.label.toLowerCase()}`;
+    totalLabel.innerHTML = `<span style="color:${statMeta.color};font-family:'Bebas Neue',sans-serif;font-size:1.1rem">${totalDisplay}</span> <span style="color:var(--muted);font-size:.7rem;text-transform:uppercase;letter-spacing:.5px">${totalWord}</span>`;
+  }
+
+  if (!cv._trendWired) {
+    cv._trendWired = true;
+    cv.addEventListener('mousemove', ev => {
+      const r = cv.getBoundingClientRect();
+      const mx = ev.clientX - r.left;
+      // Hit-test against each bar's actual horizontal slot (not a fixed pixel radius around a
+      // point) — bars are spaced by slot width, which varies with the number of matches, so a
+      // fixed threshold either missed bars when there were many games or matched too eagerly
+      // when there were few.
+      let best = -1;
+      (cv._trendPts||[]).forEach((b,i) => { if (mx >= b.cx - (b.w*1.6) && mx <= b.cx + (b.w*1.6)) best = i; });
+      if (best !== cv._trendHoveredIdx) {
+        cv._trendHoveredIdx = best;
+        drawTrendChart(name, gifKey);
+      }
+      if (best >= 0) {
+        const p = cv._trendPts[best];
+        // Re-read the CURRENTLY selected stat here rather than relying on statMeta from the
+        // draw call that first attached this listener — that closure went stale as soon as the
+        // person switched stats, so the tooltip kept showing whatever was active on first hover
+        // (e.g. always "Goals" even after switching to Assists).
+        const liveStatKey = window._trendState[gifKey] || 'all';
+        const liveStatMeta = liveStatKey === 'all' ? ALL_STATS_META : (TREND_STATS.find(t => t.key === liveStatKey) || TREND_STATS[0]);
+        let tip = document.getElementById('trend-tip-global');
+        if (!tip) { tip = document.createElement('div'); tip.id = 'trend-tip-global'; tip.style.cssText = 'position:fixed;z-index:999;background:#0d1a0f;border:1px solid rgba(57,211,83,.3);border-radius:8px;padding:8px 12px;font-family:\'Barlow Condensed\',sans-serif;pointer-events:none;font-size:.75rem;line-height:1.5;box-shadow:0 4px 20px rgba(0,0,0,.8)'; document.body.appendChild(tip); }
+        const displayVal = liveStatKey === 'all' ? p.v.toFixed(1) : p.v;
+        tip.innerHTML = `<div style="color:${liveStatMeta.color};font-weight:700">${liveStatMeta.label}: ${displayVal}</div><div style="color:var(--muted);font-size:.68rem">${p.match.match_date||''}${p.match.team?' · Team '+p.match.team:''}</div>`;
+        tip.style.opacity = '1';
+        tip.style.left = (ev.clientX+14)+'px';
+        tip.style.top = (ev.clientY-10)+'px';
+      } else {
+        const tip = document.getElementById('trend-tip-global');
+        if (tip) tip.style.opacity = '0';
+      }
+    });
+    cv.addEventListener('mouseleave', () => {
+      cv._trendHoveredIdx = -1;
+      drawTrendChart(name, gifKey);
+      const tip = document.getElementById('trend-tip-global');
+      if (tip) tip.style.opacity = '0';
+    });
+  }
 }
 
 function renderProfileHeatmap(name, hmapType) {
@@ -10031,9 +11181,53 @@ function getFamousPlayerComparison(playerName) {
   return _famousAssignments[playerName] || null;
 }
 
+// Player selection sidebar shown alongside a profile — lets you click directly to any other
+// player without going back to the Players list. Uses the same order as the Prev/Next buttons
+// (whatever sort/search was last active on the Players page, via window._playersPageOrder),
+// falling back to alphabetical if that cache isn't populated yet.
+function renderProfileSidebar(activeName){
+  const sidebar = document.getElementById('profile-sidebar');
+  if (!sidebar) return;
+  const ds = getDisplayStats();
+  const order = (window._playersPageOrder && window._playersPageOrder.length)
+    ? window._playersPageOrder
+    : Object.keys(ds).sort((a,b)=>a.localeCompare(b));
+
+  sidebar.innerHTML = order.map(name => {
+    const isActive = name === activeName;
+    return `<div onclick="nav('profile','${name.replace(/'/g,"\\'")}')"
+      style="display:flex;align-items:center;gap:8px;padding:7px 8px;border-radius:7px;cursor:pointer;margin-bottom:2px;
+      background:${isActive?'rgba(57,211,83,.12)':'transparent'};border:1px solid ${isActive?'rgba(57,211,83,.35)':'transparent'}"
+      onmouseover="if(!this.dataset.active)this.style.background='rgba(255,255,255,.05)'"
+      onmouseout="this.style.background='${isActive?'rgba(57,211,83,.12)':'transparent'}'"
+      ${isActive?'data-active="1"':''}>
+      <div style="width:26px;height:26px;border-radius:50%;background:var(--card2);border:1.5px solid ${isActive?'var(--green)':'rgba(255,255,255,.3)'};
+        display:flex;align-items:center;justify-content:center;font-family:'Bebas Neue',sans-serif;font-size:.62rem;color:${isActive?'var(--green)':'var(--text2)'};flex-shrink:0">${formInitials(name)}</div>
+      <span style="font-size:.78rem;font-family:'Barlow Condensed',sans-serif;font-weight:${isActive?700:500};color:${isActive?'var(--green)':'var(--text)'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${name}</span>
+    </div>`;
+  }).join('');
+
+  // Keep the active player's row scrolled into view rather than always landing at the top of
+  // the list, which matters once there are more players than fit in the sidebar's max-height.
+  const activeEl = sidebar.querySelector('[data-active="1"]');
+  if (activeEl) activeEl.scrollIntoView({ block: 'nearest' });
+}
+
 function renderProfile(name) {
   if (name !== currentProfileName) window._hmapType = 'shot'; // reset tab on new profile
+  // Stop any in-progress highlight cycling for whichever profile was open before this one, so a
+  // pending 15-second cycle timer doesn't fire later and try to swap a video into a DOM slot
+  // that no longer belongs to that player.
+  if (currentProfileName && currentProfileName !== name) {
+    const prevGifKey = currentProfileName.replace(/\s/g,'_');
+    _highlightActiveGifKeys[prevGifKey] = false;
+    if (_ytPlayerInstances[prevGifKey]) {
+      try { _ytPlayerInstances[prevGifKey].destroy(); } catch(e) {}
+      delete _ytPlayerInstances[prevGifKey];
+    }
+  }
   currentProfileName = name;
+  renderProfileSidebar(name);
   const ds = getDisplayStats();
   const s = ds[name] || playerStats[name];
   if (!s) { document.getElementById('profile-content').innerHTML = '<p style="color:var(--muted)">Player not found.</p>'; return; }
@@ -10159,6 +11353,29 @@ function renderProfile(name) {
   })();
 
   document.getElementById('profile-content').innerHTML = `
+    <!-- Prev/Next player navigation -->
+    ${(() => {
+      // Follow whatever order the person was browsing the Players page in (current sort/search),
+      // captured in window._playersPageOrder when that page last rendered. If someone lands on a
+      // profile without having visited the list (e.g. a direct link, or from Leaderboard/Compare),
+      // fall back to a plain alphabetical list across everyone so prev/next still works.
+      const order = (window._playersPageOrder && window._playersPageOrder.length)
+        ? window._playersPageOrder
+        : Object.keys(ds).sort((a,b)=>a.localeCompare(b));
+      const idx = order.indexOf(name);
+      const prevName = idx > 0 ? order[idx-1] : null;
+      const nextName = idx >= 0 && idx < order.length-1 ? order[idx+1] : null;
+      const btn = (label, target, dir) => target
+        ? `<button onclick="nav('profile','${target.replace(/'/g,"\\'")}')" style="flex:1;display:flex;align-items:center;${dir==='next'?'justify-content:flex-end':'justify-content:flex-start'};gap:6px;background:var(--card2);border:1px solid var(--border);border-radius:8px;padding:8px 14px;color:var(--text);cursor:pointer;font-family:'Barlow Condensed',sans-serif;font-size:.8rem;letter-spacing:.3px;overflow:hidden">${dir==='prev'?`◀ <span style="opacity:.7">${label}</span> <b style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${target}</b>`:`<b style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${target}</b> <span style="opacity:.7">${label}</span> ▶`}</button>`
+        : `<div style="flex:1"></div>`;
+      const posLabel = idx >= 0 ? `<span style="font-size:.68rem;color:var(--muted);font-family:'Barlow Condensed',sans-serif;white-space:nowrap;padding:0 8px">${idx+1} / ${order.length}</span>` : '';
+      return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:14px">
+        ${btn('Prev', prevName, 'prev')}
+        ${posLabel}
+        ${btn('Next', nextName, 'next')}
+      </div>`;
+    })()}
+
     <!-- Action buttons -->
     <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px">
       <button class="print-btn" onclick="printPlayerCard('${safeName}')">🖨 Print Profile Card</button>
@@ -10171,8 +11388,17 @@ function renderProfile(name) {
       const zoom = bannerZoom[name] != null ? bannerZoom[name] : 100;
       const objPos = `center ${pos}%`;
       const mediaStyle = `width:100%;height:100%;object-fit:cover;object-position:${objPos};display:block;transform:scale(${zoom/100});transform-origin:center ${pos}%`;
+      // A real highlight (an actual goal of this player's, in a match with a linked YouTube
+      // video) takes priority over the static uploaded banner when one exists — mounted into
+      // its own div so the YouTube IFrame API can take it over after checking real candidates
+      // exist. The static banner underneath still renders immediately as a fallback, so there's
+      // no blank flash while the API loads, and it's what stays visible if no highlight exists.
+      const highlightMountHtml = `<div id="highlight-wrap-${gifKey}" style="width:100%;height:100%;position:absolute;inset:0;z-index:2;display:none">
+        <div id="highlight-player-${gifKey}" style="width:100%;height:100%"></div>
+      </div>`;
       return `
     <div id="banner-wrap-${gifKey}" style="position:relative;width:100%;height:${bannerHeights[name]||200}px;border-radius:16px 16px 0 0;overflow:hidden;background:linear-gradient(135deg,var(--card),var(--card2));border:1px solid var(--border);border-bottom:none">
+      ${highlightMountHtml}
       ${playerGifs[name]
         ? `<img src="${playerGifs[name]}" alt="${name}" style="${mediaStyle}">`
         : `<video id="banner-video-${gifKey}" autoplay loop muted playsinline
@@ -10442,6 +11668,20 @@ function renderProfile(name) {
         +'</div></div>'
         +'<div data-bd="'+uid+'" data-sx="'+avgSx+'" data-sy="'+avgSy+'" data-nx="'+avgNx+'" data-ny="'+avgNy+'" style="display:none"></div>';
     })()}
+
+    <!-- STAT TREND OVER TIME -->
+    ${s.matches.length >= 2 ? `
+    <div class="section-hd" style="margin-top:14px"><h2>Stat Trend Over Time</h2></div>
+    <div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin-bottom:16px">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:12px">
+        <div id="trend-toggle-${gifKey}" style="display:flex;flex-wrap:wrap;gap:6px"></div>
+        <div id="trend-total-${gifKey}" style="text-align:right;white-space:nowrap"></div>
+      </div>
+      <div style="position:relative;width:100%;overflow:visible">
+        <canvas id="trend-canvas-${gifKey}" style="width:100%;height:220px;display:block"></canvas>
+      </div>
+      <div style="font-size:.68rem;color:var(--muted);margin-top:6px;font-family:'Barlow Condensed',sans-serif">One bar per match (chronological, FULL match only) · dashed line = season average · hover a bar for the exact match</div>
+    </div>` : ''}
 
     <!-- BEST GAME + CAREER HIGHS -->
     ${bestGameHtml}
@@ -10907,7 +12147,39 @@ function renderProfile(name) {
     } else {
       drawSpider(`spider-${name.replace(/\s/g,'_')}`, labels, values, 'rgb(57,211,83)');
     }
+
+    // Stat trend over time — defaults to Goals on first render of a profile, but remembers
+    // whatever stat the person last toggled to if they've already viewed a trend chart before
+    // (window._trendState persists across profile switches, keyed by player).
+    if (!window._trendState[gifKey]) window._trendState[gifKey] = 'all';
+    renderTrendToggle(name, gifKey);
+    drawTrendChart(name, gifKey);
+
+    // Autoplay highlight banner — tries to find a real goal of this player's in a video-linked
+    // match; if none exists, this is a no-op and the static banner underneath stays as-is.
+    initHighlightBanner(name, gifKey);
   }, 50);
+}
+
+// Left/Right arrow keys move to the previous/next player on the profile page, following the
+// same order as the Prev/Next buttons. Guarded to only act when the profile page is active and
+// no text input has focus, so it doesn't interfere with typing in the player search box etc.
+if (!window._profileArrowNavBound) {
+  window._profileArrowNavBound = true;
+  document.addEventListener('keydown', (e) => {
+    if (currentPage !== 'profile' || !currentProfileName) return;
+    const tag = document.activeElement?.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+    const ds = getDisplayStats();
+    const order = (window._playersPageOrder && window._playersPageOrder.length)
+      ? window._playersPageOrder
+      : Object.keys(ds).sort((a,b)=>a.localeCompare(b));
+    const idx = order.indexOf(currentProfileName);
+    if (idx < 0) return;
+    const target = e.key === 'ArrowLeft' ? order[idx-1] : order[idx+1];
+    if (target) nav('profile', target);
+  });
 }
 
 function saveCustomStat(player, key, val) {
